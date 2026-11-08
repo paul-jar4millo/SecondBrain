@@ -1,0 +1,26 @@
+*.sh text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+.githooks/* text eol=lf
+
+# Frontend/backend formatting stays identical in Windows and Linux checkouts.
+dashboard/**/*.ts text eol=lf
+dashboard/**/*.tsx text eol=lf
+dashboard/**/*.js text eol=lf
+dashboard/**/*.mjs text eol=lf
+dashboard/**/*.css text eol=lf
+dashboard/**/*.json text eol=lf
+service/**/*.mjs text eol=lf
+service/**/*.json text eol=lf
+mcp/**/*.mjs text eol=lf
+mcp/**/*.json text eol=lf
+lanzador/**/*.mjs text eol=lf
+ops/**/*.mjs text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
+ops/lxc/** text eol=lf
+ops/homelab/prender-pc text eol=lf
+ops/homelab/estado-pc text eol=lf
+# Product skills: the catalog hashes these exact bytes (SHA-256) on every host.
+lanzador/skills/**/*.md text eol=lf
+ops/lanzador/sb-hilo text eol=lf

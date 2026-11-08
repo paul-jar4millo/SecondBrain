@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "secondbrain": {
+      "command": "ssh",
+      "args": [
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "pve",
+        "pct",
+        "exec",
+        "210",
+        "--",
+        "runuser",
+        "-u",
+        "secondbrain",
+        "--",
+        "/usr/local/bin/secondbrain-mcp"
+      ]
+    }
+  }
+}

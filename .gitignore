@@ -1,0 +1,53 @@
+# Local editor state
+/obsidian/
+obsidian/.obsidian/workspace*.json
+obsidian/.obsidian/cache/
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Credentials and local environments
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.venv/
+node_modules/
+.data/
+/artifacts/
+/release/
+__pycache__/
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Environment-only compatibility paths, legacy copies and tool installations
+/.workspace-archive/
+/SecondBrain
+/spec.md
+/tooling/
+/shared/
+/library-files/
+/scratch/
+/.cache/
+/second-brain-*.zip
+/second-brain-*.zip.sha256
+/.second-brain-runtime/
+obsidian/.second-brain-runtime/
+
+# Build output and logs
+dist/
+*.tsbuildinfo
+*.log
+coverage/
+
+# Personal configuration (copy the *.example files)
+/.mcp.json
+/ops/lxc/lxc.env
+.claude/settings.local.json
+dist-demo/
