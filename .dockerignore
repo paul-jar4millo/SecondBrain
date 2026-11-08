@@ -1,0 +1,14 @@
+.git
+**/node_modules
+**/.data
+**/.env
+**/.env.*
+**/secrets
+**/artifacts
+**/dist
+obsidian
+tooling
+.workspace-archive
+scratch
+shared
+library-files

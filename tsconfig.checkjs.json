@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"],
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "service/*.mjs",
+    "mcp/*.mjs",
+    "lanzador/*.mjs",
+    "ops/*.mjs",
+    "ops/deploy/*.mjs",
+    "ops/homelab/*.mjs"
+  ]
+}
