@@ -1,0 +1,23 @@
+{
+  "actualizado": "2026-11-01",
+  "fuente": "Synthetic fixture for tests; the URLs do not point to real pins.",
+  "consultas": ["synthetic cozy room"],
+  "pines": [
+    {
+      "id": "1000000000000000001",
+      "url": "https://www.pinterest.com/pin/1000000000000000001/",
+      "imagen": "https://i.pinimg.com/474x/00/00/00/synthetic-1.jpg",
+      "titulo": "Synthetic room",
+      "consulta": "synthetic cozy room",
+      "etiquetas": ["habitacion", "azul"]
+    },
+    {
+      "id": "1000000000000000002",
+      "url": "https://www.pinterest.com/pin/1000000000000000002/",
+      "imagen": "https://i.pinimg.com/474x/00/00/00/synthetic-2.jpg",
+      "titulo": "Synthetic desk",
+      "consulta": "synthetic cozy room",
+      "etiquetas": ["escritorio"]
+    }
+  ]
+}
