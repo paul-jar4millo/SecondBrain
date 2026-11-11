@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Cerebro azul de Second Brain</title>
+  <rect width="64" height="64" rx="15" fill="#071b41"/>
+  <path d="M30 28c-3-5-11-5-14 0-7 0-10 8-6 13-2 7 4 13 10 12 2 6 9 6 12 1V31Z" fill="#61c8fa" stroke="#b8efff" stroke-width="1.8" stroke-linejoin="round"/>
+  <path d="M34 28c3-5 11-5 14 0 7 0 10 8 6 13 2 7-4 13-10 12-2 6-9 6-12 1V31Z" fill="#278cd8" stroke="#b8efff" stroke-width="1.8" stroke-linejoin="round"/>
+  <g fill="none" stroke="#12558b" stroke-width="2.2" stroke-linecap="round">
+    <path d="M19 31c-3 3-2 7 2 8m-9 3c4-1 7 1 7 5m6-4c3 1 4 4 3 7"/>
+    <path d="M45 31c3 3 2 7-2 8m9 3c-4-1-7 1-7 5m-6-4c-3 1-4 4-3 7" stroke="#a4e5ff"/>
+  </g>
+  <path d="M32 31 23 51l6-3c0-5 6-5 6 0l6 3-4-9-3 1 2-3Z" fill="#e7f8ff"/>
+  <path d="m19 11 24-2 2 15-24 2Z" fill="#0f4388" stroke="#98ddff" stroke-width="1.5"/>
+  <path d="m21 20 23-2 1 6-24 2Z" fill="#e7f8ff"/>
+  <path d="m16 26 33-3" stroke="#8edbff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M45 8c0 0-5 6-5 9a5 5 0 0 0 10 0c0-3-5-9-5-9Z" fill="#59cafa" stroke="#dbf8ff" stroke-width="1.5"/>
+  <path d="m10 12 1.5 3.5L15 17l-3.5 1.5L10 22l-1.5-3.5L5 17l3.5-1.5Z" fill="#d9f6ff"/>
+</svg>
