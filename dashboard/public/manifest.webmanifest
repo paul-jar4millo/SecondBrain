@@ -1,0 +1,30 @@
+{
+  "name": "Second Brain",
+  "short_name": "Second Brain",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a1238",
+  "theme_color": "#0a1238",
+  "icons": [
+    {
+      "src": "/brain-blue.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/brain-blue-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brain-blue-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
