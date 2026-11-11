@@ -1,0 +1,63 @@
+{
+  "name": "@secondbrain/dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node ops/dev.mjs",
+    "dev:web": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build && node ops/precache.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "test:api": "npm --prefix .. run test:api",
+    "format": "prettier --write src tests ops package.json tsconfig.json vite.config.ts vitest.config.ts index.html",
+    "publish:local": "node ops/publish.mjs",
+    "start": "node ../service/index.mjs",
+    "sb": "node ops/sb.mjs",
+    "test:docker": "node ops/smoke-container.mjs",
+    "format:check": "prettier --check src tests ops",
+    "verify:browser": "node ops/verify-refugio.mjs && node ops/verify-aprobaciones.mjs && node ops/verify-project-dashboards.mjs && node ops/verify-tools.mjs && node ops/verify-conversations.mjs && node ops/verify-workspaces.mjs",
+    "lint": "eslint src --max-warnings 0",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "dexie": "4.4.7",
+    "fflate": "0.8.3",
+    "katex": "0.19.1",
+    "lucide-react": "0.468.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-markdown": "9.1.0",
+    "react-router-dom": "7.18.5",
+    "rehype-katex": "7.0.1",
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/three": "0.170.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "@vitest/coverage-v8": "4.1.12",
+    "eslint": "10.14.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "fake-indexeddb": "6.2.7",
+    "jsdom": "31.0.0",
+    "playwright": "1.65.0",
+    "prettier": "3.9.10",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "7.3.7",
+    "vitest": "4.1.12"
+  },
+  "overrides": {
+    "katex": "$katex",
+    "minimatch": "^11.0.1"
+  }
+}

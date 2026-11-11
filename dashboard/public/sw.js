@@ -1,0 +1,4 @@
+const CACHE='second-brain-shell-v1';
+self.addEventListener('install',event=>{event.waitUntil((async()=>{const urls=await fetch('/precache.json',{cache:'no-cache'}).then(r=>r.json());const cache=await caches.open(CACHE);await cache.addAll(urls.map(url=>new Request(url,{cache:'reload'})));await self.skipWaiting()})())});
+self.addEventListener('activate',event=>{event.waitUntil((async()=>{for(const name of await caches.keys())if(name.startsWith('second-brain-shell-')&&name!==CACHE)await caches.delete(name);await self.clients.claim()})())});
+self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(event.request.method!=='GET'||url.origin!==location.origin||url.pathname.startsWith('/api/'))return;if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(async()=>{return (await caches.match('/index.html'))||Response.error()}));return;}event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request)));});
