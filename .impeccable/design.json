@@ -1,0 +1,528 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-08T05:21:49.495Z",
+  "title": "Design System: Second Brain — El refugio azul",
+  "extensions": {
+    "colorMeta": {
+      "noche": {
+        "role": "neutral",
+        "displayName": "Noche",
+        "tonalRamp": [
+          "oklch(15% 0.0283 269.53)",
+          "oklch(27% 0.0485 269.53)",
+          "oklch(39% 0.0671 269.53)",
+          "oklch(51% 0.0745 269.53)",
+          "oklch(63% 0.0745 269.53)",
+          "oklch(75% 0.0596 269.53)",
+          "oklch(87% 0.0313 269.53)",
+          "oklch(95% 0.0119 269.53)"
+        ]
+      },
+      "tinta": {
+        "role": "neutral",
+        "displayName": "Tinta azul",
+        "tonalRamp": [
+          "oklch(15% 0.0408 268.92)",
+          "oklch(27% 0.0697 268.92)",
+          "oklch(39% 0.0965 268.92)",
+          "oklch(51% 0.1072 268.92)",
+          "oklch(63% 0.1072 268.92)",
+          "oklch(75% 0.0858 268.92)",
+          "oklch(87% 0.0450 268.92)",
+          "oklch(95% 0.0172 268.92)"
+        ]
+      },
+      "pizarra": {
+        "role": "neutral",
+        "displayName": "Pizarra azul",
+        "tonalRamp": [
+          "oklch(15% 0.0419 271.47)",
+          "oklch(27% 0.0716 271.47)",
+          "oklch(39% 0.0991 271.47)",
+          "oklch(51% 0.1101 271.47)",
+          "oklch(63% 0.1101 271.47)",
+          "oklch(75% 0.0881 271.47)",
+          "oklch(87% 0.0463 271.47)",
+          "oklch(95% 0.0176 271.47)"
+        ]
+      },
+      "ultra": {
+        "role": "primary",
+        "displayName": "Ultramar",
+        "tonalRamp": [
+          "oklch(15% 0.0804 267.02)",
+          "oklch(27% 0.1376 267.02)",
+          "oklch(39% 0.1905 267.02)",
+          "oklch(51% 0.2116 267.02)",
+          "oklch(63% 0.2116 267.02)",
+          "oklch(75% 0.1693 267.02)",
+          "oklch(87% 0.0889 267.02)",
+          "oklch(95% 0.0339 267.02)"
+        ]
+      },
+      "cobalto": {
+        "role": "primary",
+        "displayName": "Cobalto",
+        "tonalRamp": [
+          "oklch(15% 0.0772 263.55)",
+          "oklch(27% 0.1320 263.55)",
+          "oklch(39% 0.1828 263.55)",
+          "oklch(51% 0.2031 263.55)",
+          "oklch(63% 0.2031 263.55)",
+          "oklch(75% 0.1625 263.55)",
+          "oklch(87% 0.0853 263.55)",
+          "oklch(95% 0.0325 263.55)"
+        ]
+      },
+      "cielo": {
+        "role": "neutral",
+        "displayName": "Cielo",
+        "tonalRamp": [
+          "oklch(15% 0.0418 245.66)",
+          "oklch(27% 0.0715 245.66)",
+          "oklch(39% 0.0990 245.66)",
+          "oklch(51% 0.1100 245.66)",
+          "oklch(63% 0.1100 245.66)",
+          "oklch(75% 0.0880 245.66)",
+          "oklch(87% 0.0462 245.66)",
+          "oklch(95% 0.0176 245.66)"
+        ]
+      },
+      "hielo": {
+        "role": "neutral",
+        "displayName": "Hielo",
+        "tonalRamp": [
+          "oklch(15% 0.0160 250.49)",
+          "oklch(27% 0.0274 250.49)",
+          "oklch(39% 0.0379 250.49)",
+          "oklch(51% 0.0421 250.49)",
+          "oklch(63% 0.0421 250.49)",
+          "oklch(75% 0.0337 250.49)",
+          "oklch(87% 0.0177 250.49)",
+          "oklch(95% 0.0067 250.49)"
+        ]
+      },
+      "blanco": {
+        "role": "neutral",
+        "displayName": "Blanco azulado",
+        "tonalRamp": [
+          "oklch(15% 0.0047 255.50)",
+          "oklch(27% 0.0081 255.50)",
+          "oklch(39% 0.0112 255.50)",
+          "oklch(51% 0.0125 255.50)",
+          "oklch(63% 0.0125 255.50)",
+          "oklch(75% 0.0100 255.50)",
+          "oklch(87% 0.0052 255.50)",
+          "oklch(95% 0.0020 255.50)"
+        ]
+      },
+      "luna": {
+        "role": "primary",
+        "displayName": "Crema de luna",
+        "tonalRamp": [
+          "oklch(15% 0.0231 94.12)",
+          "oklch(27% 0.0396 94.12)",
+          "oklch(39% 0.0548 94.12)",
+          "oklch(51% 0.0609 94.12)",
+          "oklch(63% 0.0609 94.12)",
+          "oklch(75% 0.0487 94.12)",
+          "oklch(87% 0.0256 94.12)",
+          "oklch(95% 0.0097 94.12)"
+        ]
+      },
+      "coral": {
+        "role": "neutral",
+        "displayName": "Coral",
+        "tonalRamp": [
+          "oklch(15% 0.0678 27.97)",
+          "oklch(27% 0.1160 27.97)",
+          "oklch(39% 0.1606 27.97)",
+          "oklch(51% 0.1785 27.97)",
+          "oklch(63% 0.1785 27.97)",
+          "oklch(75% 0.1428 27.97)",
+          "oklch(87% 0.0750 27.97)",
+          "oklch(95% 0.0286 27.97)"
+        ]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Fondo de lectura",
+        "tonalRamp": [
+          "oklch(15% 0.0061 262.75)",
+          "oklch(27% 0.0105 262.75)",
+          "oklch(39% 0.0145 262.75)",
+          "oklch(51% 0.0161 262.75)",
+          "oklch(63% 0.0161 262.75)",
+          "oklch(75% 0.0129 262.75)",
+          "oklch(87% 0.0068 262.75)",
+          "oklch(95% 0.0026 262.75)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Superficie azul clara",
+        "tonalRamp": [
+          "oklch(15% 0.0101 262.34)",
+          "oklch(27% 0.0173 262.34)",
+          "oklch(39% 0.0239 262.34)",
+          "oklch(51% 0.0266 262.34)",
+          "oklch(63% 0.0266 262.34)",
+          "oklch(75% 0.0213 262.34)",
+          "oklch(87% 0.0112 262.34)",
+          "oklch(95% 0.0043 262.34)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Papel de azulejo",
+        "tonalRamp": [
+          "oklch(15% 0.0033 264.52)",
+          "oklch(27% 0.0056 264.52)",
+          "oklch(39% 0.0077 264.52)",
+          "oklch(51% 0.0086 264.52)",
+          "oklch(63% 0.0086 264.52)",
+          "oklch(75% 0.0069 264.52)",
+          "oklch(87% 0.0036 264.52)",
+          "oklch(95% 0.0014 264.52)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinta de lectura",
+        "tonalRamp": [
+          "oklch(15% 0.0424 268.22)",
+          "oklch(27% 0.0726 268.22)",
+          "oklch(39% 0.1005 268.22)",
+          "oklch(51% 0.1117 268.22)",
+          "oklch(63% 0.1117 268.22)",
+          "oklch(75% 0.0894 268.22)",
+          "oklch(87% 0.0469 268.22)",
+          "oklch(95% 0.0179 268.22)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Texto secundario",
+        "tonalRamp": [
+          "oklch(15% 0.0349 269.65)",
+          "oklch(27% 0.0596 269.65)",
+          "oklch(39% 0.0826 269.65)",
+          "oklch(51% 0.0917 269.65)",
+          "oklch(63% 0.0917 269.65)",
+          "oklch(75% 0.0734 269.65)",
+          "oklch(87% 0.0385 269.65)",
+          "oklch(95% 0.0147 269.65)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Divisor",
+        "tonalRamp": [
+          "oklch(15% 0.0189 262.60)",
+          "oklch(27% 0.0324 262.60)",
+          "oklch(39% 0.0449 262.60)",
+          "oklch(51% 0.0499 262.60)",
+          "oklch(63% 0.0499 262.60)",
+          "oklch(75% 0.0399 262.60)",
+          "oklch(87% 0.0209 262.60)",
+          "oklch(95% 0.0080 262.60)"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Borde de campo",
+        "tonalRamp": [
+          "oklch(15% 0.0373 266.64)",
+          "oklch(27% 0.0638 266.64)",
+          "oklch(39% 0.0884 266.64)",
+          "oklch(51% 0.0982 266.64)",
+          "oklch(63% 0.0982 266.64)",
+          "oklch(75% 0.0786 266.64)",
+          "oklch(87% 0.0412 266.64)",
+          "oklch(95% 0.0157 266.64)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Navegación ultramar",
+        "tonalRamp": [
+          "oklch(15% 0.0804 267.02)",
+          "oklch(27% 0.1376 267.02)",
+          "oklch(39% 0.1905 267.02)",
+          "oklch(51% 0.2116 267.02)",
+          "oklch(63% 0.2116 267.02)",
+          "oklch(75% 0.1693 267.02)",
+          "oklch(87% 0.0889 267.02)",
+          "oklch(95% 0.0339 267.02)"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Ultramar activo",
+        "tonalRamp": [
+          "oklch(15% 0.0693 266.92)",
+          "oklch(27% 0.1186 266.92)",
+          "oklch(39% 0.1642 266.92)",
+          "oklch(51% 0.1825 266.92)",
+          "oklch(63% 0.1825 266.92)",
+          "oklch(75% 0.1460 266.92)",
+          "oklch(87% 0.0766 266.92)",
+          "oklch(95% 0.0292 266.92)"
+        ]
+      },
+      "danger": {
+        "role": "neutral",
+        "displayName": "Aviso de error",
+        "tonalRamp": [
+          "oklch(15% 0.0634 27.99)",
+          "oklch(27% 0.1085 27.99)",
+          "oklch(39% 0.1503 27.99)",
+          "oklch(51% 0.1670 27.99)",
+          "oklch(63% 0.1670 27.99)",
+          "oklch(75% 0.1336 27.99)",
+          "oklch(87% 0.0701 27.99)",
+          "oklch(95% 0.0267 27.99)"
+        ]
+      },
+      "ok": {
+        "role": "neutral",
+        "displayName": "Entrega confirmada",
+        "tonalRamp": [
+          "oklch(15% 0.0318 211.55)",
+          "oklch(27% 0.0543 211.55)",
+          "oklch(39% 0.0752 211.55)",
+          "oklch(51% 0.0836 211.55)",
+          "oklch(63% 0.0836 211.55)",
+          "oklch(75% 0.0669 211.55)",
+          "oklch(87% 0.0351 211.55)",
+          "oklch(95% 0.0134 211.55)"
+        ]
+      },
+      "chart-income": {
+        "role": "secondary",
+        "displayName": "Ingresos",
+        "tonalRamp": [
+          "oklch(15% 0.0562 267.29)",
+          "oklch(27% 0.1013 267.29)",
+          "oklch(39% 0.1462 267.29)",
+          "oklch(51% 0.1500 267.29)",
+          "oklch(63% 0.1500 267.29)",
+          "oklch(75% 0.1250 267.29)",
+          "oklch(87% 0.0650 267.29)",
+          "oklch(95% 0.0250 267.29)"
+        ]
+      },
+      "chart-payments": {
+        "role": "secondary",
+        "displayName": "Pagos",
+        "tonalRamp": [
+          "oklch(15% 0.0492 303.77)",
+          "oklch(27% 0.0886 303.77)",
+          "oklch(39% 0.1280 303.77)",
+          "oklch(51% 0.1313 303.77)",
+          "oklch(63% 0.1313 303.77)",
+          "oklch(75% 0.1094 303.77)",
+          "oklch(87% 0.0569 303.77)",
+          "oklch(95% 0.0219 303.77)"
+        ]
+      },
+      "chart-commitments": {
+        "role": "secondary",
+        "displayName": "Compromisos",
+        "tonalRamp": [
+          "oklch(15% 0.0304 72.36)",
+          "oklch(27% 0.0547 72.36)",
+          "oklch(39% 0.0791 72.36)",
+          "oklch(51% 0.0811 72.36)",
+          "oklch(63% 0.0811 72.36)",
+          "oklch(75% 0.0676 72.36)",
+          "oklch(87% 0.0351 72.36)",
+          "oklch(95% 0.0135 72.36)"
+        ]
+      },
+      "chart-remaining": {
+        "role": "secondary",
+        "displayName": "Disponible",
+        "tonalRamp": [
+          "oklch(15% 0.0308 228.62)",
+          "oklch(27% 0.0555 228.62)",
+          "oklch(39% 0.0802 228.62)",
+          "oklch(51% 0.0822 228.62)",
+          "oklch(63% 0.0822 228.62)",
+          "oklch(75% 0.0685 228.62)",
+          "oklch(87% 0.0356 228.62)",
+          "oklch(95% 0.0137 228.62)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Títulos del mundo y herramientas",
+        "purpose": "Dela Gothic One mantiene la voz del refugio; 28 px en herramienta y 24 px en modo compacto."
+      },
+      "hud": {
+        "displayName": "HUD y nombres de personajes",
+        "purpose": "Fredoka identifica accesos, estados, pestañas y nombres de las cuatro agentes."
+      },
+      "body": {
+        "displayName": "Lectura y datos",
+        "purpose": "Sistema para instrucciones, cifras, formularios y entregas; resultados hasta 72ch con interlineado 1.7."
+      }
+    },
+    "shadows": [
+      {
+        "name": "dialog",
+        "value": "0 18px 60px rgb(6 12 50 / 0.42)",
+        "purpose": "Diálogos y avisos sobre velo rgb(8 14 56 / 0.62). El HUD y las tarjetas de herramientas no añaden sombras."
+      }
+    ],
+    "motion": [
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce",
+        "purpose": "El mar, giros y halos se detienen. Seguimiento de cámara y visibilidad de muros son inmediatos; se conserva la navegación solicitada."
+      },
+      {
+        "name": "hud-zone-reveal",
+        "value": "zone-change",
+        "purpose": "Barrido de nombre al cambiar de zona; no añadir movimiento ornamental continuo al HUD o a los datos."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "room-dock-clear",
+        "value": "1300px"
+      },
+      {
+        "name": "room-panel-clear",
+        "value": "920px"
+      },
+      {
+        "name": "compact-hud",
+        "value": "(max-width: 700px), (max-height: 500px)"
+      },
+      {
+        "name": "compact-team-height",
+        "value": "860px height"
+      },
+      {
+        "name": "tool-projects-two-columns",
+        "value": "1050px container"
+      },
+      {
+        "name": "tool-projects-one-column",
+        "value": "600px container"
+      },
+      {
+        "name": "tool-results-list-or-detail",
+        "value": "600px container"
+      },
+      {
+        "name": "tool-profile-replaces-content",
+        "value": "950px viewport"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Acción de herramienta",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción primaria explícita: preparar o iniciar; crema de luna sobre una superficie de lectura.",
+      "html": "<button class=\"ds-primary\">Preparar encargo</button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 15px;border:1px solid var(--line-strong,#7d97d6);border-radius:8px;font:14px/1.35 system-ui,-apple-system,\"Segoe UI\",sans-serif;cursor:pointer;background:var(--luna,#fff2c4);color:var(--ink,#12205e);border-color:#cdbd89}.ds-primary:hover:not(:disabled){background:#ffe9a3}.ds-primary:focus-visible{outline:3px solid var(--cobalto,#2f66e6);outline-offset:3px}.ds-primary:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "Acción secundaria",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Volver, cancelar o copiar para otro agente; no implica ejecución.",
+      "html": "<button class=\"ds-secondary\">Copiar encargo para otro agente</button>",
+      "css": ".ds-secondary{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 15px;border:1px solid var(--line-strong,#7d97d6);border-radius:8px;font:14px/1.35 system-ui,-apple-system,\"Segoe UI\",sans-serif;cursor:pointer;background:var(--bg,#eef4ff);color:var(--ink,#12205e)}.ds-secondary:hover:not(:disabled){background:var(--hover,#d8e5ff)}.ds-secondary:focus-visible{outline:3px solid var(--cobalto,#2f66e6);outline-offset:3px}.ds-secondary:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "Acción sutil",
+      "kind": "button",
+      "refersTo": "button-subtle",
+      "description": "Consulta y navegación secundaria con objetivo mínimo de 44 px.",
+      "html": "<button class=\"ds-subtle\">Volver a entregas</button>",
+      "css": ".ds-subtle{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 15px;border:1px solid var(--line-strong,#7d97d6);border-radius:8px;font:14px/1.35 system-ui,-apple-system,\"Segoe UI\",sans-serif;cursor:pointer;background:transparent;color:var(--muted,#47588f);border-color:transparent}.ds-subtle:hover{background:var(--hover,#d8e5ff);color:var(--ink,#12205e)}.ds-subtle:focus-visible{outline:3px solid var(--cobalto,#2f66e6);outline-offset:3px}"
+    },
+    {
+      "name": "Campo de encargo",
+      "kind": "input",
+      "refersTo": "agent-field",
+      "description": "Instrucción etiquetada sobre papel; configuración de modelo y esfuerzo en un bloque plegado independiente.",
+      "html": "<label class=\"ds-label\" for=\"ds-order\">¿Qué quieres que haga?</label><textarea class=\"ds-field\" id=\"ds-order\" placeholder=\"Describe el objetivo del encargo…\"></textarea>",
+      "css": ".ds-label{display:block;margin:10px 0;color:var(--ink,#12205e);font:600 13px/1.45 system-ui,-apple-system,\"Segoe UI\",sans-serif}.ds-field{display:block;width:calc(100% - 26px);min-height:120px;resize:vertical;padding:11px 12px;background:var(--paper,#f6f9ff);color:var(--ink,#12205e);border:1px solid var(--line-strong,#7d97d6);border-radius:8px;font:14px/1.45 system-ui,-apple-system,\"Segoe UI\",sans-serif}.ds-field:focus-visible{outline:3px solid var(--cobalto,#2f66e6);outline-offset:3px}.ds-field::placeholder{color:#556594;opacity:1}"
+    },
+    {
+      "name": "Pestañas de herramientas",
+      "kind": "nav",
+      "refersTo": "tool-navigation",
+      "description": "Navegación interior inclinada; Equipo es una pestaña interna y el HUD inferior conserva sus accesos.",
+      "html": "<nav class=\"ds-tabs\" aria-label=\"Cambiar herramienta\"><a href=\"#projects\" aria-current=\"page\">Proyectos</a><a href=\"#today\">Hoy</a><a href=\"#team\">Equipo</a></nav>",
+      "css": ".ds-tabs{display:flex;gap:4px;overflow-x:auto;padding:4px 0 12px;border-bottom:1px solid var(--line,#c3d5f6)}.ds-tabs a{display:inline-flex;align-items:center;min-height:44px;padding:8px 18px;white-space:nowrap;color:var(--muted,#47588f);font:600 14px/1.45 Fredoka,\"Segoe UI\",sans-serif;text-decoration:none;clip-path:polygon(7px 0,100% 0,calc(100% - 7px) 100%,0 100%)}.ds-tabs a:hover{background:#d8e5ff;color:var(--ink,#12205e)}.ds-tabs a[aria-current]{background:var(--ultra,#2340c8);color:var(--blanco,#f1f7ff)}.ds-tabs a:focus-visible{outline:3px solid var(--cobalto,#2f66e6);outline-offset:-4px}"
+    },
+    {
+      "name": "Tarjeta de proyecto",
+      "kind": "card",
+      "refersTo": "project-card",
+      "description": "Próximo paso, tareas, fecha y cuatro cabezas; cuadrícula de tres, dos o una columna según el contenedor.",
+      "html": "<article class=\"ds-project\"><small>Proyecto · 2 de 4 tareas</small><a href=\"#project\"><h3>Proyecto de ejemplo</h3><p>Próximo paso: revisar el borrador</p></a><p class=\"ds-muted\">La consulta del equipo conserva el proyecto.</p></article>",
+      "css": ".ds-project{min-width:0;padding:22px;border:1px solid var(--line,#c3d5f6);border-radius:14px;background:#fff;color:var(--ink,#12205e);font:14px/1.55 system-ui,-apple-system,\"Segoe UI\",sans-serif}.ds-project:hover{border-color:var(--line-strong,#7d97d6)}.ds-project a{display:block;margin:24px 0;color:inherit;text-decoration:none}.ds-project h3{font-size:20px;margin:0 0 12px}.ds-project p{margin:0}.ds-project small,.ds-project .ds-muted{font-size:12px;color:var(--muted,#47588f)}.ds-project a:focus-visible{outline:3px solid var(--cobalto,#2f66e6);outline-offset:3px}"
+    },
+    {
+      "name": "Ficha de agente",
+      "kind": "card",
+      "refersTo": "agent-panel",
+      "description": "Consulta en el diálogo compartido; lateral en escritorio, sustitución del contenido hasta 950 px. El nombre acompaña al retrato original.",
+      "html": "<section class=\"ds-agent\" aria-label=\"Ficha de Menta\"><button class=\"ds-back\">Volver</button><h2>Menta</h2><p>Ideas y planificación</p><p>Consulta la actividad y prepara un encargo con el contexto del proyecto.</p><button class=\"ds-prepare\">Preparar encargo</button><details><summary>Modelo y esfuerzo</summary><p>La configuración se elige explícitamente antes de iniciar.</p></details></section>",
+      "css": ".ds-agent{padding:20px 24px 32px;max-width:420px;border-left:1px solid var(--line,#c3d5f6);background:#fff;color:var(--ink,#12205e);font:14px/1.55 system-ui,-apple-system,\"Segoe UI\",sans-serif}.ds-agent h2{font:500 28px/1.2 Fredoka,\"Segoe UI\",sans-serif;margin:14px 0 8px}.ds-agent p{font-size:13px;color:var(--muted,#47588f)}.ds-agent button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 15px;border:1px solid var(--line-strong,#7d97d6);border-radius:8px;font:14px/1.35 system-ui,-apple-system,\"Segoe UI\",sans-serif;cursor:pointer}.ds-back{background:transparent;color:var(--muted,#47588f);border-color:transparent!important}.ds-back:hover{background:var(--surface,#e3edff)}.ds-prepare{width:100%;margin:24px 0;background:var(--luna,#fff2c4);color:var(--ink,#12205e)}.ds-prepare:hover{background:#ffe9a3}.ds-agent summary{display:flex;align-items:center;min-height:44px;font-weight:600;cursor:pointer}.ds-agent button:focus-visible,.ds-agent summary:focus-visible{outline:3px solid var(--cobalto,#2f66e6);outline-offset:3px}"
+    },
+    {
+      "name": "Estado observado",
+      "kind": "chip",
+      "refersTo": "work-status",
+      "description": "Texto y punto redundantes; los estados provienen del controlador compartido y no simulan progreso.",
+      "html": "<span class=\"ds-status\">Esperando</span>",
+      "css": ".ds-status{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:5px;background:#e8eefc;color:#364980;font:12px/1.35 system-ui,-apple-system,\"Segoe UI\",sans-serif}.ds-status:before{content:\"\";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Hora azul",
+    "overview": "Un loft nocturno flotando sobre un mar facetado, entre la sala de estudio de un mundo social anime y una maqueta low-poly. Se abre como un juego: el mundo llena la pantalla y el HUD es parte de su lenguaje, no una capa de producto encima. Sustituye por completo al refugio de madera y al HUD marfil y musgo, que Paúl rechazó el 7 de noviembre de 2026 por sentirse corporativo y genérico.\r\n\r\n**Referencias.** Cuatro imágenes aportadas por Paúl: un estudio de manga con pegboard periwinkle y luna de neón; un estudio oscuro con máquina expendedora y paneles de luz; y dos lofts de azulejo blanco con globos a franjas, litera y ventanal de cuadrícula. Orientan paleta, materiales y objetos; no se copian sus personajes ni sus escenas. Para el HUD se revisaron la lista inclinada y la tipografía desbordada de Persona 3 Reload y el lenguaje de un solo tono con formas facetadas de Sayonara Wild Hearts. La búsqueda de \"HUD abstracto\" devuelve casi solo marcos sci-fi cian con esquinas cortadas: esa es la anti-referencia.",
+    "keyCharacteristics": [
+      "Un solo tono dominante, azul, en todos sus valores; crema de luna como único acento cálido y coral solo en puntos mínimos.",
+      "Sombreado cel de tres pasos, línea de tinta fina y halos pintados, sin bloom ni tone mapping.",
+      "HUD de esquirlas inclinadas sobre tinta sólida; nada de tarjetas blancas, pills ni dock de iconos de trazo.",
+      "Herramientas legibles sobre papel de azulejo claro, con banda de noche."
+    ],
+    "rules": [
+      {
+        "name": "The Una sola luna Rule",
+        "body": "Lo cálido escasea a propósito. Si `luna` aparece en más de un lugar por vista además de la selección, algo sobra.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "**Do** mantener el mundo persistente al abrir herramientas.",
+      "**Do** dar a cada zona un carácter propio dentro del mismo azul.",
+      "**Do** conservar etiquetas visibles en el dock y foco visible en todo el HUD.",
+      "**Do** distinguir a las agentes por nombre e inicial, además del color.",
+      "**Do** distinguir el trabajo real del modelo, los relevos programados y las referencias del banco local. Equipo y las fichas se leen sobre claro dentro del marco azul, con datos en tipografía del sistema, pasos comparables y resultados completos, conservando la escena.",
+      "**Do** consultar sin ejecutar, conservar el contexto al volver y ofrecer inicio o copiado como acciones explícitas distintas.",
+      "**Do** probar las herramientas en 1440 × 900, 1280 × 720, 1024 × 768, 375 × 812, 844 × 390 y anchura equivalente a zoom 200 %, incluyendo Escape y retorno de foco.",
+      "**Do** respetar movimiento reducido: el mar, los giros y los halos se detienen.",
+      "**Do** comprobar los solapes del HUD con `ops/verify-refugio.mjs` en 1024 × 768, 1280 × 720, 1440 × 900, 375 × 812 y 844 × 390 antes de mover piezas."
+    ],
+    "donts": [
+      "**Don't** volver a tarjetas claras, pills, sombras suaves o iconos de trazo en el HUD.",
+      "**Don't** usar marcos sci-fi cian, líneas de circuito ni esquinas cortadas simétricas.",
+      "**Don't** reintroducir madera, marfil, musgo, Furina, collage o barra lateral de navegación.",
+      "**Don't** llevar la decoración a los datos: las herramientas se leen sobre superficies tranquilas.",
+      "**Don't** convertir al jugador en una quinta agente ni duplicar el mapa por proyecto.",
+      "**Don't** fingir conversaciones o finalizaciones: las etiquetas y destinos siguen al runner real. No consumir modelos para animar, coordinar rutinas o adornar mensajes."
+    ]
+  }
+}

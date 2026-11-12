@@ -1,0 +1,1136 @@
+/* HUD of the blue refuge: paper-cut shards over the world, never a card grid. */
+.sala {
+  /* Space the dock needs at the bottom edge; HUD columns end above it. */
+  --dock-clear: 150px;
+  --side-top: 82px;
+  position: absolute;
+  inset: 0;
+  color: var(--hud-text);
+  background: var(--noche);
+  font-family: var(--hud-font);
+}
+.sala canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  touch-action: none;
+  cursor: crosshair;
+}
+.sala canvas:focus-visible {
+  outline: 2px solid var(--cielo);
+  outline-offset: -3px;
+}
+
+/* Zone title: the world's name for where you are, stamped on the scene. */
+.room-location {
+  position: absolute;
+  top: 84px;
+  left: 28px;
+  pointer-events: none;
+}
+.room-location h1 {
+  margin: 0;
+  font-family: var(--display-font);
+  font-size: clamp(34px, 3.9vw, 54px);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--blanco);
+  -webkit-text-stroke: 9px var(--tinta);
+  paint-order: stroke fill;
+  transform: rotate(-3deg) skewX(-6deg);
+  transform-origin: left center;
+}
+.room-location h1.swap {
+  animation: zone-swap 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes zone-swap {
+  from {
+    clip-path: polygon(0 0, 0 0, 0 100%, 0 100%);
+    translate: -18px 0;
+  }
+  to {
+    clip-path: polygon(-5% -20%, 110% -20%, 110% 130%, -5% 130%);
+    translate: 0 0;
+  }
+}
+
+/* Clock: a moon orbits a gem once a day. */
+.room-clock {
+  position: absolute;
+  left: 30px;
+  top: 150px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.moon-dial {
+  width: 58px;
+  height: 58px;
+  overflow: visible;
+}
+.dial-track {
+  fill: var(--tinta);
+  stroke: var(--cobalto);
+  stroke-width: 3;
+}
+#room-orbit {
+  transform-origin: 32px 32px;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dial-moon {
+  fill: var(--luna);
+}
+.dial-gem {
+  fill: var(--cobalto);
+}
+.dial-gem-lit {
+  fill: var(--cielo);
+}
+.room-clock > span {
+  display: flex;
+  flex-direction: column;
+  padding: 5px 16px 6px 12px;
+  background: var(--tinta);
+  clip-path: polygon(
+    6px 0,
+    100% 4px,
+    calc(100% - 7px) 100%,
+    0 calc(100% - 3px)
+  );
+}
+.room-clock b {
+  font-family: var(--display-font);
+  font-weight: 400;
+  font-size: 17px;
+  color: var(--blanco);
+}
+.room-clock small {
+  color: var(--hielo);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.room-loading {
+  position: absolute;
+  z-index: 9;
+  top: 43%;
+  left: 50%;
+  transform: translateX(-50%) rotate(-1.5deg);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: min(420px, calc(100% - 32px));
+  background: var(--tinta);
+  color: var(--blanco);
+  font-size: 16px;
+  font-weight: 500;
+  padding: 18px 30px 20px;
+  text-align: center;
+  clip-path: var(--corte);
+}
+.room-loading[hidden],
+.room-progress[hidden],
+.room-loading button[hidden] {
+  display: none;
+}
+.room-loading p {
+  margin: 0;
+  line-height: 1.4;
+}
+.room-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.room-progress progress {
+  flex: 1;
+  height: 10px;
+  appearance: none;
+  border: 0;
+  background: var(--noche);
+  clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
+}
+.room-progress progress::-webkit-progress-bar {
+  background: var(--noche);
+}
+.room-progress progress::-webkit-progress-value {
+  background: var(--cielo);
+  transition: width 0.2s;
+}
+.room-progress progress::-moz-progress-bar {
+  background: var(--cielo);
+}
+.room-progress span {
+  min-width: 3.5ch;
+  font-family: var(--display-font);
+  font-size: 14px;
+  color: var(--luna);
+  font-variant-numeric: tabular-nums;
+}
+.room-loading button {
+  min-height: 44px;
+  padding: 8px 24px;
+  background: var(--luna);
+  color: var(--noche);
+  font-weight: 600;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+
+/* Right column: team toggle, party list and camera keys stack inside one
+   anchored box that ends above the dock, so they can never overlap. */
+.room-side {
+  position: absolute;
+  z-index: 3;
+  top: var(--side-top);
+  right: 24px;
+  bottom: var(--dock-clear);
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+.room-side > * {
+  pointer-events: auto;
+}
+
+/* Party list: stepped shards along the right edge. */
+.team-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.team-collapse {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  background: var(--tinta);
+  color: var(--blanco);
+}
+.team-collapse svg {
+  width: 16px;
+  height: 16px;
+  transform: rotate(-90deg);
+}
+.team-collapse[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+.team-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 6px 18px 6px 16px;
+  background: var(--tinta);
+  color: var(--blanco);
+  font-size: 14px;
+  font-weight: 600;
+  clip-path: polygon(
+    8px 0,
+    100% 3px,
+    calc(100% - 6px) 100%,
+    0 calc(100% - 4px)
+  );
+  transition: background 0.18s;
+}
+.team-toggle:hover {
+  background: var(--ultra);
+}
+.team-toggle span {
+  font-family: var(--display-font);
+  color: var(--luna);
+  font-size: 14px;
+}
+.room-team {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 260px;
+  /* Room for the hover nudge inside the scroll box. */
+  padding-left: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cobalto) transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  pointer-events: none;
+}
+.room-team > * {
+  pointer-events: auto;
+}
+.room-team.collapsed {
+  display: none;
+}
+.team-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+#room-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.team-agent {
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  width: calc(100% - var(--step, 0px));
+  margin-left: var(--step, 0px);
+  padding: 7px 26px 7px 8px;
+  text-align: left;
+  background: var(--tinta);
+  color: var(--blanco);
+  clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+  transition:
+    translate 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.18s;
+}
+.team-agent:nth-child(1) {
+  --step: 36px;
+}
+.team-agent:nth-child(2) {
+  --step: 24px;
+}
+.team-agent:nth-child(3) {
+  --step: 12px;
+}
+.team-agent:hover {
+  translate: -10px 0;
+  background: var(--ultra);
+}
+.team-agent[aria-pressed="true"] {
+  background: var(--blanco);
+  color: var(--tinta);
+}
+.agent-initial {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-left: 6px;
+  background: var(--agent-color);
+  color: var(--noche);
+  font-family: var(--display-font);
+  font-size: 18px;
+  clip-path: polygon(50% 0, 100% 34%, 84% 100%, 16% 100%, 0 34%);
+}
+.team-agent > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.team-agent b {
+  font-size: 16px;
+  font-weight: 600;
+}
+.team-agent small {
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--hielo);
+}
+.team-agent[aria-pressed="true"] small {
+  color: var(--ultra);
+}
+.agent-chevron {
+  display: none;
+}
+
+/* Order sheet and references: one solid shard with a slanted cut. */
+.agent-detail {
+  position: absolute;
+  top: 130px;
+  right: 286px;
+  width: 340px;
+  /* The dock sits under this panel at every width. */
+  max-height: calc(100% - 290px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 22px 24px 24px;
+  background: var(--tinta);
+  color: var(--blanco);
+  clip-path: var(--corte);
+  scrollbar-color: var(--cobalto) transparent;
+}
+.agent-detail[hidden],
+.room-board[hidden] {
+  display: none;
+}
+.agent-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.agent-detail-heading h2 {
+  margin: 0;
+  font-family: var(--display-font);
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--blanco);
+}
+.agent-detail-heading p {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--hielo);
+}
+.agent-detail-heading button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  color: var(--blanco);
+}
+.agent-detail-heading button:hover {
+  color: var(--luna);
+}
+.agent-current {
+  margin: 12px 0 16px;
+  padding: 7px 14px;
+  background: var(--ultra);
+  color: var(--blanco);
+  font-size: 14px;
+  font-weight: 500;
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+}
+.agent-detail label {
+  display: block;
+  margin: 12px 0 5px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--hielo);
+}
+.agent-detail input,
+.agent-detail textarea,
+.agent-detail select {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--noche);
+  color: var(--blanco);
+  border: 2px solid var(--pizarra);
+  border-radius: 0;
+  font: inherit;
+  font-size: 15px;
+}
+.agent-detail input:focus,
+.agent-detail textarea:focus,
+.agent-detail select:focus {
+  outline: none;
+  border-color: var(--cielo);
+}
+.agent-detail textarea {
+  resize: vertical;
+  min-height: 84px;
+}
+.agent-detail textarea::placeholder {
+  color: #a9c2ee;
+}
+.agent-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.agent-actions button {
+  flex: 1;
+  min-height: 44px;
+  padding: 8px 12px;
+  background: var(--pizarra);
+  color: var(--blanco);
+  font-size: 15px;
+  font-weight: 600;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.agent-actions button[type="submit"] {
+  background: var(--luna);
+  color: var(--noche);
+}
+.agent-actions button:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+.agent-actions button:disabled {
+  opacity: 0.55;
+}
+.agent-scope {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--hielo);
+}
+.agent-results h3 {
+  margin: 18px 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--luna);
+}
+.reference-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.reference-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px;
+  background: var(--noche);
+}
+.reference-list a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--blanco);
+  font-size: 13px;
+}
+.reference-list a:hover span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.reference-list img {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+.reference-list button {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 4px 10px;
+  color: var(--luna);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Minimap: the floor plan, turned and tilted to follow the camera. */
+.room-map {
+  position: absolute;
+  bottom: var(--dock-clear);
+  left: 20px;
+  width: 262px;
+}
+.map-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 2;
+}
+.map-title b {
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--blanco);
+  padding: 3px 12px;
+  background: var(--tinta);
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+}
+.map-title button {
+  min-height: 30px;
+  padding: 3px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--hielo);
+  background: var(--noche);
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+}
+.map-title button:hover {
+  color: var(--luna);
+}
+.map-stage {
+  --map-turn: 0.6435rad;
+  position: relative;
+  height: 176px;
+  display: grid;
+  place-items: center;
+}
+.map-zones {
+  position: relative;
+  width: 204px;
+  height: 153px;
+  transform: scaleY(0.58) rotate(var(--map-turn));
+  filter: drop-shadow(0 10px 6px rgb(6 12 50 / 0.55));
+}
+.map-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.map-zones button {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  /* Undo the plan's turn so labels stay upright. */
+  transform: rotate(calc(var(--map-turn) * -1)) scaleY(1.724);
+}
+.map-zones button::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  background: var(--blanco);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  transition: scale 0.2s;
+}
+.map-zones button span {
+  position: absolute;
+  bottom: 19px;
+  left: 50%;
+  translate: -50% 0;
+  padding: 1px 7px;
+  background: var(--tinta);
+  color: var(--blanco);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.map-zones button:hover,
+.map-zones button:focus-visible,
+.map-zones button[aria-current="true"] {
+  z-index: 2;
+}
+.map-zones button:hover span,
+.map-zones button:focus-visible span,
+.map-zones button[aria-current="true"] span {
+  opacity: 1;
+}
+.map-zones button[aria-current="true"]::before {
+  background: var(--luna);
+}
+.map-zones button:hover::before {
+  background: var(--luna);
+  scale: 1.5;
+}
+.map-zones button:hover span {
+  background: var(--luna);
+  color: var(--noche);
+}
+.map-player {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  margin: -7px 0 0 -7px;
+  background: var(--coral);
+  outline: 2px solid var(--blanco);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* Camera: a small cluster of hex keys. */
+.room-camera {
+  flex-shrink: 0;
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: repeat(4, 44px);
+  gap: 3px;
+  justify-content: end;
+}
+.room-camera button {
+  display: grid;
+  place-items: center;
+  height: 44px;
+  background: var(--tinta);
+  color: var(--blanco);
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  transition: background 0.18s;
+}
+.room-camera button:hover {
+  background: var(--ultra);
+}
+.room-camera button:nth-last-child(-n + 2) {
+  grid-column: span 2;
+  height: 36px;
+  font-size: 14px;
+  font-weight: 600;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.room-camera svg {
+  width: 20px;
+  height: 20px;
+}
+
+.room-help {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  z-index: 20;
+  transform: translate(-50%, -50%) rotate(-1deg);
+  width: 400px;
+  max-width: calc(100% - 32px);
+  padding: 26px 30px 28px;
+  background: var(--tinta);
+  color: var(--blanco);
+  clip-path: var(--corte);
+}
+.room-help b {
+  font-family: var(--display-font);
+  font-weight: 400;
+  font-size: 22px;
+}
+.room-help p {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--hielo);
+}
+.room-help kbd {
+  padding: 0 6px;
+  background: var(--ultra);
+  color: var(--blanco);
+  font: inherit;
+  font-weight: 600;
+}
+.room-help {
+  max-height: calc(100% - 120px);
+  overflow-y: auto;
+}
+.room-quality {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--hielo);
+}
+.room-quality select {
+  min-height: 44px;
+  padding: 8px 10px;
+  background: var(--noche);
+  color: var(--blanco);
+  border: 2px solid var(--pizarra);
+  border-radius: 0;
+  font: inherit;
+  font-weight: 500;
+}
+.room-quality select:focus-visible {
+  outline: none;
+  border-color: var(--cielo);
+}
+.room-help .room-quality-note {
+  margin-top: 6px;
+  font-size: 13px;
+}
+.room-help button {
+  margin-top: 16px;
+  min-height: 42px;
+  padding: 8px 22px;
+  background: var(--luna);
+  color: var(--noche);
+  font-weight: 600;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+
+/* Contextual prompt, floating above the dock like a game action cue. */
+.room-interact {
+  position: absolute;
+  left: 50%;
+  bottom: 164px;
+  transform: translateX(-50%) rotate(-1.5deg);
+  min-height: 46px;
+  padding: 9px 26px;
+  background: var(--luna);
+  color: var(--noche);
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+.room-interact[hidden] {
+  display: none;
+}
+.room-interact :is(strong, span) {
+  display: block;
+}
+.room-interact strong {
+  font-size: 20px;
+}
+.room-interact #room-quick-lines {
+  font:
+    14px/1.4 system-ui,
+    sans-serif;
+  max-width: 42ch;
+  white-space: normal;
+  margin-block: 4px;
+  overflow-wrap: anywhere;
+}
+.room-interact :is(strong, span):empty {
+  display: none;
+}
+.room-interact #room-quick-action {
+  font-size: 14px;
+}
+.room-help-trigger {
+  position: absolute;
+  top: 86px;
+  left: 320px;
+  min-height: 44px;
+  padding: 8px 20px;
+  background: var(--tinta);
+  color: var(--blanco);
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.room-guide {
+  position: absolute;
+  top: 224px;
+  left: 28px;
+  width: 300px;
+  padding: 12px 18px;
+  background: var(--tinta);
+  color: var(--hielo);
+  font:
+    14px/1.45 system-ui,
+    sans-serif;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.room-guide p {
+  margin: 0 0 8px;
+}
+.room-guide button {
+  min-height: 44px;
+  color: var(--blanco);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.room-guide[hidden],
+.room-completion[hidden] {
+  display: none;
+}
+.room-volume {
+  display: grid;
+  gap: 8px;
+  margin-block: 16px;
+}
+.room-volume input {
+  width: 100%;
+  min-height: 44px;
+  accent-color: var(--cielo);
+}
+.room-completion {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 40ch;
+  background: var(--tinta);
+  color: var(--luna);
+  padding: 10px 22px;
+  pointer-events: none;
+}
+.room-joystick {
+  display: none;
+}
+.map-agent,
+.map-destination {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: var(--agent-color, var(--luna));
+  border: 1px solid var(--noche);
+  pointer-events: none;
+}
+.map-destination {
+  background: transparent;
+  border: 2px solid var(--luna);
+  width: 12px;
+  height: 12px;
+}
+.map-destination[hidden] {
+  display: none;
+}
+.sala[data-overlays]:not([data-overlays=""]) :is(.room-guide, .room-joystick) {
+  visibility: hidden;
+}
+.sala:is(
+    [data-overlays~="agent"],
+    [data-overlays~="board"],
+    [data-overlays~="desk"]
+  )
+  .room-help-trigger {
+  visibility: hidden;
+}
+@media (max-width: 700px), (max-height: 500px) {
+  .sala:has(#room-team:not(.collapsed))
+    :is(.room-interact, .room-guide, .room-joystick) {
+    visibility: hidden;
+  }
+  .room-help-trigger {
+    top: 132px;
+    left: 12px;
+  }
+  .room-guide {
+    top: 184px;
+    left: 12px;
+    width: min(228px, calc(100% - 24px));
+  }
+  .sala:has(#room-guide:not([hidden])) .room-clock {
+    display: none;
+  }
+  .room-joystick {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    left: 14px;
+    bottom: calc(var(--dock-clear) + 50px);
+    width: 104px;
+    height: 104px;
+    touch-action: none;
+    user-select: none;
+    background: var(--tinta);
+    border: 1px solid var(--cielo);
+    clip-path: polygon(
+      28% 0,
+      72% 0,
+      100% 28%,
+      100% 72%,
+      72% 100%,
+      28% 100%,
+      0 72%,
+      0 28%
+    );
+  }
+  .room-joystick > i {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    background: var(--cielo);
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    transform: translate(var(--stick-x, 0px), var(--stick-y, 0px));
+  }
+  .room-joystick > span {
+    align-self: end;
+    margin-bottom: 8px;
+    color: var(--hielo);
+    font-size: 12px;
+  }
+  .sala:has(#map-body:not([hidden])) :is(.room-joystick, .room-guide) {
+    display: none;
+  }
+  .room-completion {
+    top: 62px;
+    max-width: calc(100% - 24px);
+    width: max-content;
+    font-size: 14px;
+  }
+}
+@media (max-width: 700px) {
+  .sala:has(#map-body:not([hidden])) .room-team:not(.collapsed) {
+    display: none;
+  }
+}
+@media (max-height: 500px) and (min-width: 701px) {
+  .room-help-trigger {
+    top: 105px;
+  }
+  .room-guide {
+    top: 104px;
+    left: 142px;
+    width: 340px;
+    padding: 6px 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 8px;
+  }
+  .room-guide p {
+    font-size: 13px;
+    margin: 0;
+  }
+}
+
+/* Wide screens: the dock no longer reaches the corners, so map and camera drop. */
+@media (min-width: 1300px) {
+  .sala {
+    --dock-clear: 24px;
+  }
+}
+/* Short desktop windows: a tighter party list so the column fits above the dock. */
+@media (max-height: 860px) {
+  .team-agent {
+    min-height: 50px;
+    padding-block: 4px;
+  }
+  .agent-initial {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+}
+/* Short desktop windows: camera keys line up in one row, extending left of
+   the column, so the party list keeps its three buttons in view. */
+@media (max-height: 860px) and (min-height: 501px) and (min-width: 701px) {
+  .room-camera {
+    grid-template-columns: repeat(4, 44px) repeat(2, auto);
+  }
+  .room-camera button:nth-last-child(-n + 2) {
+    grid-column: auto;
+    height: 44px;
+    padding: 0 16px;
+  } /* The wider camera row reaches under the side panel's corner. */
+  .agent-detail {
+    max-height: calc(100% - 130px - var(--dock-clear) - 56px);
+  }
+}
+/* A side panel (agent or board) covers the middle of the screen: the minimap
+   steps aside where they would meet, and the proximity cue waits. */
+@media (max-width: 920px) {
+  .sala:is([data-overlays~="agent"], [data-overlays~="board"])
+    :is(.room-map, .room-clock) {
+    visibility: hidden;
+  }
+}
+.sala:is(
+    [data-overlays~="agent"],
+    [data-overlays~="board"],
+    [data-overlays~="help"],
+    [data-overlays~="diario"],
+    [data-overlays~="desk"]
+  )
+  .room-interact {
+  display: none;
+}
+
+/* Compact HUD: phones in portrait and landscape (same query as sala.ts). */
+@media (max-width: 700px), (max-height: 500px) {
+  .sala {
+    --dock-clear: 84px;
+    --side-top: 66px;
+  }
+  .room-location {
+    top: 66px;
+    left: 16px;
+  }
+  .room-location h1 {
+    font-size: 26px;
+    -webkit-text-stroke-width: 7px;
+  }
+  .room-clock {
+    display: none;
+  }
+  .room-side {
+    right: 12px;
+    width: 236px;
+    gap: 6px;
+  }
+  .room-team {
+    width: 236px;
+  }
+  .agent-detail {
+    top: 112px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: calc(100% - 112px - var(--dock-clear) - 8px);
+    z-index: 7;
+  }
+  /* The sheet covers the HUD underneath; hide it instead of stacking. */
+  .sala:is([data-overlays~="agent"], [data-overlays~="board"])
+    :is(.room-side, .room-map) {
+    visibility: hidden;
+  }
+  .room-map {
+    left: 10px;
+    bottom: var(--dock-clear);
+    width: 186px;
+  }
+  .map-stage {
+    height: 118px;
+  }
+  .map-zones {
+    width: 132px;
+    height: 99px;
+  }
+  .map-title b {
+    font-size: 13px;
+    padding: 3px 9px;
+  }
+  .map-title button {
+    padding: 3px 9px;
+  }
+  .room-camera {
+    grid-template-columns: repeat(4, 38px);
+  }
+  .room-camera button {
+    height: 40px;
+  }
+  .room-camera button:nth-last-child(-n + 2) {
+    height: 34px;
+    font-size: 13px;
+  }
+  .room-interact {
+    left: auto;
+    right: 12px;
+    bottom: calc(var(--dock-clear) + 114px);
+    max-width: min(210px, calc(100% - 24px));
+    min-height: 44px;
+    padding: 6px 18px;
+    transform: none;
+    font-size: 13px;
+  }
+  /* A phone keeps the scene in view: the action says where it leads, and the
+     zone's summary is one tap away. */
+  .room-interact strong,
+  .room-interact #room-quick-lines {
+    display: none;
+  }
+  .room-interact #room-quick-action {
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+  }
+}
+/* Landscape phones: little height, plenty of width. Panels take the right half. */
+@media (max-height: 500px) and (min-width: 701px) {
+  .sala {
+    --dock-clear: 78px;
+    --side-top: 60px;
+  }
+  .room-location {
+    top: 60px;
+  }
+  .agent-detail {
+    top: 60px;
+    left: auto;
+    right: 12px;
+    width: min(440px, 58%);
+    max-height: calc(100% - 60px - var(--dock-clear) - 6px);
+  }
+  .sala:is([data-overlays~="agent"], [data-overlays~="board"]) .room-map {
+    visibility: visible;
+  }
+  .room-interact {
+    left: 50%;
+    right: auto;
+    bottom: calc(var(--dock-clear) + 8px);
+    max-width: none;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+  .room-help {
+    top: 50%;
+    max-height: calc(100% - 24px);
+    overflow: auto;
+  }
+}
