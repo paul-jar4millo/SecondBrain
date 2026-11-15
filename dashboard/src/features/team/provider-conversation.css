@@ -1,0 +1,128 @@
+.provider-conversation {
+  flex: 1;
+  min-height: 160px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding: 20px clamp(16px, 4%, 48px) 32px;
+  background: var(--paper, #f6f9ff);
+  color: var(--ink, #12205e);
+  max-height: 60dvh;
+}
+.conversation-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.conversation-body {
+  min-width: 0;
+  min-height: 0;
+}
+.conversation-main > .conversation-compose {
+  padding: 16px;
+  border-top: 1px solid var(--line, #c3d5f6);
+  background: var(--paper, #f6f9ff);
+}
+.conversation-file-changes {
+  padding: 12px 0;
+}
+.provider-connection {
+  color: var(--muted, #47588f);
+  font-size: 12px;
+  margin-bottom: 24px;
+}
+.provider-message {
+  max-width: 78ch;
+  margin: 0 auto 28px;
+}
+.provider-message > strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.provider-message.is-user {
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--surface, #e3edff);
+}
+.provider-message p {
+  line-height: 1.7;
+}
+.provider-tool {
+  max-width: 78ch;
+  margin: 0 auto 12px;
+  color: var(--muted, #47588f);
+}
+.provider-tool summary {
+  min-height: 44px;
+  padding: 10px 0;
+}
+.provider-tool summary span {
+  float: right;
+  font-size: 12px;
+}
+.provider-tool pre,
+.provider-request pre {
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.provider-request {
+  max-width: 78ch;
+  margin: 24px auto;
+  padding: 20px;
+  border: 1px solid var(--line-strong, #7d97d6);
+  border-radius: 12px;
+  background: var(--bg, #eef4ff);
+}
+.provider-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  color: var(--muted, #47588f);
+}
+.provider-request h3 {
+  margin: 8px 0 16px;
+}
+.provider-request fieldset {
+  border: 0;
+  padding: 0;
+  margin: 16px 0;
+  min-width: 0;
+}
+.provider-request legend {
+  margin-bottom: 10px;
+}
+.provider-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.provider-options .button {
+  white-space: normal;
+  text-align: left;
+}
+.provider-options small {
+  display: block;
+  font-weight: 400;
+}
+.provider-request input {
+  width: 100%;
+  box-sizing: border-box;
+}
+@media (max-width: 700px) {
+  .provider-conversation {
+    padding: 16px 14px 24px;
+  }
+  .provider-request {
+    padding: 14px;
+  }
+  .provider-request input {
+    font-size: 16px;
+  }
+  .provider-options .button {
+    min-height: 44px;
+  }
+}
