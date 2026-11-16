@@ -1,0 +1,52 @@
+[Unit]
+Description=SecondBrain launcher for harness sessions
+After=network-online.target secondbrain.service
+OnFailure=secondbrain-aviso@%n.service
+
+[Service]
+User=sb-agente
+Group=sb-agente
+WorkingDirectory=/srv/sb-agente/proyectos
+EnvironmentFile=/var/lib/sb-agente/agentes.env
+Environment=HOME=/var/lib/sb-agente
+Environment=PATH=/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:/var/lib/sb-agente/.local/bin
+Environment=SB_LANZADOR_DATA_DIR=/var/lib/sb-agente/estado/lanzador
+Environment=SB_CONTROL_HASH_FILE=/etc/sb-agente/lanzador-control.sha256
+Environment=SB_HOOK_HASH_FILE=/etc/sb-agente/hook-token.sha256
+Environment=SB_HOOK_TOKEN_FILE=/var/lib/sb-agente/hook-token
+Environment=SB_PROYECTOS_FILE=/etc/sb-agente/proyectos.json
+Environment=AGENTES_BRAIN_TOKEN_FILE=/var/lib/sb-agente/brain-token
+Environment=AGENTES_CLAUDE_DIR=/var/lib/sb-agente/claude
+Environment=AGENTES_DEEPSEEK_DIR=/var/lib/sb-agente/deepseek
+Environment=CODEX_HOME=/var/lib/sb-agente/codex
+Environment=SB_REMOTE_INTERACTIVE=1
+Environment=SB_MAX_ACTIVOS=2
+Environment=SB_RETENCION_DIAS=14
+Environment=SB_SESSION_SCOPES=1
+Environment=XDG_RUNTIME_DIR=/run/user/@UID@
+ExecStart=/opt/node/bin/node /opt/secondbrain/current/server/lanzador.mjs
+ExecStartPre=+/bin/sh -c '/usr/bin/readlink -f /opt/secondbrain/current > /run/secondbrain-launcher-release && /usr/bin/chmod 0644 /run/secondbrain-launcher-release'
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=tmpfs
+BindPaths=/run/user/@UID@
+InaccessiblePaths=/srv/secondbrain/vault /var/lib/secondbrain
+ReadWritePaths=/srv/sb-agente /var/lib/sb-agente
+MemoryMax=3G
+# This is an aggregate bound. Individual session containment is verified separately.
+OOMPolicy=continue
+TasksMax=256
+CPUQuota=150%
+ProtectProc=invisible
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+BindReadOnlyPaths=/etc/sb-agente/resolv.conf:/etc/resolv.conf
+
+[Install]
+WantedBy=multi-user.target
