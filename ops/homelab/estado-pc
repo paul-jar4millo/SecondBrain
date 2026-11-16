@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /opt/node/bin/node /opt/secondbrain/current/ops/homelab/pc.mjs status

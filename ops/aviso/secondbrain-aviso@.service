@@ -1,0 +1,23 @@
+[Unit]
+Description=SecondBrain failure notice for %i
+# Inert until /etc/secondbrain/aviso.env exists (see docs/deployment.md).
+ConditionPathExists=/etc/secondbrain/aviso.env
+
+[Service]
+Type=oneshot
+# Read by systemd as root before dropping privileges, so it can stay 0600 root.
+EnvironmentFile=-/etc/secondbrain/aviso.env
+ExecStart=/bin/sh /opt/secondbrain/current/ops/aviso/enviar-aviso.sh %i
+TimeoutStartSec=30
+DynamicUser=yes
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

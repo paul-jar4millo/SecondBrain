@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily SecondBrain off-host backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=30min
+Persistent=true
+Unit=secondbrain-backup.service
+
+[Install]
+WantedBy=timers.target

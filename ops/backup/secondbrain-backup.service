@@ -1,0 +1,33 @@
+[Unit]
+Description=SecondBrain off-host backup with restic
+# Harmless until /etc/secondbrain/backup.env exists: the unit is skipped, not failed.
+ConditionPathExists=/etc/secondbrain/backup.env
+Wants=network-online.target
+After=network-online.target
+OnFailure=secondbrain-aviso@%n.service
+
+[Service]
+Type=oneshot
+User=secondbrain
+Group=secondbrain
+# RESTIC_REPOSITORY, RESTIC_PASSWORD_FILE, VAULT_ROOT, DATA_DIR (see docs/deployment.md).
+# systemd reads it as root, so the file can stay 0600 root.
+EnvironmentFile=/etc/secondbrain/backup.env
+Environment=RESTIC_CACHE_DIR=/var/cache/secondbrain-backup
+CacheDirectory=secondbrain-backup
+ExecStart=/bin/sh /opt/secondbrain/current/ops/backup/backup.sh
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=idle
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+# Reads the vault and DATA_DIR; a local (non-network) RESTIC_REPOSITORY needs a drop-in
+# adding its path to ReadWritePaths=.
+ReadOnlyPaths=/srv/secondbrain/vault /var/lib/secondbrain
