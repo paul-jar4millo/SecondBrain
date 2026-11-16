@@ -1,0 +1,9 @@
+[Unit]
+Description=SecondBrain morning summary at 07:00 Mexico City
+
+[Timer]
+OnCalendar=*-*-* 07:00:00 America/Mexico_City
+Persistent=true
+
+[Install]
+WantedBy=timers.target

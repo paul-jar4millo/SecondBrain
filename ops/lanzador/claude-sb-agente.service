@@ -1,0 +1,36 @@
+[Unit]
+Description=sb-agente Claude Remote Control (permisos auto)
+After=network-online.target
+
+[Service]
+User=sb-agente
+Group=sb-agente
+WorkingDirectory=/srv/sb-agente/proyectos/sb-agente
+EnvironmentFile=/var/lib/sb-agente/agentes.env
+Environment=HOME=/var/lib/sb-agente
+Environment=PATH=/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:/var/lib/sb-agente/.local/bin
+Environment=CLAUDE_CONFIG_DIR=/var/lib/sb-agente/claude
+# Sin los conectores de claude.ai del dueño: podrían mandar mensajes sin aprobación.
+Environment=ENABLE_CLAUDEAI_MCP_SERVERS=false
+ExecStart=/opt/sb-agente/node_modules/.bin/claude remote-control --name sb-agente --permission-mode auto
+Restart=on-failure
+RestartSec=5
+MemoryMax=768M
+TasksMax=128
+CPUQuota=50%
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=yes
+InaccessiblePaths=/srv/secondbrain/vault /var/lib/secondbrain
+ReadWritePaths=/srv/sb-agente /var/lib/sb-agente
+ProtectProc=invisible
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+BindReadOnlyPaths=/etc/sb-agente/resolv.conf:/etc/resolv.conf
+
+[Install]
+WantedBy=multi-user.target

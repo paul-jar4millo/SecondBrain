@@ -1,0 +1,32 @@
+[Unit]
+Description=Second Brain private Markdown dashboard
+Wants=network-online.target
+After=network-online.target
+OnFailure=secondbrain-aviso@%n.service
+
+[Service]
+Type=simple
+User=secondbrain
+Group=secondbrain
+WorkingDirectory=/opt/secondbrain/current
+Environment=NODE_ENV=production
+Environment=AUTH=on
+Environment=HOST=0.0.0.0
+Environment=PORT=8080
+Environment=VAULT_ROOT=/srv/secondbrain/vault
+Environment=DATA_DIR=/var/lib/secondbrain
+Environment=TRUSTED_PROXY=@PROXY_IP@
+Environment=VAULT_GIT=on
+Environment=AGENTES_BRAIN_TOKEN_FILE=/var/lib/secondbrain/agentes-brain-token
+ExecStart=/opt/node/bin/node server/index.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/secondbrain/vault /var/lib/secondbrain
+
+[Install]
+WantedBy=multi-user.target

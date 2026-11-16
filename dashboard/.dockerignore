@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.data
+.env
+.env.*
+secrets
+artifacts
+server/bin
+server/obj
+tests
+**/node_modules
+**/bin
+**/obj
