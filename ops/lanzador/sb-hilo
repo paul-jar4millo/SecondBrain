@@ -1,0 +1,10 @@
+#!/bin/sh
+# Hilos del lanzador desde la terminal del LXC (root o secondbrain).
+# El token de control es del servicio: sb-agente y sus sesiones no lo leen.
+set -eu
+cli=/opt/secondbrain/current/lanzador/cli.mjs
+set -- env LANZADOR_URL=http://127.0.0.1:8092 \
+  LANZADOR_TOKEN_FILE=/var/lib/secondbrain/lanzador-token \
+  /opt/node/bin/node "$cli" "$@"
+if [ "$(id -u)" = 0 ]; then exec runuser -u secondbrain -- "$@"; fi
+exec "$@"

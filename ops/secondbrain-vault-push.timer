@@ -1,0 +1,11 @@
+[Unit]
+Description=Send SecondBrain vault commits every ten minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=secondbrain-vault-push.service
+
+[Install]
+WantedBy=timers.target
