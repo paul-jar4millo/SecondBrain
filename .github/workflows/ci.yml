@@ -1,0 +1,247 @@
+name: CI
+
+# A single blocking job (verify) decides whether a change can be merged.
+# Checks that depend on third parties or on software WebGL (dependency audit and
+# browser suites) report warnings without blocking. Deployment lives in
+# deploy.yml and only runs for version tags; it never runs for pull requests.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly dependency audit (Mondays 15:23 UTC).
+    - cron: "23 15 * * 1"
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its previous run.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FORCE_COLOR: "0"
+
+jobs:
+  verify:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      browser: ${{ steps.changes.outputs.browser }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
+            service/package-lock.json
+            mcp/package-lock.json
+            lanzador/package-lock.json
+      # Browser suites only for pull requests that touch the UI or the service,
+      # and for manual runs. Decided with git, without calling the GitHub API.
+      - name: Do the browser suites need to run?
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          case "$EVENT" in
+            workflow_dispatch) browser=true ;;
+            pull_request)
+              if files=$(git diff --name-only "$BASE" HEAD); then
+                grep -qE '^(dashboard|service)/' <<<"$files" && browser=true || browser=false
+              else
+                browser=true
+              fi ;;
+            *) browser=false ;;
+          esac
+          echo "browser=$browser" >> "$GITHUB_OUTPUT"
+      - run: npm run setup
+      - name: Lint and format
+        run: |
+          npm run lint
+          npm run format:check
+      - name: Type check
+        run: npm run typecheck
+      - name: ShellCheck
+        run: |
+          find ops dashboard/ops -name '*.sh' -type f -print0 | xargs -0 shellcheck -S warning
+          shellcheck -S warning ops/homelab/prender-pc ops/homelab/estado-pc ops/lanzador/sb-hilo
+      - name: Tests with coverage
+        run: |
+          npm run coverage
+          npm run test:ops
+          python3 -m unittest discover -s ops/migration/tests
+          python3 -m unittest discover -s ops/backup/tests
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "### Line coverage"
+            for module in service mcp lanzador dashboard; do
+              file="coverage/$module/lcov.info"
+              [ -f "$file" ] || continue
+              awk -F: -v m="$module" '/^LF:/{f+=$2} /^LH:/{h+=$2} END{if(f) printf "- %s: %.1f%%\n", m, 100*h/f}' "$file"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - run: npm run build
+      - name: Package the application
+        run: |
+          mkdir -p release
+          node ops/package-release.mjs release
+          tar -czf release.tar.gz -C release .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: secondbrain-${{ github.sha }}
+          path: release.tar.gz
+          retention-days: 3
+          if-no-files-found: error
+      # Browser jobs reuse this build instead of repeating it.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dashboard/dist
+          retention-days: 1
+          if-no-files-found: error
+
+  commits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+      - run: node --test ops/tests/commit-message.test.mjs
+      - name: Conventional Commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            range="$HEAD"
+          else
+            range="$BASE..$HEAD"
+          fi
+          while read -r sha; do
+            # GitHub's merge button creates a two-parent commit with its own
+            # fixed subject; the authored commits were checked on the PR.
+            parents=$(git show -s --format=%P "$sha")
+            subject=$(git show -s --format=%s "$sha")
+            if [[ "$parents" == *" "* && "$subject" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\  ]]; then
+              continue
+            fi
+            git show -s --format=%B "$sha" | node ops/check-commit.mjs || exit 1
+          done < <(git rev-list "$range")
+
+  # A new advisory in a third-party package must not block unrelated work:
+  # this job stays green and leaves a visible warning. It also runs weekly.
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+      - name: Production dependencies
+        run: |
+          failed=""
+          for package in dashboard service mcp lanzador; do
+            if ! npm --prefix "$package" audit --omit=dev --audit-level=high; then
+              failed="$failed $package"
+            fi
+          done
+          if [ -n "$failed" ]; then
+            echo "::warning title=Audit::High-severity advisories in production dependencies:$failed. Review before merging."
+          fi
+      - name: Development dependencies (informational)
+        run: |
+          npm --prefix dashboard audit --audit-level=high \
+            || echo "::notice title=Dev audit::The dashboard has advisories in development dependencies; they do not ship."
+
+  # Software WebGL on shared machines: four groups, each retried once. Reports
+  # on pull requests; it does not gate merges.
+  browser:
+    name: browser (${{ matrix.group }})
+    needs: verify
+    if: needs.verify.outputs.browser == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: refuge-desktop
+            commands: REFUGIO_PARTES=escritorio node ops/verify-refugio.mjs
+          - group: refuge-layouts
+            commands: REFUGIO_PARTES=descarga,layouts node ops/verify-refugio.mjs
+          - group: refuge-mobile
+            commands: REFUGIO_PARTES=movil,privado,sinwebgl node ops/verify-refugio.mjs
+          - group: team-and-tools
+            commands: node ops/verify-aprobaciones.mjs && node ops/verify-project-dashboards.mjs && node ops/verify-tools.mjs && node ops/verify-conversations.mjs
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
+            service/package-lock.json
+            mcp/package-lock.json
+            lanzador/package-lock.json
+      - run: npm run setup
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dashboard/dist
+      # The runner image ships Chrome: avoid downloading Chromium and its deps.
+      - name: Browser
+        run: |
+          if command -v google-chrome >/dev/null; then
+            echo "BROWSER_EXECUTABLE=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          else
+            npx --prefix dashboard playwright install --with-deps chromium
+          fi
+      - name: Verify ${{ matrix.group }}
+        working-directory: dashboard
+        env:
+          COMMANDS: ${{ matrix.commands }}
+          GROUP: ${{ matrix.group }}
+        run: |
+          for attempt in 1 2; do
+            if bash -c "$COMMANDS"; then
+              [ "$attempt" = 2 ] && echo "::warning title=Flaky::$GROUP passed only on the second attempt"
+              exit 0
+            fi
+            echo "::warning title=Failure::$GROUP failed on attempt $attempt"
+          done
+          exit 1
+      - name: Failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-${{ matrix.group }}-${{ github.run_attempt }}
+          path: .impeccable/review
+          retention-days: 7
+          if-no-files-found: ignore
