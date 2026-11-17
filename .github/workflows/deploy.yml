@@ -1,0 +1,99 @@
+name: Deploy
+
+# Continuous delivery to the self-hosted production container.
+#
+# Safety model (see docs/ci-cd.md):
+# - Only a pushed `v*` tag (or a manual run on such a tag) can start it; pull
+#   requests, including those from forks, never reach the self-hosted runner.
+# - The `deploy` job uses the `production` environment, which requires a manual
+#   approval and only accepts `v*` tags. Host-specific values live in that
+#   environment's variables and secrets, never in the repository.
+# - The self-hosted job does not check out the repository: it only downloads the
+#   artifact built and tested on a GitHub-hosted runner, and runs a fixed,
+#   root-owned helper through a single sudo rule.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  FORCE_COLOR: "0"
+
+jobs:
+  build:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            dashboard/package-lock.json
+            service/package-lock.json
+            mcp/package-lock.json
+            lanzador/package-lock.json
+      - run: npm run setup
+      - name: Test
+        run: |
+          npm test
+          npm run test:api
+          node --test ops/tests/*.test.mjs
+      - run: npm run build
+      - name: Package the application
+        run: |
+          mkdir -p release
+          node ops/package-release.mjs release
+          tar -czf release.tar.gz -C release .
+          sha256sum release.tar.gz | tee release.tar.gz.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: secondbrain-${{ github.sha }}
+          path: |
+            release.tar.gz
+            release.tar.gz.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    # Never on forks or on anything but a version tag of this repository.
+    if: github.repository_owner == vars.SB_DEPLOY_OWNER && github.ref_type == 'tag'
+    runs-on: [self-hosted, linux, x64, secondbrain-production]
+    environment:
+      name: production
+      url: ${{ vars.SB_PUBLIC_URL }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: secondbrain-${{ github.sha }}
+          path: /var/lib/sb-runner/incoming/${{ github.sha }}
+      - name: Verify the artifact checksum
+        working-directory: /var/lib/sb-runner/incoming/${{ github.sha }}
+        run: sha256sum -c release.tar.gz.sha256
+      - name: Activate the release (health check and automatic rollback)
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: sudo /usr/local/sbin/secondbrain-deploy "$RELEASE_SHA"
+      - name: Public health check
+        if: vars.SB_PUBLIC_URL != ''
+        env:
+          PUBLIC_URL: ${{ vars.SB_PUBLIC_URL }}
+        run: curl -fsS --retry 5 --retry-delay 3 --max-time 10 "$PUBLIC_URL/api/v1/health"
+      - name: Remove the temporary package
+        if: always()
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: rm -rf -- "/var/lib/sb-runner/incoming/$RELEASE_SHA"
