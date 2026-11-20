@@ -5,16 +5,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { once } from "node:events";
-import { abrirRegistro } from "../sessions.mjs";
-import { abrirEquipos } from "../teams.mjs";
-import { crearEjecutor } from "../executor.mjs";
-import { crearServidor } from "../index.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { openTeams } from "../teams.mjs";
+import { createExecutor } from "../executor.mjs";
+import { createLauncherServer } from "../index.mjs";
 import { createProviderConversations } from "../provider-conversations.mjs";
 
 test("sesión estructurada de extremo a extremo: pregunta, autenticación, respuesta y reanudación", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-provider-http-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(dir, "sessions.json"));
+  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
   let resume;
   let asked;
   let ready = new Promise((r) => {
@@ -37,14 +37,14 @@ test("sesión estructurada de extremo a extremo: pregunta, autenticación, respu
       },
     },
   });
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     proyectos: { demo: dir },
     conversations,
     env: {},
   });
   const hash = (token) => createHash("sha256").update(token).digest("hex");
-  const server = crearServidor({
+  const server = createLauncherServer({
     registro,
     ejecutor,
     conversations,
@@ -115,8 +115,8 @@ test("sesión estructurada de extremo a extremo: pregunta, autenticación, respu
 test("delegar conserva protocolo, modelo y esfuerzo y separa archivos incluso con el mismo motor", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-provider-team-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(dir, "sessions.json"));
-  const equipos = await abrirEquipos(path.join(dir, "teams"), {
+  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const equipos = await openTeams(path.join(dir, "teams"), {
     activo: (id) =>
       registro.leer().some((s) => s.id === id && s.estado === "trabajando"),
   });
@@ -134,7 +134,7 @@ test("delegar conserva protocolo, modelo y esfuerzo y separa archivos incluso co
       },
     },
   });
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     equipos,
     proyectos: { demo: dir },

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { crearServidor } from "../index.mjs";
+import { createLauncherServer } from "../index.mjs";
 
 test("control y hooks usan credenciales distintas y las rutas modifican solo la sesión solicitada", async (t) => {
   let estado = [
@@ -24,7 +24,7 @@ test("control y hooks usan credenciales distintas y las rutas modifican solo la 
       return { id };
     },
   };
-  const server = crearServidor({
+  const server = createLauncherServer({
     registro,
     ejecutor,
     controlHash: huella("control"),
@@ -131,7 +131,7 @@ test("las rutas de equipo exigen control y enlazan mensajes al miembro activo", 
     },
     esperarHija: async () => ({ estado: "terminada" }),
   };
-  const server = crearServidor({
+  const server = createLauncherServer({
     registro,
     ejecutor,
     equipos,

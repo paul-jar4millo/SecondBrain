@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ErrorLanzador } from "./errors.mjs";
+import { LauncherError } from "./errors.mjs";
 /** @import { LauncherSession, SessionCheckpoint, SessionRegistry } from "./session-types.d.ts" */
 
 /** @typedef {{ esRepo: boolean, tieneRemoto: boolean, remotoGithub: boolean }} RepositoryInfo */
@@ -41,12 +41,12 @@ const plano = (texto) =>
  * Checkpoints of a working tree as hidden refs. Nothing here touches the user's
  * index, branch, stash or HEAD: trees are built in a throwaway index file.
  * @param {object} options
- * @param {Pick<ReturnType<typeof import("./git.mjs").crearGit>, "git">} options.git
+ * @param {Pick<ReturnType<typeof import("./git.mjs").createGit>, "git">} options.git
  * @param {() => Date} [options.ahora]
  * @param {number} [options.max]
  * @param {string} [options.dirIndices]
  */
-export function crearCheckpoints({
+export function createCheckpoints({
   git: ejecutor,
   ahora = () => new Date(),
   max = MAX_CHECKPOINTS,
@@ -351,10 +351,10 @@ export function crearCheckpoints({
  * diffs. A failing capture is recorded and never blocks the turn.
  * @param {object} options
  * @param {Pick<SessionRegistry, "leer" | "actualizar">} options.registro
- * @param {ReturnType<typeof crearCheckpoints>} options.checkpoints
+ * @param {ReturnType<typeof createCheckpoints>} options.checkpoints
  * @param {(session: Readonly<LauncherSession>) => string | null | undefined} options.cwdDe
  */
-export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
+export function createTracking({ registro, checkpoints, cwdDe }) {
   /** @type {Map<string, Promise<unknown>>} */
   const colas = new Map();
   /** @template T @param {string} id @param {() => Promise<T>} fn */
@@ -415,7 +415,7 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
         const cwd = sesion && cwdDe(sesion);
         const destino = sesion?.checkpoints?.find((c) => c.n === n);
         if (!destino)
-          throw new ErrorLanzador("Ese punto de control ya no existe.", 404);
+          throw new LauncherError("Ese punto de control ya no existe.", 404);
         // The safety checkpoint is what «undo» goes back to.
         let seguridad;
         try {
@@ -427,7 +427,7 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
           if (!cwd) throw new Error("No hay un directorio de sesión.");
           await checkpoints.restaurar(cwd, destino.commit);
         } catch {
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "No se pudo restaurar el árbol de trabajo. Revisa el repositorio.",
             500,
           );
@@ -441,12 +441,12 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
       const cwd = sesion && cwdDe(sesion);
       const lista = sesion?.checkpoints ?? [];
       if (!cwd || !lista.length)
-        throw new ErrorLanzador("Esta sesión no tiene puntos de control.", 404);
+        throw new LauncherError("Esta sesión no tiene puntos de control.", 404);
       /** @param {number} n */
       const punto = (n) => {
         const c = lista.find((x) => x.n === n);
         if (!c)
-          throw new ErrorLanzador("Ese punto de control ya no existe.", 404);
+          throw new LauncherError("Ese punto de control ya no existe.", 404);
         return c.commit;
       };
       const a = desde === undefined ? lista[0].commit : punto(desde);

@@ -52,7 +52,7 @@ const AgentProfile = lazy(() =>
   })),
 );
 const ToolRoutes = lazy(() => import("./ToolRoutes"));
-const SalaPage = lazy(() => import("../features/sala/SalaPage"));
+const RoomPage = lazy(() => import("../features/room/RoomPage"));
 const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform)
   ? "⌘ K"
   : "Ctrl K";
@@ -346,7 +346,7 @@ export function Workspace() {
               <Suspense
                 fallback={<p className="world-loading">{t("loading.room")}</p>}
               >
-                <SalaPage />
+                <RoomPage />
               </Suspense>
             ) : (
               <div className="world-loading">

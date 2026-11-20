@@ -1,15 +1,15 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
-import { ErrorLanzador } from "./errors.mjs";
+import { LauncherError } from "./errors.mjs";
 import { marcarInterna } from "./conversations.mjs";
 import {
-  comandoMotor,
+  engineCommand,
   entornoDe,
-  leerClaude,
-  leerGemini,
-  modeloEconomico,
-  nuevoClaude,
+  readClaudeEvent,
+  readGeminiEvent,
+  economyModel,
+  newClaudeState,
 } from "./engines.mjs";
 
 /** @import { LauncherSession } from "./session-types.d.ts" */
@@ -137,14 +137,14 @@ function extraerJson(texto) {
 /**
  * Pull-request flow and optional drafting by the session's own engine.
  * `ejecutor` is the git/gh runner of git.mjs; `info(cwd)` tells repo facts.
- * @param {{ git: ReturnType<typeof import("./git.mjs").crearGit>, info: ReturnType<typeof import("./checkpoints.mjs").crearCheckpoints>["info"], env?: NodeJS.ProcessEnv, lanzar?: typeof spawn, comando?: typeof comandoMotor }} options
+ * @param {{ git: ReturnType<typeof import("./git.mjs").createGit>, info: ReturnType<typeof import("./checkpoints.mjs").createCheckpoints>["info"], env?: NodeJS.ProcessEnv, lanzar?: typeof spawn, comando?: typeof engineCommand }} options
  */
-export function crearPr({
+export function createPrClient({
   git: ejecutor,
   info,
   env = process.env,
   lanzar = spawn,
-  comando = comandoMotor,
+  comando = engineCommand,
 }) {
   const { git, gh } = ejecutor;
   const enCurso = new Set();
@@ -173,31 +173,31 @@ export function crearPr({
         )
           return rama;
     }
-    throw new ErrorLanzador("No se pudo determinar la rama por defecto.");
+    throw new LauncherError("No se pudo determinar la rama por defecto.");
   }
 
   /** @param {{ sesion: LauncherSession, cwd: string, titulo: string, descripcion: string, borrador?: boolean }} input */
   async function crear({ sesion, cwd, titulo, descripcion, borrador = false }) {
     if (!esConvencional(titulo))
-      throw new ErrorLanzador(
+      throw new LauncherError(
         "El título debe seguir Conventional Commits, por ejemplo «feat: añade X».",
         400,
       );
     if (typeof descripcion !== "string" || descripcion.length > MAX_DESCRIPCION)
-      throw new ErrorLanzador("La descripción es demasiado larga.", 400);
+      throw new LauncherError("La descripción es demasiado larga.", 400);
     if (enCurso.has(sesion.id))
-      throw new ErrorLanzador("Ya hay un PR en curso para esta sesión.");
+      throw new LauncherError("Ya hay un PR en curso para esta sesión.");
     enCurso.add(sesion.id);
     try {
       const repo = await info(cwd);
       if (!repo.esRepo || !repo.remotoGithub)
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "La sesión no está en un repositorio con remoto en GitHub.",
         );
       const defecto = await ramaPorDefecto(cwd);
       const actual = (
         await git(cwd, ["symbolic-ref", "--short", "HEAD"]).catch(() => {
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "El repositorio está en HEAD desacoplado; cambia a una rama.",
           );
         })
@@ -213,13 +213,13 @@ export function crearPr({
       );
       const ramaNueva = actual === defecto;
       if (!sucio && (ramaNueva || !adelantados))
-        throw new ErrorLanzador("No hay cambios para enviar en un PR.");
+        throw new LauncherError("No hay cambios para enviar en un PR.");
       const rama = ramaNueva ? nombreRama(sesion) : actual;
       if (ramaNueva) {
         try {
           await git(cwd, ["checkout", "-b", rama]);
         } catch {
-          throw new ErrorLanzador("No se pudo crear la rama del PR.");
+          throw new LauncherError("No se pudo crear la rama del PR.");
         }
       }
       const identidad = (
@@ -244,7 +244,7 @@ export function crearPr({
             timeout: 120000,
           });
       } catch {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "No se pudo crear el commit; revisa los hooks del repositorio.",
         );
       }
@@ -252,7 +252,7 @@ export function crearPr({
       try {
         await git(cwd, ["push", "-u", "origin", rama], { timeout: 120000 });
       } catch {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "No se pudo enviar la rama al remoto. El commit quedó en local.",
           502,
         );
@@ -293,14 +293,14 @@ export function crearPr({
           )
         ).stdout;
       } catch {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "La rama se envió, pero gh no pudo abrir el PR.",
           502,
         );
       }
       const url = /https?:\/\/\S+/.exec(salida)?.[0];
       if (!url)
-        throw new ErrorLanzador("gh no devolvió la dirección del PR.", 502);
+        throw new LauncherError("gh no devolvió la dirección del PR.", 502);
       return { rama, commit, url, existente: false };
     } finally {
       enCurso.delete(sesion.id);
@@ -309,7 +309,7 @@ export function crearPr({
 
   /**
    * One short headless run of the session's engine, only when the user asks.
-   * @param {{ sesion: LauncherSession, cwd: string, propuesta: ReturnType<typeof propuestaPr>, parche?: string, catalogo?: Partial<Record<string, Parameters<typeof modeloEconomico>[1]>> }} input
+   * @param {{ sesion: LauncherSession, cwd: string, propuesta: ReturnType<typeof propuestaPr>, parche?: string, catalogo?: Partial<Record<string, Parameters<typeof economyModel>[1]>> }} input
    */
   async function redactar({
     sesion,
@@ -334,8 +334,7 @@ export function crearPr({
       parche.slice(0, 6000),
     ].join("\n");
     const spec = comando(sesion.motor, prompt, {
-      modelo:
-        modeloEconomico(sesion.motor, catalogo[sesion.motor]) ?? undefined,
+      modelo: economyModel(sesion.motor, catalogo[sesion.motor]) ?? undefined,
     });
     // An internal run is not a conversation: with the session's own id the
     // hooks would link its transcript to that session and the observer would
@@ -361,7 +360,7 @@ export function crearPr({
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
-    const acumulado = nuevoClaude();
+    const acumulado = newClaudeState();
     const lineas = createInterface({ input: hijo.stdout });
     lineas.on("line", (linea) => {
       let evento;
@@ -377,8 +376,8 @@ export function crearPr({
           evento.conversation_id,
       );
       if (sesion.motor === "claude" || sesion.motor === "deepseek")
-        leerClaude(acumulado, evento);
-      else if (sesion.motor === "agy") leerGemini(acumulado, evento);
+        readClaudeEvent(acumulado, evento);
+      else if (sesion.motor === "agy") readGeminiEvent(acumulado, evento);
       else if (
         evento.type === "item.completed" &&
         evento.item?.type === "agent_message"
@@ -400,7 +399,7 @@ export function crearPr({
       codigo === 0 && !acumulado.error ? extraerJson(acumulado.texto) : null;
     const titulo = String(datos?.titulo ?? "").trim();
     if (!esConvencional(titulo) || typeof datos?.descripcion !== "string")
-      throw new ErrorLanzador(
+      throw new LauncherError(
         "El agente no pudo redactar el PR; se conserva la propuesta.",
         502,
       );

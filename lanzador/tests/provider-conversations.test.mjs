@@ -7,9 +7,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { createProviderConversations } from "../provider-conversations.mjs";
 import { createApplication } from "../../service/index.mjs";
-import { abrirRegistro } from "../sessions.mjs";
-import { crearEjecutor } from "../executor.mjs";
-import { crearServidor } from "../index.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { createExecutor } from "../executor.mjs";
+import { createLauncherServer } from "../index.mjs";
 
 async function fixture(t, adapter) {
   const directory = await mkdtemp(path.join(tmpdir(), "sb-protocol-"));
@@ -201,8 +201,8 @@ test("mensajería estructurada: idempotencia, steer en vivo, cola cancelable y l
     },
   });
 
-  const registro = await abrirRegistro(path.join(dir, "sessions.json"));
-  const ejecutor = crearEjecutor({
+  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const ejecutor = createExecutor({
     registro,
     proyectos: { demo: dir },
     conversations,
@@ -295,8 +295,8 @@ async function turnBoundary(t) {
       return result;
     },
   };
-  const registro = await abrirRegistro(path.join(dir, "sessions.json"));
-  const ejecutor = crearEjecutor({
+  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const ejecutor = createExecutor({
     registro,
     proyectos: { demo: dir },
     conversations,
@@ -401,7 +401,7 @@ test("recorrido vertical completo con puente service <-> lanzador: pregunta, res
   await mkdir(path.join(vault, "00-Inbox"), { recursive: true });
   await writeFile(path.join(vault, "Home.md"), "# Sintético\n");
 
-  const registro = await abrirRegistro(path.join(dir, "sessions.json"));
+  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
   let askReady;
   let askBarrier = new Promise((r) => {
     askReady = r;
@@ -455,14 +455,14 @@ test("recorrido vertical completo con puente service <-> lanzador: pregunta, res
     },
   });
 
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     proyectos: { demo: dir },
     conversations,
     env: {},
   });
   const h = (v) => createHash("sha256").update(v).digest("hex");
-  const launcher = crearServidor({
+  const launcher = createLauncherServer({
     registro,
     ejecutor,
     conversations,
@@ -635,8 +635,8 @@ test("el silencio o inactividad nunca fabrica una pregunta ni usa el motor sin s
       },
     },
   });
-  const reg2 = await abrirRegistro(path.join(dir, "sessions2.json"));
-  const exec2 = crearEjecutor({
+  const reg2 = await openSessionRegistry(path.join(dir, "sessions2.json"));
+  const exec2 = createExecutor({
     registro: reg2,
     proyectos: { demo: dir },
     conversations: convDirect,

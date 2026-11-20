@@ -14,7 +14,7 @@ import {
   UNIDENTIFIED,
   overview as computeOverview,
 } from "../../service/finance.mjs";
-import { parseRegistro } from "../../service/finance-import.mjs";
+import { parseLedgerExport } from "../../service/finance-import.mjs";
 
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
 const HELP = `Second Brain · CLI para agentes (node dashboard/ops/sb.mjs <comando>)
@@ -135,7 +135,7 @@ async function main() {
     if (command === "import-registro") {
       const file = rest[0];
       if (!file) fail("Indica el archivo del registro.");
-      const parsed = parseRegistro(await readFile(file, "utf8"), today);
+      const parsed = parseLedgerExport(await readFile(file, "utf8"), today);
       const view = computeOverview(parsed.data, today);
       const checks = [
         [

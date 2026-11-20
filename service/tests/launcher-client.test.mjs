@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { once } from "node:events";
-import { createLanzador } from "../launcher-client.mjs";
+import { createLauncherClient } from "../launcher-client.mjs";
 import { createApplication } from "../index.mjs";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -31,7 +31,7 @@ test("reenvía consultas y encargos al lanzador autenticado sin exponer el token
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => server.close());
-  const cliente = createLanzador(Failure, {
+  const cliente = createLauncherClient(Failure, {
     url: `http://127.0.0.1:${server.address().port}`,
     token: "secreto",
   });

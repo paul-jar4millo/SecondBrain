@@ -37,7 +37,7 @@ const ID = /^[A-Za-z0-9][\w.:[\]-]{0,79}$/;
 const ESFUERZO = /^[a-z]{1,10}$/;
 
 /** @param {string} json */
-export function leerModelosCodex(json) {
+export function readCodexModels(json) {
   const { models } = /** @type {{ models?: CodexModel[] }} */ (
     JSON.parse(json)
   );
@@ -54,7 +54,7 @@ export function leerModelosCodex(json) {
 }
 
 /** @param {string} salida */
-export function leerModelosAgy(salida) {
+export function readAgyModels(salida) {
   /** @type {Map<string, LauncherModel>} */
   const vistos = new Map();
   for (const linea of salida.replace(/\x1b\[[0-9;]*m/g, "").split(/\r?\n/)) {
@@ -94,7 +94,7 @@ function correrAgy(env) {
 /**
  * @param {{ env?: NodeJS.ProcessEnv, agy?: () => Promise<string>, leer?: (archivo: string) => Promise<string>, ahora?: () => number }} [options]
  */
-export function crearCatalogo({
+export function createModelCatalog({
   env = process.env,
   agy = () => correrAgy(env),
   leer = (archivo) => readFile(archivo, "utf8"),
@@ -108,11 +108,11 @@ export function crearCatalogo({
     const [codex, lira] = await Promise.all([
       env.CODEX_HOME
         ? leer(path.join(env.CODEX_HOME, "models_cache.json"))
-            .then(leerModelosCodex)
+            .then(readCodexModels)
             .catch(/** @returns {[]} */ () => [])
         : [],
       agy()
-        .then(leerModelosAgy)
+        .then(readAgyModels)
         .catch(/** @returns {[]} */ () => []),
     ]);
     const valor = { claude: CLAUDE, codex, agy: lira, deepseek: DEEPSEEK };

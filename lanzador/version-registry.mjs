@@ -1,1 +1,1 @@
-export const REGISTRO_VERSION = 2;
+export const SESSION_REGISTRY_VERSION = 2;

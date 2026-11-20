@@ -1,9 +1,9 @@
 // The session executor. Each concern lives in lanzador/execution/; what stays
 // here is the turn orchestration (launch, release, resource queue, message
 // queue), whose functions call one another.
-import { validarAdjuntosMotor } from "./engines.mjs";
+import { validateEngineAttachments } from "./engines.mjs";
 import { stopSessionScope } from "./limits.mjs";
-import { ErrorLanzador } from "./errors.mjs";
+import { LauncherError } from "./errors.mjs";
 import { resolveExecutorOptions } from "./execution/options.mjs";
 import { createExecutionState } from "./execution/state.mjs";
 import { createLifecycle } from "./execution/lifecycle.mjs";
@@ -22,7 +22,7 @@ import { createProcessTools } from "./execution/process-tools.mjs";
 /** @import { ActiveJob, ExecutorOptions, TurnOptions } from "./types.d.ts" */
 
 /** @param {ExecutorOptions} options */
-export function crearEjecutor(options) {
+export function createExecutor(options) {
   const config = resolveExecutorOptions(options);
   const { registro, proyectos, env, maxActivos, conversations } = config;
   const state = createExecutionState();
@@ -178,14 +178,14 @@ export function crearEjecutor(options) {
                     pid: null,
                     motivo: job.cancelada
                       ? "Turno cancelado"
-                      : error instanceof ErrorLanzador
+                      : error instanceof LauncherError
                         ? error.message
                         : "Error en turno",
                   },
                 }
               : {}),
             error: sesion.structured
-              ? error instanceof ErrorLanzador
+              ? error instanceof LauncherError
                 ? error.message
                 : "El proveedor no completó la conversación. Comprueba el ejecutable, su autenticación y la compatibilidad del protocolo en el servidor."
               : "No se pudo ejecutar el motor.",
@@ -272,19 +272,19 @@ export function crearEjecutor(options) {
       const sesion = registro.leer().find((s) => s.id === id && !s.eliminada);
       if (sesion?.structured) {
         if (activos.has(id))
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "Espera a que termine el turno o detenlo antes de enviar otro mensaje.",
             409,
           );
         if (!sesion.directorio || !sesion.conversacionId)
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "No se puede reanudar esta conversación.",
             409,
           );
         if (typeof brief !== "string" || !brief.trim())
           throw new Error("Encargo vacío");
         await asegurarCupo(id);
-        const validatedAttachments = validarAdjuntosMotor(
+        const validatedAttachments = validateEngineAttachments(
           sesion.motor,
           turnOptions.attachments || [],
           sesion.directorio,

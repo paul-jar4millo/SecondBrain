@@ -22,7 +22,7 @@ export const projectDashboards: readonly ProjectDashboard[] = [
     path: "/projects/mundo-hipotetico",
     projectPath: "01-Proyectos/Proyecto-Mundo-Hipotetico.md",
     fixed: true,
-    Component: lazy(() => import("../mundo/MundoPage")),
+    Component: lazy(() => import("../world/WorldPage")),
   },
 ];
 

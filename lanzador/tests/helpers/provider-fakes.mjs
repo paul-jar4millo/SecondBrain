@@ -9,14 +9,14 @@ import path from "node:path";
 import { PassThrough, Writable } from "node:stream";
 
 import { createToolCatalogStore } from "../../tool-catalog.mjs";
-import { crearEjecutor } from "../../executor.mjs";
+import { createExecutor } from "../../executor.mjs";
 
 import {
   createAcpController,
   createCodexController,
 } from "../../provider-controllers.mjs";
 import { createProviderConversations } from "../../provider-conversations.mjs";
-import { abrirRegistro } from "../../sessions.mjs";
+import { openSessionRegistry } from "../../sessions.mjs";
 
 export const FAKE_CODEX_SCRIPT = `
 import { createInterface } from "node:readline";
@@ -309,7 +309,9 @@ export async function createHarness(t, options = {}) {
   await writeFile(path.join(dir, "codex-fake.mjs"), FAKE_CODEX_SCRIPT);
   await writeFile(path.join(dir, "acp-fake.mjs"), FAKE_ACP_SCRIPT);
 
-  const registro = await abrirRegistro(path.join(dataDir, "sesiones.json"));
+  const registro = await openSessionRegistry(
+    path.join(dataDir, "sesiones.json"),
+  );
   const toolCatalog = await createToolCatalogStore({ dataDir });
   if (options.emptyMcps) {
     await toolCatalog.updateProfile("ejecucion", { allowedMcps: [] });
@@ -382,7 +384,7 @@ export async function createHarness(t, options = {}) {
     ...(options.env || {}),
   };
 
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     proyectos: { demo: projectDir },
     env,

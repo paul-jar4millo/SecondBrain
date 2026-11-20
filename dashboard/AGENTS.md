@@ -9,7 +9,7 @@
 - The blue refuge is the full-screen main view: exactly four base agents, a
   persistent scene, a game-like HUD and clear tools over it ([DESIGN](../DESIGN.md)).
 - The scene is generated in Blender by `ops/sala-refugio.py`; the runtime is
-  `src/features/sala/sala-mundo.js`.
+  `src/features/room/room-world.js`.
 - The refuge observes and approves real sessions; it never invents work,
   conversations or deliverables. Opening a profile or copying a work order
   never starts a model. Do not connect paid services without cost approval.

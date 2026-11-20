@@ -1,6 +1,6 @@
 import { agentHeaders, body, relayArtifactDownload, send } from "../io.mjs";
 import { Failure } from "../../vault.mjs";
-import { MOTOR_ACTOR } from "../../agent-profiles.mjs";
+import { ENGINE_ACTOR } from "../../agent-profiles.mjs";
 /** @import { RouteModule } from "../route-types.d.ts" */
 
 /** @type {RouteModule} */
@@ -149,7 +149,7 @@ export const workOrderRoutes = (ctx, req) => {
         (s) => s.id === data.sesion,
       );
       if (!sesionObj) throw new Failure("Sesión no activa.", 403);
-      const actor = MOTOR_ACTOR[sesionObj.motor];
+      const actor = ENGINE_ACTOR[sesionObj.motor];
       const resultado = await lanzador.equipo("integrar", data.sesion, actor, {
         entregableIds: data.entregableIds,
         resoluciones: data.resoluciones,

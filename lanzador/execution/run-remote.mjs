@@ -1,11 +1,11 @@
 // Runs a turn in an interactive harness over a pty, for engines without a
 // structured protocol, and relays its terminal.
 import { entornoDe, entornoEsfuerzo } from "../engines.mjs";
-import { comandoRemoto } from "../remote.mjs";
+import { remoteCommand } from "../remote.mjs";
 import { sessionCommand } from "../limits.mjs";
-import { prepararAgy, prepararClaude } from "../claude-config.mjs";
+import { prepareAgy, prepareClaude } from "../claude-config.mjs";
 import { fileURLToPath } from "node:url";
-import { crearTerminal } from "../harness.mjs";
+import { createTerminal } from "../harness.mjs";
 import { randomUUID } from "node:crypto";
 import { PROVIDER_BY_ENGINE } from "./process-tools.mjs";
 /** @import { LauncherSession } from "../session-types.d.ts" */
@@ -51,16 +51,16 @@ export function createRemoteRunner(config, state, deps) {
     };
     const nativeSpec = sesion.harness
       ? comandoInteractivo(sesion, brief, childEnv)
-      : comandoRemoto(sesion, brief);
+      : remoteCommand(sesion, brief);
     const spec = sessionCommand(nativeSpec, sesion.id, env);
     if (sesion.harness && ["claude", "deepseek"].includes(sesion.motor))
-      await prepararClaude(childEnv.CLAUDE_CONFIG_DIR, cwd, {
+      await prepareClaude(childEnv.CLAUDE_CONFIG_DIR, cwd, {
         firma:
           sesion.motor === "deepseek" ? "Marina · DeepSeek" : "Ámbar · Claude",
         medir: sesion.motor === "claude",
       }).catch(() => {}); // a first-run dialog is still answerable in the terminal
     if (sesion.motor === "agy")
-      await prepararAgy(childEnv.HOME, cwd).catch(() => {});
+      await prepareAgy(childEnv.HOME, cwd).catch(() => {});
     const hijo = lanzarPty(
       "python3",
       [
@@ -74,7 +74,7 @@ export function createRemoteRunner(config, state, deps) {
     job.hijo = hijo;
     job.nativo = true;
     if (job.cancelada) senalar(hijo, "SIGTERM");
-    const terminal = /** @type {LiveTerminal} */ (crearTerminal());
+    const terminal = /** @type {LiveTerminal} */ (createTerminal());
     terminal.generacion = randomUUID();
     if (sesion.terminal) terminal.append(sesion.terminal + "\r\n");
     terminales.set(sesion.id, terminal);

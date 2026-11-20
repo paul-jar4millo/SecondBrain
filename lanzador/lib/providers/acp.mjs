@@ -1,7 +1,7 @@
 // Controller for Agent Client Protocol (ACP) CLIs.
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
-import { validarAdjuntosMotor } from "../../engines.mjs";
+import { validateEngineAttachments } from "../../engines.mjs";
 import { providerRpc } from "../../provider-rpc.mjs";
 import {
   exitedChildren,
@@ -578,7 +578,7 @@ export function createAcpController() {
   /** @param {AcpContext} ctx */
   async function runTurn(ctx) {
     lastUsedAt = Date.now();
-    const validatedAttachments = validarAdjuntosMotor(
+    const validatedAttachments = validateEngineAttachments(
       "agy",
       ctx.attachments || [],
       ctx.cwd,
@@ -650,7 +650,7 @@ export function createAcpController() {
         }
         const promptBlocks = formatAcpInput(
           steerText,
-          validarAdjuntosMotor("agy", steerAttachments, ctx.cwd),
+          validateEngineAttachments("agy", steerAttachments, ctx.cwd),
         );
         return rpc.call(
           "session/prompt",

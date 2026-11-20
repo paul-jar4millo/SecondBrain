@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { abrirRegistro } from "../sessions.mjs";
-import { crearEjecutor } from "../executor.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { createExecutor } from "../executor.mjs";
 
 test("ejecuta un CLI simulado, recoge su resultado y conserva el directorio del proyecto", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-exec-"));
@@ -14,10 +14,10 @@ test("ejecuta un CLI simulado, recoge su resultado y conserva el directorio del 
     fake,
     'console.log(JSON.stringify({type:"result",result:process.cwd()}));',
   );
-  const registro = await abrirRegistro(
+  const registro = await openSessionRegistry(
     path.join(dir, "estado", "sesiones.json"),
   );
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     proyectos: { prueba: dir },
     comando: () => ({ bin: process.execPath, args: [fake] }),
@@ -40,8 +40,8 @@ test("cancela el proceso y rechaza proyectos no registrados", async (t) => {
   t.after(() => rm(dir, { recursive: true, force: true }));
   const fake = path.join(dir, "fake.mjs");
   await writeFile(fake, "setInterval(() => {}, 1000);");
-  const registro = await abrirRegistro(path.join(dir, "estado.json"));
-  const ejecutor = crearEjecutor({
+  const registro = await openSessionRegistry(path.join(dir, "estado.json"));
+  const ejecutor = createExecutor({
     registro,
     proyectos: { prueba: dir },
     comando: () => ({ bin: process.execPath, args: [fake] }),
@@ -68,8 +68,8 @@ test("cancela el proceso y rechaza proyectos no registrados", async (t) => {
 test("un CLI inexistente termina la sesión con error y libera el cupo", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-exec-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(dir, "estado.json"));
-  const ejecutor = crearEjecutor({
+  const registro = await openSessionRegistry(path.join(dir, "estado.json"));
+  const ejecutor = createExecutor({
     registro,
     proyectos: { prueba: dir },
     comando: () => ({ bin: path.join(dir, "inexistente"), args: [] }),
@@ -88,8 +88,8 @@ test("un CLI inexistente termina la sesión con error y libera el cupo", async (
 test("un fallo al preparar el comando no deja la sesión trabajando", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-exec-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(dir, "estado.json"));
-  const ejecutor = crearEjecutor({
+  const registro = await openSessionRegistry(path.join(dir, "estado.json"));
+  const ejecutor = createExecutor({
     registro,
     proyectos: { prueba: dir },
     comando: () => {
@@ -114,8 +114,8 @@ test("el CLI recibe la ruta del token de hooks y el identificador de su sesión"
     fake,
     'console.log(JSON.stringify({type:"result",result:JSON.stringify({id:process.env.SB_SESSION_ID,token:process.env.SB_HOOK_TOKEN_FILE})}));',
   );
-  const registro = await abrirRegistro(path.join(dir, "estado.json"));
-  const ejecutor = crearEjecutor({
+  const registro = await openSessionRegistry(path.join(dir, "estado.json"));
+  const ejecutor = createExecutor({
     registro,
     proyectos: { prueba: dir },
     env: { PATH: process.env.PATH, SB_HOOK_TOKEN_FILE: "/hook-token" },

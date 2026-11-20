@@ -1,7 +1,7 @@
 // Controller for the Codex app-server protocol.
 import { randomUUID } from "node:crypto";
-import { ErrorLanzador } from "../../errors.mjs";
-import { validarAdjuntosMotor } from "../../engines.mjs";
+import { LauncherError } from "../../errors.mjs";
+import { validateEngineAttachments } from "../../engines.mjs";
 import { providerRpc } from "../../provider-rpc.mjs";
 import {
   buildCodexArgs,
@@ -465,7 +465,7 @@ export function createCodexController() {
           if (method === "mcpServer/elicitation/request") {
             const mode = p?.mode || "form";
             if (mode !== "form") {
-              throw new ErrorLanzador(
+              throw new LauncherError(
                 `Modo de elicitación no soportado: "${mode}".`,
                 400,
               );
@@ -705,7 +705,7 @@ export function createCodexController() {
   /** @param {CodexContext} ctx */
   async function runTurn(ctx) {
     lastUsedAt = Date.now();
-    const validatedAttachments = validarAdjuntosMotor(
+    const validatedAttachments = validateEngineAttachments(
       "codex",
       ctx.attachments || [],
       ctx.cwd,
@@ -770,7 +770,7 @@ export function createCodexController() {
         }
         const steerInput = formatCodexInput(
           steerText,
-          validarAdjuntosMotor("codex", steerAttachments, ctx.cwd),
+          validateEngineAttachments("codex", steerAttachments, ctx.cwd),
         );
         return rpc.call("turn/steer", {
           threadId,

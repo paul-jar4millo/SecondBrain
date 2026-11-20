@@ -1,6 +1,6 @@
 // Team delegation: a coordinator assigns a member from the approved manifest
 // or starts a child session, and waits for it.
-import { ErrorLanzador } from "../errors.mjs";
+import { LauncherError } from "../errors.mjs";
 import { TOOL_PROFILES_BASE, narrowChildProfile } from "../tool-catalog.mjs";
 /** @import { ExecutionRequest } from "../types.d.ts" */
 /** @import { ExecutorConfig } from "./options.mjs" */
@@ -125,7 +125,7 @@ export function createDelegation(config, state, deps) {
         padre.workOrderId &&
         workOrderId !== padre.workOrderId
       ) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "La integrante no puede encargar trabajo de otro encargo.",
           403,
         );
@@ -194,7 +194,7 @@ export function createDelegation(config, state, deps) {
       if (motor === "deepseek") {
         if (hasManifestOrStructured) {
           if (!childBillingGrant)
-            throw new ErrorLanzador(
+            throw new LauncherError(
               "DeepSeek bloqueado por la política de gasto sin autorización explícita de gasto.",
               403,
             );

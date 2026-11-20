@@ -1,4 +1,4 @@
-import { ErrorLanzador } from "./errors.mjs";
+import { LauncherError } from "./errors.mjs";
 import { capacidadesDe } from "./engines.mjs";
 import { propuestaPr } from "./pr.mjs";
 
@@ -11,15 +11,15 @@ const ACTIVAS = new Set(["pendiente", "trabajando"]);
  * the engine's capabilities first and answers 409 in Spanish instead of failing midway.
  * @param {{
  *   registro: SessionRegistry,
- *   seguimiento: ReturnType<typeof import("./checkpoints.mjs").crearSeguimiento>,
- *   checkpoints: ReturnType<typeof import("./checkpoints.mjs").crearCheckpoints>,
- *   pr: ReturnType<typeof import("./pr.mjs").crearPr>,
- *   catalogo: ReturnType<typeof import("./models.mjs").crearCatalogo>,
+ *   seguimiento: ReturnType<typeof import("./checkpoints.mjs").createTracking>,
+ *   checkpoints: ReturnType<typeof import("./checkpoints.mjs").createCheckpoints>,
+ *   pr: ReturnType<typeof import("./pr.mjs").createPrClient>,
+ *   catalogo: ReturnType<typeof import("./models.mjs").createModelCatalog>,
  *   proyectos?: Record<string, string>,
- *   items?: ReturnType<typeof import("./items.mjs").crearItems>,
+ *   items?: ReturnType<typeof import("./items.mjs").createItems>,
  * }} options
  */
-export function crearAcciones({
+export function createActions({
   registro,
   seguimiento,
   checkpoints,
@@ -33,7 +33,7 @@ export function crearAcciones({
   /** @param {string} id */
   const sesionDe = (id) => {
     const sesion = registro.leer().find((s) => s.id === id && !s.eliminada);
-    if (!sesion) throw new ErrorLanzador("Sesión inexistente.", 404);
+    if (!sesion) throw new LauncherError("Sesión inexistente.", 404);
     return sesion;
   };
   /** @param {LauncherSession} sesion */
@@ -46,7 +46,7 @@ export function crearAcciones({
    * @param {string} texto
    */
   const detener = (sesion, texto) => {
-    if (ACTIVAS.has(sesion.estado)) throw new ErrorLanzador(texto);
+    if (ACTIVAS.has(sesion.estado)) throw new LauncherError(texto);
   };
 
   /** @param {string} id */
@@ -73,7 +73,7 @@ export function crearAcciones({
     const sesion = sesionDe(id);
     const c = await capacidades(sesion);
     if (!c?.revertirArchivos)
-      throw new ErrorLanzador(
+      throw new LauncherError(
         "Los cambios solo se pueden consultar en una carpeta con repositorio git.",
       );
     return seguimiento.diff(id, desde, hasta);
@@ -84,7 +84,7 @@ export function crearAcciones({
     const sesion = sesionDe(id);
     const c = await capacidades(sesion);
     if (!c?.crearPr)
-      throw new ErrorLanzador(
+      throw new LauncherError(
         "Esta sesión no está en un repositorio con remoto en GitHub.",
       );
     const { archivos } = await seguimiento
@@ -126,11 +126,11 @@ export function crearAcciones({
       detener(sesion, "Detén el turno antes de revertir");
       const c = await capacidades(sesion);
       if (!c?.revertirArchivos)
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "Revertir archivos requiere una carpeta con repositorio git.",
         );
       if (!Number.isInteger(n) || n < 1)
-        throw new ErrorLanzador("Punto de control inválido.", 400);
+        throw new LauncherError("Punto de control inválido.", 400);
       return seguimiento.revertir(id, n);
     },
     /**
@@ -142,7 +142,7 @@ export function crearAcciones({
       detener(sesion, "Detén el turno antes de crear el PR");
       const c = await capacidades(sesion);
       if (!c?.crearPr)
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "Crear un PR requiere un repositorio registrado con remoto en GitHub.",
         );
       const base =
@@ -164,7 +164,7 @@ export function crearAcciones({
       const sesion = sesionDe(id);
       const c = await capacidades(sesion);
       if (!c?.redactarPr)
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "Este agente no puede redactar el PR en esta sesión.",
         );
       const base = await propuesta(id);

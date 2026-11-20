@@ -37,7 +37,7 @@ const DOCUMENTOS = [".md", ".json", ".csv"];
  * @param {new (message: string, status?: number) => Error} Failure
  * @param {string} [paqueteDirectory]
  */
-export function createMundo(dataDirectory, Failure, paqueteDirectory) {
+export function createWorld(dataDirectory, Failure, paqueteDirectory) {
   const directorio = paqueteDirectory || path.join(dataDirectory, "mundo");
   const estadoFile = path.join(dataDirectory, "mundo-estado.json");
   /** @type {MundoState | null} */

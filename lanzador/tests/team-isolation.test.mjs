@@ -10,9 +10,9 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { abrirRegistro } from "../sessions.mjs";
-import { abrirEquipos } from "../teams.mjs";
-import { crearEjecutor } from "../executor.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { openTeams } from "../teams.mjs";
+import { createExecutor } from "../executor.mjs";
 import { git, repoSintetico } from "./helpers-git.mjs";
 import { manifiesto } from "./helpers-manifest.mjs";
 
@@ -49,8 +49,8 @@ async function entorno(t, { proyecto, maxActivos = 6 } = {}) {
   const datos = path.join(dir, "datos");
   const fake = path.join(dir, "fake.mjs");
   await writeFile(fake, "setInterval(() => {}, 1000)");
-  const registro = await abrirRegistro(path.join(dir, "sesiones.json"));
-  const equipos = await abrirEquipos(path.join(dir, "equipos"), {
+  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
+  const equipos = await openTeams(path.join(dir, "equipos"), {
     activo: (id) =>
       registro
         .leer()
@@ -58,7 +58,7 @@ async function entorno(t, { proyecto, maxActivos = 6 } = {}) {
           (s) => s.id === id && ["pendiente", "trabajando"].includes(s.estado),
         ),
   });
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     equipos,
     maxActivos,

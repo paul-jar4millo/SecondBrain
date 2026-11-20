@@ -1,5 +1,5 @@
 export type AgentId = "ambar" | "menta" | "lira" | "marina";
-import { sesionesEscena, type SesionObservada } from "../sala/sala-sesiones";
+import { sesionesEscena, type SesionObservada } from "../room/room-sessions";
 export type TeamTab = "vivo";
 export interface AgentTarget {
   agentId: string;

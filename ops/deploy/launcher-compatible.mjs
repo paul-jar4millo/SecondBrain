@@ -60,7 +60,7 @@ async function supports(release, required) {
   ).catch(() => "");
   // Only line comments may precede the export; any other statement is rejected.
   const version =
-    /^(?:[ \t]*(?:\/\/[^\n]*)?\r?\n)*\s*export const REGISTRO_VERSION = ([1-9]\d*);\s*$/.exec(
+    /^(?:[ \t]*(?:\/\/[^\n]*)?\r?\n)*\s*export const SESSION_REGISTRY_VERSION = ([1-9]\d*);\s*$/.exec(
       marker,
     )?.[1];
   return Number(version) >= required;

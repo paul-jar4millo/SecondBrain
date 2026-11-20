@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { apiAgentesDemo } from "../src/features/sala/sala-agentes-demo.js";
+import { apiAgentesDemo } from "../src/features/room/room-agents-demo.js";
 import { createTeamController } from "../src/features/team/team-controller";
 
 it("abre Equipo en demo con sus sesiones sintéticas y sin un error de servicio", async () => {
