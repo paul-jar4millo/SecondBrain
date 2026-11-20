@@ -21,13 +21,9 @@ import { sendItems } from "./http-items.mjs";
 
 import { operationalStatus } from "./operational-status.mjs";
 
-import {
-  body,
-  relayArtifactDownload,
-  send,
-  validateNotePath,
-} from "./http/io.mjs";
+import { body, send, validateNotePath } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
+import { agentConversationRoutes } from "./http/routes/agents-conversation.mjs";
 import { workOrderRoutes } from "./http/routes/work-orders.mjs";
 import { requestRoutes } from "./http/routes/requests.mjs";
 import { effectRoutes } from "./http/routes/effects.mjs";
@@ -379,6 +375,7 @@ export async function createApplication(options = {}) {
         const req = { request, response, consulta, required, callerCap };
         /** @type {Partial<Record<string, () => Promise<unknown>>>} */
         const routes = {
+          ...agentConversationRoutes(context, req),
           ...workOrderRoutes(context, req),
           ...requestRoutes(context, req),
           ...effectRoutes(context, req),
@@ -422,16 +419,6 @@ export async function createApplication(options = {}) {
             send(response, 200, await lanzador.espacios(await body(request))),
           "GET /agentes/conversacion/stream": async () =>
             routes["GET /agentes/terminal/stream"]?.(),
-          "GET /agentes/conversacion/artefactos/descargar": async () => {
-            const upstream = await lanzador.descargarArtefacto(
-              consulta.get("id"),
-              consulta.get("artifactId"),
-            );
-            await relayArtifactDownload(response, upstream);
-            return;
-          },
-          "POST /agentes/conversacion/responder": async () =>
-            send(response, 200, await lanzador.responder(await body(request))),
           "GET /agentes/terminal/stream": async () => {
             // The launcher's SSE goes through untouched: no buffering, and
             // either side closing ends the other. The browser retries.
@@ -549,31 +536,6 @@ export async function createApplication(options = {}) {
               await lanzador.resolverSkills(safePayload),
             );
           },
-          "GET /agentes/conversacion/cola": async () =>
-            send(
-              response,
-              200,
-              await lanzador.colaConversacion(consulta.get("id")),
-            ),
-          "POST /agentes/conversacion/mensajes": async () => {
-            const payload = await body(request);
-            const sent = await lanzador.enviarMensajeConversacion(payload);
-            const link = bridges.linkOf(payload.id);
-            if (link) {
-              bridges.bridge(
-                payload.id,
-                link.workOrderId,
-                link.fallbackMemberId,
-              );
-            }
-            return send(response, 200, sent);
-          },
-          "POST /agentes/conversacion/cola/cancelar": async () =>
-            send(
-              response,
-              200,
-              await lanzador.cancelarColaConversacion(await body(request)),
-            ),
           "GET /agentes/sesiones/diff": async () =>
             send(
               response,
