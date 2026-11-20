@@ -10,10 +10,9 @@ import { actorContext, Failure } from "./vault.mjs";
 
 import { MOTOR_ACTOR, intersectProfileBounds } from "./agent-profiles.mjs";
 
-import { operationalStatus } from "./operational-status.mjs";
-
 import { body, send } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
+import { systemRoutes } from "./http/routes/system.mjs";
 import { vaultRoutes } from "./http/routes/vault.mjs";
 
 import { agentSessionRoutes } from "./http/routes/agents-sessions.mjs";
@@ -38,7 +37,6 @@ const appRoot = fileURLToPath(new URL("..", import.meta.url));
 export async function createApplication(options = {}) {
   const context = await createContext(options);
   const {
-    appVersion,
     root,
     dataDirectory,
     history,
@@ -365,6 +363,7 @@ export async function createApplication(options = {}) {
         const req = { request, response, consulta, required, callerCap };
         /** @type {Partial<Record<string, () => Promise<unknown>>>} */
         const routes = {
+          ...systemRoutes(context, req),
           ...vaultRoutes(context, req),
           ...agentSessionRoutes(context, req),
           ...agentToolRoutes(context, req),
@@ -378,44 +377,6 @@ export async function createApplication(options = {}) {
           ...authRoutes(context, req),
           ...roomRoutes(context, req),
           ...worldRoutes(context, req),
-          "GET /health": async () => {
-            const ready = await stat(path.join(root, "Home.md"))
-              .then((s) => s.isFile())
-              .catch(() => false);
-            return send(response, ready ? 200 : 503, {
-              status: ready ? "ready" : "unavailable",
-              version: appVersion,
-              storage: "obsidian-markdown",
-              maintenance: await operationalStatus({
-                stateFile: "/var/lib/secondbrain-ops/backup-status.json",
-                revisionFile: path.join(appRoot, "REVISION"),
-                launcherPinFile: "/etc/secondbrain/launcher-release",
-                runtimeLauncherFile: "/run/secondbrain-launcher-release",
-              }),
-            });
-          },
-          "GET /events": async () => {
-            response.writeHead(200, {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-            });
-            response.write(": connected\n\n");
-            clients.add(response);
-            const heartbeat = setInterval(() => {
-              if (!auth.authenticated(request)) {
-                clearInterval(heartbeat);
-                clients.delete(response);
-                response.end();
-              } else response.write(": heartbeat\n\n");
-            }, 20000);
-            heartbeat.unref();
-            request.on("close", () => {
-              clearInterval(heartbeat);
-              clients.delete(response);
-            });
-            return;
-          },
         };
         const handler = routes[method + " " + route];
         if (handler) return await handler();
