@@ -55,9 +55,6 @@ export interface ApplicationOptions {
   aprobaciones?: Parameters<
     typeof import("./approvals.mjs").createApprovalQueue
   >[1];
-  workOrders?: Parameters<
-    typeof import("./work-orders.mjs").createWorkOrderStore
-  >[1];
   userRequests?: Parameters<
     typeof import("./user-requests.mjs").createUserRequestStore
   >[1];
@@ -67,14 +64,6 @@ export interface ApplicationOptions {
   operatorBillingPolicy?: { allowBilledApi?: boolean };
   operatorToolPolicy?: { allowedMcps?: string[]; allowedOperations?: string[] };
   logger?: (record: HttpLogRecord) => void;
-}
-
-export interface LauncherSessionSummary {
-  id: string;
-  motor: string;
-  workOrderId?: string | null;
-  mensajes?: unknown;
-  resultado?: unknown;
 }
 
 export interface Credentials {

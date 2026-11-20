@@ -38,13 +38,13 @@ the systemd units in `ops/lxc/plantillas/` and by host-only files under
 
 ## launcher
 
-| Variable                                    | Default            | Purpose                                         |
-| ------------------------------------------- | ------------------ | ----------------------------------------------- |
-| `SB_LANZADOR_PORT`                          | `8092`             | Loopback control port                           |
-| `SB_LANZADOR_DATA_DIR`                      | required, absolute | Sessions, conversations, checkpoints            |
-| `SB_CONTROL_HASH_FILE`, `SB_HOOK_HASH_FILE` | required           | Hashes of the control and hook tokens           |
-| `SB_PROYECTOS_FILE`                         | required           | JSON catalog of repositories agents may work on |
-| `SB_AGY_ACP_BIN`, `SB_AGY_ACP_ARGS`         | `agy`, `["acp"]`   | Antigravity ACP command (operator only)         |
+| Variable                            | Default            | Purpose                                         |
+| ----------------------------------- | ------------------ | ----------------------------------------------- |
+| `SB_LANZADOR_PORT`                  | `8092`             | Loopback control port                           |
+| `SB_LANZADOR_DATA_DIR`              | required, absolute | Sessions, conversations, checkpoints            |
+| `SB_CONTROL_HASH_FILE`              | required           | Hash of the control token                       |
+| `SB_PROYECTOS_FILE`                 | required           | JSON catalog of repositories agents may work on |
+| `SB_AGY_ACP_BIN`, `SB_AGY_ACP_ARGS` | `agy`, `["acp"]`   | Antigravity ACP command (operator only)         |
 
 Session and team limits (active sessions, members, depth) are read by
 `launcher/limits.mjs`; see [ADR 0005](adr/0005-team-manifests.md).

@@ -85,7 +85,6 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
       "ops/deploy/deploy-release.sh",
       "usr/local/sbin/secondbrain-deploy",
     ],
-    ["ops/launcher/sb-hilo", "ops/lanzador/sb-hilo", "usr/local/bin/sb-hilo"],
     ...[
       "secondbrain-lanzador.service",
       "claude-sb-agente.service",
@@ -160,21 +159,14 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
     return { code, output };
   };
   assert.equal((await run()).code, 0);
-  await writeFile(
-    path.join(host, "usr/local/bin/sb-hilo"),
-    "old installation\n",
-  );
+  const unit = path.join(host, "etc/systemd/system/resumen-matutino.timer");
+  const installed = await readFile(unit, "utf8");
+  await writeFile(unit, "old installation\n");
   const drift = await run();
   assert.equal(drift.code, 1);
-  assert.match(drift.output, /\/usr\/local\/bin\/sb-hilo/);
-  assert.equal(
-    await readFile(path.join(host, "usr/local/bin/sb-hilo"), "utf8"),
-    "old installation\n",
-  );
-  await copyFile(
-    "ops/launcher/sb-hilo",
-    path.join(host, "usr/local/bin/sb-hilo"),
-  );
+  assert.match(drift.output, /resumen-matutino\.timer/);
+  assert.equal(await readFile(unit, "utf8"), "old installation\n");
+  await writeFile(unit, installed);
   await writeFile(
     path.join(host, "usr/local/lib/secondbrain/launcher-compatible.mjs"),
     "obsolete checker\n",

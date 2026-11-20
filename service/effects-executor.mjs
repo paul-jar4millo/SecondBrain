@@ -87,7 +87,6 @@ export async function createEffectsExecutor(
   dir,
   {
     userRequests,
-    workOrders = null,
     externalRunner = null,
     operatorBillingPolicy = { allowBilledApi: false },
     maxContentLength = MAX_EFFECT_CONTENT_LENGTH,
@@ -874,24 +873,6 @@ export async function createEffectsExecutor(
             note: "Efecto ejecutado y confirmado con recibo",
           })
           .catch(() => {});
-
-        if (workOrders && eff.workOrderId) {
-          await workOrders
-            .appendEvent(eff.workOrderId, {
-              sourceId: actor,
-              type: "tool.completed",
-              correlationId: eff.id,
-              idempotencyKey: `effect-exec:${eff.id}:${requestId}`,
-              provenance: "observed",
-              payload: {
-                nombre: eff.action,
-                resumen: `Efecto ejecutado hacia ${eff.recipient}`,
-                estado: "ok",
-                recibo: executionReceipt,
-              },
-            })
-            .catch(() => {});
-        }
 
         return {
           ok: true,

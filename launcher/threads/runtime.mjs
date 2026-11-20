@@ -1,7 +1,6 @@
 // Wires the thread system into the launcher: SQLite store, engine,
 // scheduler, workspaces, provider context and HTTP routes.
 import path from "node:path";
-import { createProcessTools } from "../execution/process-tools.mjs";
 import { CONTROLLER_FACTORIES } from "../provider-controllers.mjs";
 import { createClosing } from "./engine/closing.ts";
 import { createScheduler } from "./engine/scheduler.ts";
@@ -36,9 +35,6 @@ export function openThreads({
   context,
 }) {
   const store = openStore(path.join(dataDir, "threads.sqlite"));
-  const tools = createProcessTools(
-    /** @type {any} */ ({ env, proyectos: projects, registro: {} }),
-  );
   const engine = createThreadEngine({
     store,
     git,
@@ -54,8 +50,6 @@ export function openThreads({
       context ??
       createProviderContextFactory({
         env,
-        sanitizeChildEnv: tools.sanitizeChildEnv,
-        acpGeminiDirFor: tools.acpGeminiDirFor,
         toolCatalog,
         tokenDir: path.join(dataDir, "threads", "tokens"),
       }),

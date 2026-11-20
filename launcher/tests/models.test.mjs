@@ -120,50 +120,21 @@ test("pasa el modelo a cada CLI y nunca a DeepSeek", () => {
   );
 });
 
-test("el servidor publica los modelos y rechaza uno que no existe", async (t) => {
+test("el servidor publica los modelos", async (t) => {
   const fingerprint = (s) => createHash("sha256").update(s).digest("hex");
-  const pedidos = [];
   const server = createLauncherServer({
-    registro: { leer: () => [], subscribe: () => () => {} },
-    ejecutor: { encargar: async (x) => (pedidos.push(x), { id: "s" }) },
     catalogo: createModelCatalog({
       env: { CODEX_HOME: "/c" },
       leer: async () => cacheCodex,
       agy: async () => agyOutput,
     }),
     controlHash: fingerprint("control"),
-    hookHash: fingerprint("hook"),
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => server.close());
   const url = `http://127.0.0.1:${server.address().port}`;
-  const headers = {
-    authorization: "Bearer control",
-    "content-type": "application/json",
-  };
+  const headers = { authorization: "Bearer control" };
   const models = await (await fetch(url + "/modelos", { headers })).json();
   assert.equal(models.codex[0].id, "gpt-a");
-  const delegate = (extra) =>
-    fetch(url + "/sesiones", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        motor: "codex",
-        origen: "sala",
-        proyecto: "p",
-        brief: "b",
-        ...extra,
-      }),
-    });
-  assert.equal(
-    (await delegate({ modelo: "gpt-a", esfuerzo: "low" })).status,
-    202,
-  );
-  const malo = await delegate({ modelo: "gpt-z" });
-  assert.equal(malo.status, 400);
-  assert.equal((await malo.json()).error, "Modelo no disponible");
-  assert.equal((await delegate({ modelo: 3 })).status, 400);
-  assert.equal(pedidos.length, 1);
-  assert.equal(pedidos[0].modelo, "gpt-a");
 });

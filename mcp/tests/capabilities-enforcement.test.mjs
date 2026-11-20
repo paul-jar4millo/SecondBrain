@@ -154,7 +154,6 @@ test("B: MCP stdio y brain-cli omiten herramientas fuera de perfil, ignoran SB_T
     "files_put",
     "files_upload",
     "files_trash",
-    "equipo_encargar",
   ]) {
     assert.equal(names.has(omitted), false, `Tool ${omitted} must be omitted`);
   }
@@ -178,10 +177,6 @@ test("B: MCP stdio y brain-cli omiten herramientas fuera de perfil, ignoran SB_T
         description: "x",
         ref: "r1",
       },
-    },
-    {
-      name: "equipo_encargar",
-      arguments: { motor: "codex", brief: "escalar" },
     },
   ]) {
     let thrown = null;

@@ -1,7 +1,6 @@
 // Every API route handler, grouped by domain. The keys must match the
 // policies in service/routes.mjs; route-modules.test.mjs checks both ways.
-import { agentConversationRoutes } from "./agents-conversation.mjs";
-import { agentSessionRoutes } from "./agents-sessions.mjs";
+import { agentCatalogRoutes } from "./agents-catalog.mjs";
 import { agentToolRoutes } from "./agents-tools.mjs";
 import { approvalRoutes } from "./approvals.mjs";
 import { authRoutes } from "./auth.mjs";
@@ -13,7 +12,6 @@ import { roomRoutes } from "./room.mjs";
 import { systemRoutes } from "./system.mjs";
 import { threadRoutes } from "./threads.mjs";
 import { vaultRoutes } from "./vault.mjs";
-import { workOrderRoutes } from "./work-orders.mjs";
 import { worldRoutes } from "./world.mjs";
 
 /** @import { RouteModule, Routes } from "../route-types.d.ts" */
@@ -27,10 +25,8 @@ export const ROUTE_MODULES = [
   fileRoutes,
   roomRoutes,
   worldRoutes,
-  agentSessionRoutes,
-  agentConversationRoutes,
+  agentCatalogRoutes,
   agentToolRoutes,
-  workOrderRoutes,
   requestRoutes,
   effectRoutes,
   approvalRoutes,

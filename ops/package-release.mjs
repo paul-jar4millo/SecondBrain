@@ -15,7 +15,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 /**
  * Repository folder → folder in the release. The launcher lives in launcher/
  * in the repository but stays lanzador/ in the release, because systemd units,
- * sb-hilo, remote hooks and the deploy helper on the hosts use that path.
+ * the deploy helper and the stable entry points on the hosts use that path.
  */
 export const RELEASE_MODULES = /** @type {const} */ ([
   ["service", "service"],
@@ -28,7 +28,8 @@ export const RELEASE_MODULES = /** @type {const} */ ([
  * (/usr/local/lib/secondbrain/launcher-compatible.mjs) that reads the session
  * registry version from lanzador/registro-version.mjs as REGISTRO_VERSION.
  * Without that file it keeps the previous launcher release. Ship the old marker
- * next to the new one until every host runs the current helper.
+ * next to the new one until every host runs the current helper; the thread
+ * launcher ignores the old index, which the A9 data step removes.
  * @param {string} root
  * @param {string} target
  */
@@ -133,9 +134,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
     })) {
       if (
         entry.isFile() &&
-        (isSource(entry.name) ||
-          (module === "launcher" && entry.name === "terminal.py") ||
-          entry.name === "package.json")
+        (isSource(entry.name) || entry.name === "package.json")
       )
         await cp(
           path.join(root, module, entry.name),
@@ -143,13 +142,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
         );
     }
     // Internal folders of a package, recursively: only .mjs and .ts sources.
-    for (const folder of [
-      "lib",
-      "http",
-      "execution",
-      "conversation",
-      "threads",
-    ]) {
+    for (const folder of ["lib", "http", "threads"]) {
       const lib = path.join(root, module, folder);
       const libEntries = await readdir(lib, {
         withFileTypes: true,
@@ -183,7 +176,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
   await writeLegacyRegistryMarker(root, target);
   await packageContracts(root, target);
   await mkdir(path.join(target, "lanzador/skills"));
-  for (const skill of ["equipo-cuatro-fases", "resumen-matutino"])
+  for (const skill of ["resumen-matutino"])
     await cp(
       path.join(root, `launcher/skills/${skill}.md`),
       path.join(target, `lanzador/skills/${skill}.md`),

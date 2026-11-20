@@ -21,13 +21,11 @@ import { createLauncherClient } from "../launcher-client.mjs";
 import { createRemoteMcp } from "../remote-mcp.mjs";
 import { createApprovalQueue } from "../approvals.mjs";
 import { createSharedFiles } from "../shared-files.mjs";
-import { createWorkOrderStore } from "../work-orders.mjs";
 import { createUserRequestStore } from "../user-requests.mjs";
 import { createEffectsExecutor } from "../effects-executor.mjs";
-import { createSessionBridges } from "../agent-bridges.mjs";
 import { agentHeaders } from "./io.mjs";
 
-/** @import { ApplicationOptions, HttpLogRecord, HttpRequest, LauncherSessionSummary, ScopedRecord, ToolProfile } from "../types.d.ts" */
+/** @import { ApplicationOptions, HttpLogRecord, HttpRequest, ScopedRecord, ToolProfile } from "../types.d.ts" */
 /** @import { ServerResponse } from "node:http" */
 
 const appRoot = fileURLToPath(new URL("../..", import.meta.url));
@@ -127,39 +125,21 @@ export async function createContext(options) {
     path.join(dataDirectory, "aprobaciones"),
     { ...options.aprobaciones, onChange: change },
   );
-  const workOrders = await createWorkOrderStore(
-    path.join(dataDirectory, "encargos"),
-    { ...options.workOrders, onChange: change },
-  );
   const userRequests = await createUserRequestStore(
     path.join(dataDirectory, "solicitudes"),
     {
       ...options.userRequests,
       onChange: change,
-      onEvent: (workOrderId, ev) => workOrders.appendEvent(workOrderId, ev),
     },
   );
   const effects = await createEffectsExecutor(
     path.join(dataDirectory, "efectos"),
     {
       userRequests,
-      workOrders,
       ...options.effects,
       onChange: change,
     },
   );
-  /**
-   * The launcher lists sessions as an array; older fixtures wrap it.
-   * @returns {Promise<LauncherSessionSummary[]>}
-   */
-  const launcherSessions = async () => {
-    const state = await lanzador.leer().catch(
-      /** @returns {null} */
-      () => null,
-    );
-    if (Array.isArray(state)) return state;
-    return Array.isArray(state?.sesiones) ? state.sesiones : [];
-  };
   /**
    * @template T
    * @param {() => T | Promise<T>} fn
@@ -272,10 +252,6 @@ export async function createContext(options) {
       case "GET /efectos/detalle":
       case "GET /solicitudes":
       case "GET /solicitudes/detalle":
-      case "GET /encargos/detalle":
-      case "GET /encargos/artefactos/descargar":
-      case "POST /encargos/eventos":
-      case "GET /agentes/conversacion/cola":
         return cap;
       case "GET /vault/files":
       case "GET /vault/note":
@@ -315,21 +291,6 @@ export async function createContext(options) {
       case "POST /efectos/preparar":
       case "POST /efectos/ejecutar":
         requireAny("effect.prepare");
-        return cap;
-      case "POST /equipo/encargar":
-        requireAny("team.coordinate");
-        if ((cap.depth || 1) >= (cap.maxDepth || 2)) {
-          throw new Failure(
-            "Profundidad máxima de delegación alcanzada para esta credencial.",
-            403,
-          );
-        }
-        return cap;
-      case "POST /equipo/esperar":
-      case "POST /equipo/estado":
-      case "POST /equipo/mensaje":
-      case "POST /equipo/bandeja":
-      case "POST /equipo/entregar":
         return cap;
       default:
         throw new Failure(
@@ -386,7 +347,6 @@ export async function createContext(options) {
     }
     return true;
   };
-  const bridges = createSessionBridges({ lanzador, userRequests, workOrders });
   const shared = createSharedFiles(
     options.sharedDirectory ||
       process.env.SHARED_DIR ||
@@ -484,16 +444,13 @@ export async function createContext(options) {
     stopLanzadorEvents: stopLauncherEvents,
     mcpRemoto: mcpRemote,
     aprobaciones: approvals,
-    workOrders,
     userRequests,
     effects,
-    sesionesLanzador: launcherSessions,
     runStoreOp,
     resolveServerProfile,
     hasVerifiedBillingGrant,
     assertAgentCapabilityForRoute,
     canAgentAccessScopedRecord,
-    bridges,
     shared,
     actorOf,
     logger,
