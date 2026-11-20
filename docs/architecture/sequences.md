@@ -43,7 +43,7 @@ sequenceDiagram
   autonumber
   participant D as dashboard
   participant S as service
-  participant L as lanzador (sb-agente)
+  participant L as launcher (sb-agente)
   participant P as Provider controller
   participant CLI as Agent CLI
   participant M as brain CLI (MCP)

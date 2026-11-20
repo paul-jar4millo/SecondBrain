@@ -10,7 +10,7 @@ Please **do not open a public issue**. Report it privately through
 [GitHub private vulnerability reporting](../../security/advisories/new)
 (the "Report a vulnerability" button in the Security tab).
 
-Include the affected module (`service`, `mcp`, `dashboard`, `lanzador` or
+Include the affected module (`service`, `mcp`, `dashboard`, `launcher` or
 `ops`), the version or commit, reproduction steps and the impact you expect.
 You should receive an acknowledgement within 7 days. Fixes are released as a
 new version and credited in the advisory unless you prefer otherwise.
