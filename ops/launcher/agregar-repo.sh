@@ -2,7 +2,7 @@
 # Adds a GitHub repository to the launcher and optionally links it to a project.
 # Run inside the LXC as root:
 #   bash /opt/secondbrain/current/ops/lanzador/agregar-repo.sh <owner/repo> [project-id]
-# Idempotent. Refuses to restart the launcher while a session is active, because that
+# Idempotent. Refuses to restart the launcher while a thread is working, because that
 # would interrupt it. Access comes from sb-agente's GitHub token: edit that token's
 # repository access on GitHub; this script never reads or replaces it.
 set -euo pipefail
@@ -24,20 +24,16 @@ base=/srv/sb-agente/proyectos
 destino=$base/$nombre
 registro=/etc/sb-agente/proyectos.json
 espacios=$agente/estado/lanzador/espacios.json
-sesiones=$agente/estado/lanzador/sesiones.json
 node=/opt/node/bin/node
 
+# Restarting the launcher stops running turns; ask it which threads are busy.
 activas=$(
-  "$node" -e '
-    const fs = require("fs");
-    let datos = [];
-    try { datos = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch {}
-    const lista = Array.isArray(datos) ? datos : datos.sesiones || [];
-    console.log(lista.filter((s) => ["pendiente", "trabajando"].includes(s.estado)).length);
-  ' "$sesiones"
-)
+  curl -fsS --max-time 5 -H "Authorization: Bearer $(cat /var/lib/secondbrain/lanzador-token)" \
+    'http://127.0.0.1:8092/threads?status=setting-up,running,closing' |
+    "$node" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).threads.length))'
+) || { echo "El lanzador no respondió; no se puede saber si hay turnos en curso." >&2; exit 1; }
 if [[ $activas != 0 ]]; then
-  echo "Hay $activas sesiones activas; reiniciar el lanzador las interrumpiría. Vuelve a ejecutarlo al terminar." >&2
+  echo "Hay $activas threads trabajando; reiniciar el lanzador los interrumpiría. Vuelve a ejecutarlo al terminar." >&2
   exit 1
 fi
 
@@ -83,4 +79,4 @@ fi
 
 trap - EXIT
 systemctl start secondbrain-lanzador.service
-echo "Listo: $repo disponible${proyecto:+ y vinculado a $proyecto}. Las conversaciones nuevas lo usan; las abiertas conservan su carpeta."
+echo "Listo: $repo disponible${proyecto:+ y vinculado a $proyecto}. Los threads nuevos lo usan; los abiertos conservan su worktree."
