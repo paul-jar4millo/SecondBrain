@@ -23,7 +23,7 @@ export const SPANISH = new Set(
 
 // Folders whose source files follow the convention.
 const SOURCE =
-  /^(service|mcp|launcher|ops|dashboard\/src|dashboard\/ops)\/.*\.(mjs|js|ts|tsx|py|css)$/;
+  /^(contracts|discord|service|mcp|launcher|ops|dashboard\/src|dashboard\/ops)\/.*\.(mjs|js|ts|tsx|py|css)$/;
 const SKIP = /(^|\/)(node_modules|dist|fixtures)\/|^ops\/compat\//;
 
 /** @param {string} name */
@@ -61,7 +61,9 @@ export function findings() {
     if (spanishWords(base).length) out.push(file);
     // Exported identifiers of the backend modules.
     if (
-      !/^(service|mcp|launcher|dashboard\/src)\//.test(file) ||
+      !/^(contracts|discord|service|mcp|launcher|dashboard\/src)\//.test(
+        file,
+      ) ||
       file.includes("/tests/")
     )
       continue;
