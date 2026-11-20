@@ -1,4 +1,3 @@
-// @ts-check
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
@@ -25,6 +24,7 @@ export async function crearColaAprobaciones(
   const recibos = new Map();
   const esperas = new Map();
   const timers = new Map();
+  /** @type {Promise<unknown>} */
   let cola = Promise.resolve();
   let cerrado = false;
   const contenido = await readFile(archivo, "utf8").catch((e) => {
@@ -78,6 +78,12 @@ export async function crearColaAprobaciones(
       /* observers cannot reverse a journalled decision */
     }
   }
+  /**
+   * Runs fn after every previously queued call.
+   * @template T
+   * @param {() => Promise<T>} fn
+   * @returns {Promise<T>}
+   */
   function serial(fn) {
     const siguiente = cola.then(fn);
     cola = siguiente.catch(() => {});

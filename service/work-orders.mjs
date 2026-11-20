@@ -1,4 +1,4 @@
-// @ts-check
+import { DomainError } from "./domain-error.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import {
@@ -62,13 +62,7 @@ export const EVENT_TYPES = new Set([
   "verification.completed",
 ]);
 
-export class WorkOrderError extends Error {
-  constructor(message, status = 400, details = {}) {
-    super(message);
-    this.status = status;
-    Object.assign(this, details);
-  }
-}
+export class WorkOrderError extends DomainError {}
 
 function canonicalJson(value) {
   if (Array.isArray(value)) {

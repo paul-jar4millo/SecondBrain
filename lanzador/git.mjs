@@ -1,4 +1,3 @@
-// @ts-check
 import { execFile } from "node:child_process";
 
 // Only what git and gh need. Tokens, when present, travel in the environment of

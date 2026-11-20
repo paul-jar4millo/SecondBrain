@@ -85,7 +85,11 @@ function esPerfilMasAmplio(solicitadoId, limiteId) {
 
 export async function abrirEquipos(
   dir,
-  { maxMiembros = 4, activo = () => true, onChange = () => {} } = {},
+  {
+    maxMiembros = 4,
+    activo = /** @type {(sessionId: string) => boolean} */ (() => true),
+    onChange = /** @type {() => void} */ (() => {}),
+  } = {},
 ) {
   const archivo = path.join(dir, "equipos.json");
   let equipos;
@@ -97,6 +101,7 @@ export async function abrirEquipos(
     if (e.code !== "ENOENT") throw e;
     equipos = [];
   }
+  /** @type {Promise<unknown>} */
   let cola = Promise.resolve();
   const buscar = (sesion) =>
     equipos.find((equipo) => equipo.miembros.some((m) => m.id === sesion));

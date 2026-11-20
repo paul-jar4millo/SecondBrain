@@ -1,4 +1,3 @@
-// @ts-check
 export function comandoRemoto(sesion, brief) {
   if (sesion.motor === "claude")
     return {

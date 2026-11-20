@@ -252,13 +252,18 @@ export function createBrainMcp({
       ...(nota ? { note: nota } : {}),
     });
     const esperado = await sha256Of(origen);
-    const response = await fetch(`${baseUrl}/files/raw?${consulta}`, {
-      method: "POST",
-      headers: { ...headers, "content-type": "application/octet-stream" },
-      body: Readable.toWeb(createReadStream(origen)),
-      duplex: "half",
-      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT),
-    });
+    // `duplex` is required by Node to stream a request body but is missing
+    // from the DOM RequestInit type.
+    const response = await fetch(
+      `${baseUrl}/files/raw?${consulta}`,
+      /** @type {RequestInit} */ ({
+        method: "POST",
+        headers: { ...headers, "content-type": "application/octet-stream" },
+        body: Readable.toWeb(createReadStream(origen)),
+        duplex: "half",
+        signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT),
+      }),
+    );
     const value = await response.json().catch(() => ({}));
     if (!response.ok)
       throw new Error(
@@ -312,12 +317,17 @@ export function createBrainMcp({
             );
           }
           return {
-            content: [{ type: "text", text: JSON.stringify(await run(args)) }],
+            content: [
+              {
+                type: /** @type {const} */ ("text"),
+                text: JSON.stringify(await run(args)),
+              },
+            ],
           };
         } catch (e) {
           return {
             isError: true,
-            content: [{ type: "text", text: e.message }],
+            content: [{ type: /** @type {const} */ ("text"), text: e.message }],
           };
         }
       },

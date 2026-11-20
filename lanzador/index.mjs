@@ -1,4 +1,3 @@
-// @ts-check
 import http from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { inferirFase } from "./fases.mjs";

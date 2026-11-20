@@ -1,4 +1,3 @@
-// @ts-check
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 export const hash = (s) => createHash("sha256").update(s).digest("hex");

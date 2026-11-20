@@ -1,4 +1,3 @@
-// @ts-check
 // Remote MCP: OAuth 2.1 authorization server (dynamic client registration,
 // PKCE S256, rotating refresh tokens) plus the Streamable HTTP /mcp endpoint.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";

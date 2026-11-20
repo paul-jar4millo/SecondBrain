@@ -1,4 +1,3 @@
-// @ts-check
 import path from "node:path";
 
 // Provider catalog and pure helpers: CLI arguments, child environments and

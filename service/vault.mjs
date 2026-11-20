@@ -67,6 +67,13 @@ export class Vault {
     this.journalDirectory = journalDirectory;
     this.journal = null;
     this.recoveryWarnings = [];
+    // Set only while importItems() runs a batch (see vault-import.mjs).
+    /** @type {Awaited<ReturnType<Vault["snapshot"]>> | null} */
+    this.batchSnapshot = null;
+    /** @type {Set<string> | null} */
+    this.pendingPaths = null;
+    /** @type {string[] | null} */
+    this.indexBatch = null;
   }
   async recover() {
     this.recoveryWarnings = await Journal.recover(this, this.journalDirectory);
@@ -109,7 +116,8 @@ export class Vault {
   }
   async exclusive(fn) {
     const previous = this.queue;
-    let release;
+    /** @type {(value?: unknown) => void} */
+    let release = () => {};
     this.queue = new Promise((r) => (release = r));
     await previous;
     try {
@@ -389,6 +397,7 @@ export class Vault {
         const sourceLine =
           text.slice(0, text.length - parts.body.length).split("\n").length +
           index;
+        /** @type {Record<string, any>} */
         const task = {
           ...extra,
           id: taskId,
@@ -507,18 +516,24 @@ export class Vault {
   async mutate(mutation) {
     return this.exclusive(() => this.transaction(() => this.apply(mutation)));
   }
-}
-
-for (const [name, method] of Object.entries({
-  apply,
-  index,
-  repeat,
-  import: importItems,
-  ledger,
-})) {
-  Object.defineProperty(Vault.prototype, name, {
-    value: method,
-    writable: true,
-    configurable: true,
-  });
+  // Operations implemented in sibling modules, run with this vault as `this`.
+  /** @param {Parameters<typeof apply>[0]} mutation */
+  apply(mutation) {
+    return apply.call(this, mutation);
+  }
+  /** @param {Parameters<typeof index>[0]} id */
+  index(id) {
+    return index.call(this, id);
+  }
+  /** @param {Parameters<typeof repeat>[0]} item */
+  repeat(item) {
+    return repeat.call(this, item);
+  }
+  /** @param {Parameters<typeof importItems>[0]} items */
+  import(items) {
+    return importItems.call(this, items);
+  }
+  ledger() {
+    return ledger.call(this);
+  }
 }

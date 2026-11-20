@@ -1,4 +1,3 @@
-// @ts-check
 // One-time importer for the dated "Registro financiero" note (tables exported
 // from the card summary). It only reads Markdown text; the caller decides
 // whether to write the result.

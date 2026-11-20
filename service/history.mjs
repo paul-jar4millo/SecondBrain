@@ -1,4 +1,3 @@
-// @ts-check
 // Version history of vault writes: the previous content of every committed change and who
 // made it. Operational recovery data, like the journal, not a second copy of the vault.
 // It lives on the vault's disk, so it does not replace an off-host backup.

@@ -1,4 +1,3 @@
-// @ts-check
 export function createChangeFeed() {
   const listeners = new Set();
   let timer;

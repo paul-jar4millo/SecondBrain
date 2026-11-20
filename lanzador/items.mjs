@@ -1,4 +1,3 @@
-// @ts-check
 import { watch } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import path from "node:path";

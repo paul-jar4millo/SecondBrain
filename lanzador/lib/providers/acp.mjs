@@ -1,4 +1,3 @@
-// @ts-check
 // Controller for Agent Client Protocol (ACP) CLIs.
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";

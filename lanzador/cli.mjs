@@ -216,6 +216,7 @@ export async function ejecutarCli(
   async function esperar(id, segundos) {
     const limite = Date.now() + segundos * 1000;
     const control = new AbortController();
+    /** @type {(value?: unknown) => void} */
     let despertar = () => {};
     let dormir = new Promise((r) => (despertar = r));
     (async () => {

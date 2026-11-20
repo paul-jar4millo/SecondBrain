@@ -22,6 +22,9 @@ import { arrancar } from "../lanzador/index.mjs";
 import { createApplication } from "../service/index.mjs";
 
 const execFileAsync = promisify(execFile);
+/** Port of a server listening on TCP. */
+const portOf = (/** @type {import("node:net").Server} */ server) =>
+  /** @type {import("node:net").AddressInfo} */ (server.address()).port;
 
 function sha256Hex(value) {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -144,6 +147,7 @@ export async function runLiveVerification({
       { mode: 0o600 },
     );
 
+    /** @type {Record<string, string>} */
     const lanzadorEnv = {
       ...process.env,
       SB_LANZADOR_PORT: "0",
@@ -157,7 +161,7 @@ export async function runLiveVerification({
     };
 
     launcher = await arrancar(lanzadorEnv);
-    const launcherUrl = `http://127.0.0.1:${launcher.address().port}`;
+    const launcherUrl = `http://127.0.0.1:${portOf(launcher)}`;
 
     app = await createApplication({
       vaultRoot,
@@ -168,7 +172,7 @@ export async function runLiveVerification({
     });
     app.server.listen(0, "127.0.0.1");
     await once(app.server, "listening");
-    let servicePort = app.server.address().port;
+    let servicePort = portOf(app.server);
     let baseApi = `http://127.0.0.1:${servicePort}/api/v1`;
     lanzadorEnv.SB_BRAIN_URL = baseApi;
     lanzadorEnv.AGENTES_BRAIN_URL = baseApi;
@@ -268,6 +272,7 @@ export async function runLiveVerification({
 
     const freeTextAnswer = "azul-cobalto-sintetico-901";
     const answeredNative = new Set();
+    /** @type {any} */
     let productQuestionAnswered = null;
     const sseAbort = new AbortController();
     let lastSseSeq = 0;
@@ -589,7 +594,7 @@ export async function runLiveVerification({
       });
       app.server.listen(0, "127.0.0.1");
       await once(app.server, "listening");
-      servicePort = app.server.address().port;
+      servicePort = portOf(app.server);
       baseApi = `http://127.0.0.1:${servicePort}/api/v1`;
       lanzadorEnv.SB_BRAIN_URL = baseApi;
       lanzadorEnv.AGENTES_BRAIN_URL = baseApi;

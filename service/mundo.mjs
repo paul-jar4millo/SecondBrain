@@ -1,4 +1,3 @@
-// @ts-check
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";

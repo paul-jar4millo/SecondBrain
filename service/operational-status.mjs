@@ -1,4 +1,3 @@
-// @ts-check
 import { readFile } from "node:fs/promises";
 
 async function bounded(file) {

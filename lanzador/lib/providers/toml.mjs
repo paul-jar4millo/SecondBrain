@@ -1,4 +1,3 @@
-// @ts-check
 // Minimal TOML reader for Codex configuration files.
 
 const TOML_HEX4_RE = /^[0-9A-Fa-f]{4}$/;

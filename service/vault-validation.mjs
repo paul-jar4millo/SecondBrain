@@ -1,6 +1,6 @@
-// @ts-check
 import { Temporal } from "@js-temporal/polyfill";
 import { kinds, uuid, day } from "./vault-format.mjs";
+/** @param {any[] | Map<string, any>} items */
 export const accountIndex = (items) =>
   items instanceof Map
     ? items
@@ -9,6 +9,10 @@ export const accountIndex = (items) =>
           .filter((a) => a.kind === "account" && !a.deleted)
           .map((a) => [a.id, a]),
       );
+/**
+ * @param {any} item
+ * @param {any[] | Map<string, any>} [items] Records, or an index from accountIndex().
+ */
 export function validate(item, items = []) {
   const errors = [];
   if (!uuid.test(item.id || "")) errors.push("Identificador inválido.");

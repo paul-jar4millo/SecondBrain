@@ -1,4 +1,3 @@
-// @ts-check
 // Finance module: one structured Markdown document is the source of truth.
 // Everything shown in the UI (utilization, cash-flow margin, categories, alerts)
 // is derived by overview() on every read; nothing computed is persisted.

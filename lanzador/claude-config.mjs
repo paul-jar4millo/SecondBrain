@@ -1,4 +1,3 @@
-// @ts-check
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { carpetaAgy, esLineaUso, lineaUso } from "./uso.mjs";

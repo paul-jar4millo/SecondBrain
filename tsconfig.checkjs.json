@@ -7,7 +7,7 @@
     "types": ["node"],
     "typeRoots": ["./node_modules/@types"],
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
     "noEmit": true,
     "strict": false,
     "skipLibCheck": true,
@@ -19,6 +19,9 @@
     "lanzador/*.mjs",
     "ops/*.mjs",
     "ops/deploy/*.mjs",
-    "ops/homelab/*.mjs"
+    "ops/homelab/*.mjs",
+    "lanzador/lib/**/*.mjs",
+    "service/lib/*.mjs",
+    "ops/lanzador/*.mjs"
   ]
 }

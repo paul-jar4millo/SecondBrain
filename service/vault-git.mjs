@@ -1,4 +1,3 @@
-// @ts-check
 import fs from "node:fs";
 import { realpath, lstat } from "node:fs/promises";
 import path from "node:path";

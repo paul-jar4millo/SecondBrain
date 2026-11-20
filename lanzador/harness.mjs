@@ -1,4 +1,3 @@
-// @ts-check
 import { fileURLToPath } from "node:url";
 import xterm from "@xterm/headless";
 import { SerializeAddon } from "@xterm/addon-serialize";

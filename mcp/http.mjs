@@ -1,4 +1,3 @@
-// @ts-check
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createBrainMcp } from "./index.mjs";
 

@@ -1,4 +1,3 @@
-// @ts-check
 import { ErrorLanzador } from "./errores.mjs";
 import { capacidadesDe } from "./motores.mjs";
 import { propuestaPr } from "./pr.mjs";

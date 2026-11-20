@@ -1,4 +1,3 @@
-// @ts-check
 export function inferirFase(actividad) {
   const texto = String(actividad || "").toLowerCase();
   if (/\b(test|tests|git|pytest|vitest|jest)\b/.test(texto)) return "revisar";

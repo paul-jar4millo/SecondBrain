@@ -1,4 +1,3 @@
-// @ts-check
 // Controller for the Codex app-server protocol.
 import { randomUUID } from "node:crypto";
 import { ErrorLanzador } from "../../errores.mjs";

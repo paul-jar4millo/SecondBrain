@@ -1,4 +1,3 @@
-// @ts-check
 import { parseDocument, Document } from "yaml";
 export const kinds = new Set([
   "note",

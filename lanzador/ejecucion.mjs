@@ -70,6 +70,8 @@ export function crearEjecutor({
   const activos = new Map();
   const terminales = new Map();
   const liveProcesses = new Map();
+  /** Processes that already emitted "exit" (exitCode alone misses signals). */
+  const exitedProcesses = new WeakSet();
   const idleTimers = new Map();
   const sessionTokenFiles = new Map();
   const sessionProfiles = new Map();
@@ -636,7 +638,7 @@ export function crearEjecutor({
       const existingChild = liveProcesses.get(sesion.id);
       if (
         existingChild &&
-        !existingChild._sbExited &&
+        !exitedProcesses.has(existingChild) &&
         conversations?.hasLiveController?.(sesion.id)
       ) {
         job.hijo = existingChild;
@@ -791,7 +793,7 @@ export function crearEjecutor({
             job.hijo = child;
             liveProcesses.set(sesion.id, child);
             child.once("exit", (code, signal) => {
-              child._sbExited = true;
+              exitedProcesses.add(child);
               if (liveProcesses.get(sesion.id) === child) {
                 liveProcesses.delete(sesion.id);
               }
@@ -886,7 +888,7 @@ export function crearEjecutor({
         if (
           !keepPersistent &&
           job.hijo &&
-          !job.hijo._sbExited &&
+          !exitedProcesses.has(job.hijo) &&
           (job.hijo.exitCode === null || job.hijo.exitCode === undefined)
         ) {
           senalar(job.hijo, "SIGTERM");
@@ -1024,6 +1026,7 @@ export function crearEjecutor({
     }
   }
   async function correrRemoto(sesion, brief, cwd) {
+    /** @type {Record<string, string | undefined>} */
     const childEnv = {
       ...entornoDe(
         { agy: "gemini", codex: "chatgpt" }[sesion.motor] || sesion.motor,
@@ -1737,6 +1740,10 @@ export function crearEjecutor({
     conexionesActivas: () => conversations?.liveSessions?.() ?? [],
     cerrarConexion: (id, reason) => serial(() => cerrarConexion(id, reason)),
     cerrarTodo,
+    /**
+     * @param {string} id
+     * @param {{ clientMessageId?: string, text?: string, mode?: string, attachments?: any[] }} [message]
+     */
     async enviarMensaje(
       id,
       { clientMessageId, text = "", mode = "send", attachments = [] } = {},

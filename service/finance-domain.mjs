@@ -1,4 +1,3 @@
-// @ts-check
 import { Failure } from "./vault.mjs";
 const LEAK_DEFAULT = ["Comida fuera", "Rappi", "Antojos y conveniencia"];
 export const UNIDENTIFIED = "Sin identificar";

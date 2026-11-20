@@ -17,6 +17,7 @@ import {
   stableId,
 } from "./vault.mjs";
 import { History } from "./history.mjs";
+import { DomainError } from "./domain-error.mjs";
 import { GitHistory } from "./vault-git.mjs";
 import { Auth } from "./auth.mjs";
 import { Finance, mexicoDay } from "./finance.mjs";
@@ -29,16 +30,9 @@ import { sendItems } from "./http-items.mjs";
 import { createSharedFiles, downloadHeaders } from "./shared-files.mjs";
 import { pipeline } from "node:stream/promises";
 import { operationalStatus } from "./operational-status.mjs";
-import { WorkOrderError, createWorkOrderStore } from "./work-orders.mjs";
-import {
-  UserRequestConflictError,
-  UserRequestError,
-  createUserRequestStore,
-} from "./user-requests.mjs";
-import {
-  EffectExecutorError,
-  createEffectsExecutor,
-} from "./effects-executor.mjs";
+import { createWorkOrderStore } from "./work-orders.mjs";
+import { createUserRequestStore } from "./user-requests.mjs";
+import { createEffectsExecutor } from "./effects-executor.mjs";
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
 // Reported by /health; the release package always ships service/package.json.
 const APP_VERSION = JSON.parse(
@@ -155,12 +149,7 @@ export async function createApplication(options = {}) {
     try {
       return await fn();
     } catch (error) {
-      if (
-        error instanceof WorkOrderError ||
-        error instanceof UserRequestError ||
-        error instanceof UserRequestConflictError ||
-        error instanceof EffectExecutorError
-      ) {
+      if (error instanceof DomainError) {
         throw Object.assign(new Failure(error.message, error.status || 400), {
           ...(error.recibo ? { recibo: error.recibo } : {}),
           ...(error.solicitud ? { solicitud: error.solicitud } : {}),
@@ -1516,11 +1505,10 @@ export async function createApplication(options = {}) {
             );
           },
           "POST /sala/agentes": async () => {
-            return send(
-              response,
-              201,
-              await sala.crearAgente(await body(request)),
-            );
+            // Retired: the room has four fixed agents. The body is still
+            // validated so a malformed request keeps answering 400, not 410.
+            await body(request);
+            return send(response, 201, await sala.crearAgente());
           },
           "POST /sala/agentes/borrar": async () => {
             return send(
@@ -1628,6 +1616,7 @@ export async function createApplication(options = {}) {
           },
           "GET /export": async () => {
             const snapshot = await vault.read();
+            /** @type {Record<string, Uint8Array>} */
             const files = {};
             const manifest = [];
             for (const record of snapshot.byPath.values()) {
@@ -1740,6 +1729,7 @@ export async function createApplication(options = {}) {
                 403,
               );
             }
+            /** @type {{ cursor: number, recipientScope?: string, memberId?: string }} */
             let feedArgs = {
               cursor,
               recipientScope,
@@ -2525,7 +2515,7 @@ export async function startService() {
   const host = process.env.HOST || "127.0.0.1";
   app.server.listen(port, host, () =>
     console.log(
-      `Second Brain · http://${host}:${app.server.address().port} · vault ${app.root}`,
+      `Second Brain · http://${host}:${/** @type {import("node:net").AddressInfo} */ (app.server.address()).port} · vault ${app.root}`,
     ),
   );
   for (const signal of ["SIGINT", "SIGTERM"])

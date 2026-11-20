@@ -1,3 +1,4 @@
+import { DomainError } from "./domain-error.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename } from "node:fs/promises";
 import {
@@ -33,13 +34,7 @@ export const NATIVE_CALLBACK_STATUSES = new Set([
   "not_applicable",
 ]);
 
-export class UserRequestError extends Error {
-  constructor(message, status = 400, details = {}) {
-    super(message);
-    this.status = status;
-    Object.assign(this, details);
-  }
-}
+export class UserRequestError extends DomainError {}
 
 export class UserRequestConflictError extends UserRequestError {
   constructor(
@@ -158,8 +153,10 @@ export async function createUserRequestStore(
   {
     clock = Date.now,
     approvalTimeoutMs = 1800000,
-    onChange = () => {},
-    onEvent = async () => {},
+    onChange = /** @type {() => void} */ (() => {}),
+    onEvent = /** @type {(workOrderId: string, payload: object) => Promise<void>} */ (
+      async () => {}
+    ),
   } = {},
 ) {
   await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -363,6 +360,7 @@ export async function createUserRequestStore(
   }
 
   return {
+    /** @param {{ workOrderId?: string, kind?: string, status?: string }} [filter] */
     list({ workOrderId, kind, status } = {}) {
       const items = [];
       for (const req of requests.values()) {
@@ -616,6 +614,16 @@ export async function createUserRequestStore(
       });
     },
 
+    /**
+     * @param {string} id
+     * @param {{
+     *   requestId?: string, option?: string, freeText?: string,
+     *   approve?: boolean, by?: string, origin?: string,
+     *   expectedRevision?: number, expectedNativeTurnId?: string,
+     *   action?: string, recipient?: string, contentHash?: string,
+     *   changes?: unknown, cost?: unknown, scope?: unknown,
+     * }} [answer]
+     */
     respond(
       id,
       {
@@ -924,6 +932,10 @@ export async function createUserRequestStore(
       });
     },
 
+    /**
+     * @param {string} id
+     * @param {{ status?: string, note?: string }} [state]
+     */
     updateDeliveryState(id, { status, note } = {}) {
       return serial(async () => {
         if (

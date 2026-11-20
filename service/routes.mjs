@@ -71,6 +71,14 @@ const schemas = {
     })
     .passthrough(),
 };
+/**
+ * @typedef {object} RoutePolicy
+ * @property {boolean} public Reachable without a session.
+ * @property {boolean} room Allowed for the room's agent credential.
+ * @property {z.ZodType} body Request body schema.
+ * @property {z.ZodType} query Query-string schema.
+ */
+/** @type {Map<string, RoutePolicy>} */
 export const ROUTES = new Map([
   [
     "GET /health",
@@ -373,7 +381,7 @@ export const ROUTES = new Map([
 // Maletín: shared folder between the owner and the agents. Agents may use all of it
 // (the handlers restrict what they can write or remove); pinning is the owner's.
 const anyQuery = z.record(z.string(), z.string());
-for (const [key, body] of [
+for (const [key, body] of /** @type {Array<[string, z.ZodType]>} */ ([
   ["GET /aprobaciones", object],
   [
     "POST /aprobaciones/decidir",
@@ -573,7 +581,7 @@ for (const [key, body] of [
   ],
   ["POST /agentes/sesiones/cancelar", z.object({ id: z.uuid() }).strict()],
   ["POST /agentes/sesiones/eliminar", z.object({ id: z.uuid() }).strict()],
-])
+]))
   ROUTES.set(key, { public: false, room: false, body, query: anyQuery });
 // Changes and PR draft of one session: a user session and a UUID, nothing else.
 ROUTES.set("GET /agentes/sesiones/diff", {
@@ -619,7 +627,7 @@ ROUTES.set("GET /agentes/conversacion/artefactos/descargar", {
   body: object,
   query: z.object({ id: z.uuid(), artifactId: z.uuid() }).strict(),
 });
-for (const [accion, body] of [
+for (const [accion, body] of /** @type {Array<[string, z.ZodType]>} */ ([
   ["estado", z.object({}).strict()],
   ["bandeja", z.object({}).strict()],
   [
@@ -720,7 +728,7 @@ for (const [accion, body] of [
       })
       .strict(),
   ],
-])
+]))
   ROUTES.set("POST /equipo/" + accion, {
     public: false,
     room: true,
@@ -752,7 +760,11 @@ ROUTES.set("POST /encargos/integrar", {
     .strict(),
   query: anyQuery,
 });
-for (const [key, room, body] of [
+for (const [
+  key,
+  room,
+  body,
+] of /** @type {Array<[string, boolean, z.ZodType]>} */ ([
   ["GET /files", true, object],
   ["GET /files/download", true, object],
   ["GET /files/chunk", true, object],
@@ -777,7 +789,7 @@ for (const [key, room, body] of [
     false,
     z.object({ id: z.string(), pinned: z.boolean() }).passthrough(),
   ],
-])
+]))
   ROUTES.set(key, { public: false, room, body, query: anyQuery });
 
 // persistent work orders, events and user requests

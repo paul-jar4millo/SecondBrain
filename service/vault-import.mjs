@@ -1,5 +1,6 @@
 import { Failure, stableId } from "./vault-identity.mjs";
 import { validate, accountIndex } from "./vault-validation.mjs";
+/** @this {import("./vault.mjs").Vault} */
 export async function importItems(items) {
   return this.exclusive(async () => {
     try {

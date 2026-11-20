@@ -1,4 +1,3 @@
-// @ts-check
 import { cp, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

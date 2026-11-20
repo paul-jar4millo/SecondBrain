@@ -1,4 +1,3 @@
-// @ts-check
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";

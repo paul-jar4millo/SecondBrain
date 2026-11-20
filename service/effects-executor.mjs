@@ -1,3 +1,4 @@
+import { DomainError } from "./domain-error.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import {
@@ -49,13 +50,7 @@ const PROFILE_ALLOWED_CATEGORIES = {
 
 const UUID_RE = /^[a-f0-9-]{36}$/i;
 
-export class EffectExecutorError extends Error {
-  constructor(message, status = 400, details = {}) {
-    super(message);
-    this.status = status;
-    Object.assign(this, details);
-  }
-}
+export class EffectExecutorError extends DomainError {}
 
 function sha256Text(value) {
   return createHash("sha256")
@@ -276,6 +271,7 @@ export async function createEffectsExecutor(
   }
 
   return {
+    /** @param {{ workOrderId?: string, status?: string, includeSensitive?: boolean }} [filter] */
     list({ workOrderId, status, includeSensitive = true } = {}) {
       const items = [];
       for (const eff of effects.values()) {
@@ -521,6 +517,14 @@ export async function createEffectsExecutor(
       });
     },
 
+    /**
+     * @param {string} effectId
+     * @param {{
+     *   requestId?: string, actor?: string, expectedNativeTurnId?: string,
+     *   action?: string, recipient?: string, contentHash?: string,
+     *   changes?: unknown, cost?: unknown, scope?: unknown,
+     * }} [approval]
+     */
     executeEffect(
       effectId,
       {
@@ -866,6 +870,10 @@ export async function createEffectsExecutor(
       });
     },
 
+    /**
+     * @param {string} effectId
+     * @param {{ requestId?: string, outcome?: string, note?: string, actor?: string }} [result]
+     */
     reconcileEffect(
       effectId,
       { requestId, outcome, note = "", actor = "app" } = {},

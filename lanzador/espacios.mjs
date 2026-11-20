@@ -1,4 +1,3 @@
-// @ts-check
 import { mkdir, readFile, writeFile, rename, stat } from "node:fs/promises";
 import path from "node:path";
 

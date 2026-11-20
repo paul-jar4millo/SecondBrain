@@ -1,4 +1,3 @@
-// @ts-check
 // Inspection of Codex MCP configuration and launch arguments.
 import { lstat, readFile, realpath } from "node:fs/promises";
 import os from "node:os";

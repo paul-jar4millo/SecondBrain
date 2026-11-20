@@ -1,4 +1,3 @@
-// @ts-check
 import {
   brainServer,
   CONTROLLER_FACTORIES,

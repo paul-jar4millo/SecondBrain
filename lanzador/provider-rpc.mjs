@@ -1,4 +1,3 @@
-// @ts-check
 import { StringDecoder } from "node:string_decoder";
 
 /** Newline-delimited JSON-RPC; no PTY, ANSI parsing or transcript polling. */

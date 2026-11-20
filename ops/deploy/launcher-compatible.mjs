@@ -1,4 +1,3 @@
-// @ts-check
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";

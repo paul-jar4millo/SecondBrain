@@ -1,4 +1,3 @@
-// @ts-check
 import { promisify } from "node:util";
 import { gzip } from "node:zlib";
 import { createHash } from "node:crypto";

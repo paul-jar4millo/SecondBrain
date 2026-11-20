@@ -1,4 +1,3 @@
-// @ts-check
 /** Redact known credentials and caller text before a diagnostic reaches stderr. */
 export function ocultarDiagnostico(
   valor,

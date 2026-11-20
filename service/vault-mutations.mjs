@@ -1,4 +1,3 @@
-// @ts-check
 import { mexicoDay } from "./finance-domain.mjs";
 import { Document } from "yaml";
 import { Failure } from "./vault-identity.mjs";
@@ -12,6 +11,7 @@ import {
 } from "./vault-format.mjs";
 import { validate } from "./vault-validation.mjs";
 import path from "node:path";
+/** @this {import("./vault.mjs").Vault} */
 export async function apply({ mutationId, baseVersion, entity }) {
   if (!uuid.test(mutationId || ""))
     throw new Failure("La operación necesita una identidad válida.");

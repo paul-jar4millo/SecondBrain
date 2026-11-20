@@ -1,4 +1,3 @@
-// @ts-check
 // Status line command of Ámbar and Lira: uso-linea.mjs <motor> <archivo> <firma>.
 // Runs on the CLI's own redraws, so it must never fail or block the terminal.
 import { guardarUsoLinea } from "./uso.mjs";

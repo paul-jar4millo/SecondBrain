@@ -1,4 +1,3 @@
-// @ts-check
 // Helpers shared by every provider controller: MCP servers, input formatting, artifacts and child processes.
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";

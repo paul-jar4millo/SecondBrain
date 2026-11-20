@@ -1,4 +1,3 @@
-// @ts-check
 import { coalescer } from "./harness.mjs";
 import { LOTE_INICIAL } from "./items.mjs";
 

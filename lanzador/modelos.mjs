@@ -1,4 +1,3 @@
-// @ts-check
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
