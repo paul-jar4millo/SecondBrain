@@ -12,6 +12,7 @@ export const es = {
   "greeting.afternoon": "Buenas tardes",
   "tools.projects": "Proyectos",
   "tools.team": "Equipo",
+  "tools.threads": "Threads",
   "tools.tasks": "Tareas",
   "tools.finance": "Finanzas",
   "tools.files": "Maletín",
