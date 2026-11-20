@@ -1,18 +1,47 @@
-// Panel de Mundo Hipotético: lee el paquete que publica el canal. Es HTML por plantillas:
-// React solo lo monta y lo desmonta.
+// Mundo Hipotético panel: reads the package the channel publishes. Plain HTML
+// templates; React only mounts and unmounts it.
+import type {
+  SortableMetric,
+  WorldData,
+  WorldMetric,
+  WorldTask,
+  WorldVideo,
+} from "./panel-types";
+
+interface PanelOptions {
+  api: (path: string, body?: unknown) => Promise<unknown>;
+  confirm?: (
+    message: string,
+    options?: { confirmLabel?: string; danger?: boolean },
+  ) => Promise<boolean>;
+}
+/** A button or link that carries a data-action. */
+type Action = (b: HTMLElement) => unknown;
+
 export function montarPanel(
-  raiz,
-  { api: apiBase, confirm: confirmDecision = async () => false },
+  raiz: HTMLElement,
+  { api: apiBase, confirm: confirmDecision = async () => false }: PanelOptions,
 ) {
   const control = new AbortController();
-  const on = (objetivo, tipo, fn) =>
-    objetivo.addEventListener(tipo, fn, { signal: control.signal });
-  const $ = (s) => raiz.querySelector(s);
-  const esc = (s) =>
+  const on = <E extends Event>(
+    objetivo: EventTarget,
+    tipo: string,
+    fn: (event: E) => unknown,
+  ) =>
+    objetivo.addEventListener(tipo, fn as EventListener, {
+      signal: control.signal,
+    });
+  // WorldPage renders these nodes; most lookups are inputs or plain elements.
+  const $ = <T extends HTMLElement = HTMLInputElement>(s: string) =>
+    raiz.querySelector<T>(s)!;
+  const dialog = () => $<HTMLDialogElement>("#dialog");
+  const target = (event: Event) => event.target as HTMLInputElement;
+  const message = (e: unknown) => (e as Error).message;
+  const esc = (s: unknown) =>
     String(s ?? "").replace(
       /[&<>"']/g,
       (c) =>
-        ({
+        (<Record<string, string>>{
           "&": "&amp;",
           "<": "&lt;",
           ">": "&gt;",
@@ -20,7 +49,7 @@ export function montarPanel(
           "'": "&#39;",
         })[c],
     );
-  const paths = {
+  const paths: Record<string, string> = {
     grid: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
     film: "M4 3h16v18H4z M4 8h16 M4 16h16 M8 3v18 M16 3v18",
     flow: "M4 4h6v6H4z M14 14h6v6h-6z M7 10v7h7 M10 7h7v7",
@@ -43,14 +72,14 @@ export function montarPanel(
       "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M10 2h4l1 3 3 1 3 3-2 3 2 3-3 3-3 1-1 3h-4l-1-3-3-1-3-3 2-3-2-3 3-3 3-1z",
     clock: "M12 7v5l4 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
   };
-  const icon = (name) =>
+  const icon = (name: string) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${(
       paths[name] || paths.file
     )
       .split(" M")
       .map((p, i) => `<path d="${i ? "M" : ""}${p}"/>`)
       .join("")}</svg>`;
-  const names = {
+  const names: Record<string, string> = {
     overview: "Vista general",
     videos: "Biblioteca de videos",
     production: "Producción",
@@ -60,7 +89,7 @@ export function montarPanel(
     agents: "Agentes",
     settings: "Preferencias",
   };
-  const navigation = [
+  const navigation: [string, string, string][] = [
     ["overview", "grid", "Vista general"],
     ["videos", "film", "Videos"],
     ["production", "flow", "Producción"],
@@ -68,29 +97,34 @@ export function montarPanel(
     ["results", "bulb", "Interpretación"],
     ["agents", "bot", "Agentes"],
   ];
-  let data,
-    token,
-    loading = false,
-    toastTimer,
-    pollTimer;
+  // Assigned by the first successful load; render() waits for it.
+  let data!: WorldData;
+  let loading = false,
+    toastTimer: ReturnType<typeof setTimeout> | undefined,
+    pollTimer: ReturnType<typeof setInterval> | undefined;
   const params = () => new URL(location.href).searchParams;
   const view = () =>
-    names[params().get("view")] ? params().get("view") : "overview";
+    names[params().get("view") ?? ""] ? params().get("view")! : "overview";
   let query = params().get("q") || "";
   let autoRefresh = true;
   try {
     autoRefresh = localStorage.getItem("mh-panel-auto") !== "false";
   } catch {}
-  const num = (v, d = 0) =>
+  const num = (v: number | string | null | undefined, d = 0) =>
     v == null
       ? "—"
-      : new Intl.NumberFormat("es-MX", { maximumFractionDigits: d }).format(v);
-  const compact = (v) =>
+      : new Intl.NumberFormat("es-MX", { maximumFractionDigits: d }).format(
+          Number(v),
+        );
+  const compact = (v: number | null | undefined) =>
     new Intl.NumberFormat("es-MX", {
       notation: "compact",
       maximumFractionDigits: 1,
     }).format(v || 0);
-  function date(v, options = {}) {
+  function date(
+    v: string | null | undefined,
+    options: Intl.DateTimeFormatOptions = {},
+  ) {
     if (!v) return "Sin fecha";
     const parsed = new Date(v.length === 10 ? v + "T12:00:00Z" : v);
     if (Number.isNaN(parsed.getTime())) return "Sin fecha";
@@ -101,22 +135,23 @@ export function montarPanel(
       ...options,
     }).format(parsed);
   }
-  const isActive = (v) => !["Publicado", "Descartado"].includes(v.status);
-  const shortTitle = (v) =>
+  const isActive = (v: WorldVideo) =>
+    !["Publicado", "Descartado"].includes(v.status);
+  const shortTitle = (v: { title: string }) =>
     v.title
       .replace(/^¿Qué pasaría si\s*/i, "")
       .replace(/\?$/, "")
       .replace(/^Beats:\s*/, "");
-  const match = (v) =>
+  const match = (v: WorldVideo) =>
     !query ||
     `${v.title} ${v.num || ""} ${v.status}`
       .toLocaleLowerCase("es")
       .includes(query.toLocaleLowerCase("es"));
-  const button = (label, action, extra = "", classes = "") =>
+  const button = (label: string, action: string, extra = "", classes = "") =>
     `<button class="button ${classes}" data-action="${action}" ${extra}>${label}</button>`;
-  function badge(status) {
+  function badge(status: string) {
     const cls =
-      {
+      (<Record<string, string>>{
         Publicado: "published",
         "Listo para revisar": "ready",
         Descartado: "stopped",
@@ -127,8 +162,8 @@ export function montarPanel(
         queued: "ready",
         interrupted: "pink",
         cancelled: "stopped",
-      }[status] || "";
-    const labels = {
+      })[status] || "";
+    const labels: Record<string, string> = {
       completed: "Completado",
       failed: "Falló",
       running: "En ejecución",
@@ -138,22 +173,22 @@ export function montarPanel(
     };
     return `<span class="badge ${cls}">${esc(labels[status] || status)}</span>`;
   }
-  const evidence = (v) =>
+  const evidence = (v: WorldVideo) =>
     `<div class="mini-progress" aria-label="${v.checks.filter(Boolean).length} de ${data.stages.length} evidencias presentes">${v.checks.map((c) => `<span class="${c ? "done" : ""}"></span>`).join("")}</div>`;
-  const poster = (v, cls = "", priority = false) =>
+  const poster = (v: WorldVideo, cls = "", priority = false) =>
     v.poster
       ? `<img class="${cls}" src="${esc(v.poster)}" alt="Portada de ${esc(shortTitle(v))}" width="400" height="600" ${priority ? 'fetchpriority="high"' : 'loading="lazy"'}>`
       : `<div class="no-poster">${icon("film")}<span>Por crear</span></div>`;
-  function videoCard(v) {
+  function videoCard(v: WorldVideo) {
     return `<article class="video-card"><button class="video-image" data-action="video" data-id="${esc(v.id)}" aria-label="Abrir ${esc(v.title)}">${poster(v)}${badge(v.status)}${v.duration ? `<span class="duration">${num(v.duration, 1)} s</span>` : ""}</button><div class="video-card-body"><h3><button data-action="video" data-id="${esc(v.id)}">${esc(shortTitle(v))}</button></h3><div class="video-card-footer"><span>${v.metric ? `${compact(v.metric.vistas)} vistas` : esc(date(v.date))}</span>${evidence(v)}</div></div></article>`;
   }
-  function heading(title, description = "", right = "") {
+  function heading(title: string, description = "", right = "") {
     return `<div class="page-heading"><div><h1>${esc(title)}</h1>${description ? `<p>${esc(description)}</p>` : ""}</div>${right}</div>`;
   }
-  function section(title, description = "", link = "") {
+  function section(title: string, description = "", link = "") {
     return `<div class="section-heading"><div><h2>${title}</h2>${description ? `<p>${description}</p>` : ""}</div>${link}</div>`;
   }
-  function empty(title, text, action = "") {
+  function empty(title: string, text: string, action = "") {
     return `<div class="empty"><h2>${esc(title)}</h2><p>${esc(text)}</p>${action}</div>`;
   }
   function sourceNote() {
@@ -200,7 +235,7 @@ export function montarPanel(
         "Últimas tomas guardadas. Compara el alcance con el contexto de cada video.",
         `<a class="button subtle" href="/projects/mundo-hipotetico?view=analysis">Explorar análisis ${icon("arrow")}</a>`,
       ) +
-      `<div class="insights-grid"><section class="panel"><div class="panel-heading"><div><h2>Alcance a una edad comparable</h2><p>Toma más cercana a 24 h, dentro de 15–30 h</p></div><span class="tag">TikTok</span></div><div class="statline"><div class="stat"><strong>${compact(visible.reduce((s, v) => s + v.vistas, 0))}</strong><small>Vistas acumuladas</small></div><div class="stat"><strong>${num(visible.length)}</strong><small>Videos con métricas</small></div><div class="stat"><strong>${num(data.videos.filter((v) => v.status === "Publicado").length)}</strong><small>Carpetas publicadas</small></div></div><div class="bar-chart">${age.map((v) => `<div class="bar-row"><span>${esc(v.video)}</span><div class="bar-track"><div class="bar-fill" style="width:${(v.vistas_hora / max) * 100}%"></div></div><span class="value">${num(v.vistas_hora)}/h</span></div>`).join("") || '<p class="muted">Faltan tomas a una edad comparable.</p>'}</div><p class="chart-note">Las vistas acumuladas corresponden a videos de distintas edades. Las barras muestran vistas/hora desde la publicación, no crecimiento entre tomas.</p></section>
+      `<div class="insights-grid"><section class="panel"><div class="panel-heading"><div><h2>Alcance a una edad comparable</h2><p>Toma más cercana a 24 h, dentro de 15–30 h</p></div><span class="tag">TikTok</span></div><div class="statline"><div class="stat"><strong>${compact(visible.reduce((s, v) => s + (v.vistas ?? 0), 0))}</strong><small>Vistas acumuladas</small></div><div class="stat"><strong>${num(visible.length)}</strong><small>Videos con métricas</small></div><div class="stat"><strong>${num(data.videos.filter((v) => v.status === "Publicado").length)}</strong><small>Carpetas publicadas</small></div></div><div class="bar-chart">${age.map((v) => `<div class="bar-row"><span>${esc(v.video)}</span><div class="bar-track"><div class="bar-fill" style="width:${(v.vistas_hora / max) * 100}%"></div></div><span class="value">${num(v.vistas_hora)}/h</span></div>`).join("") || '<p class="muted">Faltan tomas a una edad comparable.</p>'}</div><p class="chart-note">Las vistas acumuladas corresponden a videos de distintas edades. Las barras muestran vistas/hora desde la publicación, no crecimiento entre tomas.</p></section>
   <section class="panel reading"><div class="reading-icon">${icon("bulb")} <span class="tag">Lectura del analista · ${esc(date(data.interpretation.actualizado))}</span></div><h2>${esc(reading?.titulo || "La próxima decisión empieza con datos")}</h2><p>${esc(reading?.texto || "Registra métricas y asigna un análisis para encontrar oportunidades.")}</p>${reading ? `<div class="reading-action"><small>Para el siguiente video</small><p>${esc(reading.accion)}</p></div>` : ""}<a class="button subtle" href="/projects/mundo-hipotetico?view=results">Leer todas las conclusiones ${icon("arrow")}</a></section></div>`
     );
   }
@@ -231,7 +266,7 @@ export function montarPanel(
   }
   function production() {
     const active = data.videos.filter(isActive).filter(match);
-    const groups = [
+    const groups: [string, (v: WorldVideo) => boolean][] = [
       ["Por desarrollar", (v) => !v.checks[2]],
       ["En revisión", (v) => v.checks[2] && !v.checks[5]],
       ["Entrega disponible", (v) => v.checks[5]],
@@ -276,7 +311,10 @@ export function montarPanel(
           ))
     );
   }
-  function metricTable(rows, sortKey = "vistas_dia") {
+  function metricTable(
+    rows: WorldMetric[],
+    sortKey: SortableMetric = "vistas_dia",
+  ) {
     return `<div class="table-wrap"><table><caption class="sr-only">Métricas de TikTok por video, última toma guardada</caption><thead><tr><th>Video</th><th class="number">Vistas</th><th class="number">Edad</th><th class="number">Vistas/día</th><th class="number">Sigue a 3 s</th><th class="number">Completo</th><th class="number">Comp. + guard. / mil</th></tr></thead><tbody>${[
       ...rows,
     ]
@@ -312,7 +350,7 @@ export function montarPanel(
   function analysis() {
     const include = params().get("hidden") === "true",
       sort = params().get("sort") || "vistas_dia";
-    const allowed = [
+    const allowed: string[] = [
       "vistas_dia",
       "vistas",
       "pct_completo",
@@ -345,7 +383,7 @@ export function montarPanel(
           "",
         )}</select></label><label for="hidden-videos" class="switch-row"><input type="checkbox" id="hidden-videos" name="hidden" ${include ? "checked" : ""}> Incluir videos ocultos</label></div></div>` +
       (rows.length
-        ? `<section class="panel">${metricTable(rows, allowed.includes(sort) ? sort : "vistas_dia")}</section>`
+        ? `<section class="panel">${metricTable(rows, (allowed.includes(sort) ? sort : "vistas_dia") as SortableMetric)}</section>`
         : empty(
             "No hay métricas para esta búsqueda",
             "Los valores vacíos se conservan como desconocidos.",
@@ -354,7 +392,7 @@ export function montarPanel(
         "Dónde se queda la audiencia",
         "Curvas de la última toma por video. Las edades pueden ser distintas.",
       ) +
-      `<section class="panel"><div class="panel-heading"><div><h2>Retención por segundo</h2><p>Inspecciona puntos y abre la tabla para ver los valores.</p></div><label class="sr-only" for="retention-video">Video de retención</label><select id="retention-video" name="retention" data-filter="retention"><option value="all">Primeras 4 curvas</option>${[...new Set(data.retention.map((r) => r.num))].map((id) => `<option value="${id}" ${String(id) === ret ? "selected" : ""}>${esc(data.retention.find((r) => r.num === id).video)}</option>`).join("")}</select></div>${data.retention.length ? retentionChart() : '<p class="charts-empty">No hay curvas de retención registradas.</p>'}<details class="hypothesis"><summary>Ver valores y fechas de las curvas</summary><div class="table-wrap"><table><thead><tr><th>Video</th><th class="number">Segundo</th><th class="number">Sigue viendo</th><th>Fecha de toma</th></tr></thead><tbody>${data.retention
+      `<section class="panel"><div class="panel-heading"><div><h2>Retención por segundo</h2><p>Inspecciona puntos y abre la tabla para ver los valores.</p></div><label class="sr-only" for="retention-video">Video de retención</label><select id="retention-video" name="retention" data-filter="retention"><option value="all">Primeras 4 curvas</option>${[...new Set(data.retention.map((r) => r.num))].map((id) => `<option value="${id}" ${String(id) === ret ? "selected" : ""}>${esc(data.retention.find((r) => r.num === id)!.video)}</option>`).join("")}</select></div>${data.retention.length ? retentionChart() : '<p class="charts-empty">No hay curvas de retención registradas.</p>'}<details class="hypothesis"><summary>Ver valores y fechas de las curvas</summary><div class="table-wrap"><table><thead><tr><th>Video</th><th class="number">Segundo</th><th class="number">Sigue viendo</th><th>Fecha de toma</th></tr></thead><tbody>${data.retention
         .filter((r) => ret === "all" || String(r.num) === ret)
         .map(
           (r) =>
@@ -454,7 +492,7 @@ export function montarPanel(
       )
       .join("");
     $("#settings-link").classList.toggle("active", current === "settings");
-    const pages = {
+    const pages: Record<string, () => string> = {
       overview,
       videos: videoLibrary,
       production,
@@ -472,12 +510,15 @@ export function montarPanel(
     $("#sync-label").textContent =
       `Archivos leídos ${date(data.scannedAt, { hour: "numeric", minute: "2-digit", second: "2-digit" })} · Métricas del ${date(data.updated)}`;
   }
-  const discardChanges = async (message) =>
-    (await confirmDecision(message, {
+  const discardChanges = async (text: string) =>
+    (await confirmDecision(text, {
       confirmLabel: "Descartar cambios",
       danger: true,
     })) && !control.signal.aborted;
-  async function navigate(next, options = {}) {
+  async function navigate(
+    next: string | undefined,
+    options: Record<string, string> = {},
+  ) {
     if (
       hasUnsavedForm() &&
       !(await discardChanges(
@@ -487,7 +528,7 @@ export function montarPanel(
       return false;
     const url = new URL(location.href);
     url.search = "";
-    url.searchParams.set("view", next);
+    url.searchParams.set("view", String(next));
     for (const [key, value] of Object.entries(options))
       url.searchParams.set(key, value);
     history.pushState({}, "", url);
@@ -497,37 +538,37 @@ export function montarPanel(
     window.scrollTo({ top: 0 });
     return true;
   }
-  function setFilter(key, value) {
+  function setFilter(key: string | undefined, value: string | undefined) {
     const url = new URL(location.href);
-    url.searchParams.set(key, value);
+    url.searchParams.set(String(key), String(value));
     history.replaceState({}, "", url);
     render();
   }
-  const api = (path, body) => apiBase(path, body);
+  const api = (path: string, body?: unknown) => apiBase(path, body);
   let lastSignature = "";
   async function load(force = false) {
     if (loading) return;
     loading = true;
     try {
-      const result = await api("/mundo/overview");
+      const result = (await api("/mundo/overview")) as WorldData;
       const signature = JSON.stringify({ ...result, scannedAt: undefined });
       data = result;
       if (force || signature !== lastSignature) {
         lastSignature = signature;
-        if (!$("#dialog").open && !hasUnsavedForm()) render();
+        if (!dialog().open && !hasUnsavedForm()) render();
       }
       updateSync();
     } catch (e) {
       if (!data)
         $("#main").innerHTML =
-          `<div class="error-panel"><h2>No se pudo abrir el estudio</h2><p>${esc(e.message)}</p>${button("Volver a intentar", "refresh")}</div>`;
-      else toast(e.message);
+          `<div class="error-panel"><h2>No se pudo abrir el estudio</h2><p>${esc(message(e))}</p>${button("Volver a intentar", "refresh")}</div>`;
+      else toast(message(e));
     } finally {
       loading = false;
     }
   }
-  function toast(message) {
-    $("#toast").textContent = message;
+  function toast(text: string) {
+    $("#toast").textContent = text;
     $("#toast").classList.add("toast-visible");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(
@@ -535,12 +576,12 @@ export function montarPanel(
       6000,
     );
   }
-  function openDialog(title, subtitle, content) {
+  function openDialog(title: string, subtitle: string, content: string) {
     $("#dialog-body").innerHTML =
       `<div class="dialog-head"><div><h2 id="dialog-title">${esc(title)}</h2>${subtitle ? `<p>${esc(subtitle)}</p>` : ""}</div><button class="icon-button" data-action="close" aria-label="Cerrar ventana">${icon("close")}</button></div><div class="dialog-content">${content}</div>`;
-    if (!$("#dialog").open) $("#dialog").showModal();
+    if (!dialog().open) dialog().showModal();
   }
-  function videoDetails(id) {
+  function videoDetails(id: string | undefined) {
     const v = data.videos.find((v) => v.id === id);
     if (!v) return toast("Actualiza el panel para encontrar este proyecto.");
     openDialog(
@@ -549,11 +590,17 @@ export function montarPanel(
       `<div class="details-grid"><div>${poster(v, "details-poster", true)}</div><div>${badge(v.status)}<ul class="checklist">${data.stages.map((s, i) => `<li><span class="check ${v.checks[i] ? "done" : ""}" aria-hidden="true">${v.checks[i] ? "✓" : "·"}</span>${esc(s)}: ${v.checks[i] ? "evidencia presente" : "pendiente"}</li>`).join("")}</ul><p class="muted">Estas comprobaciones detectan archivos; abre el QA para conocer su resultado. Los MP4 se quedan en tu PC.</p><div class="form-actions" style="margin-top:17px">${button("Asignar agente", "assign", `data-video="${esc(v.id)}"`, "small")}</div></div></div><div class="document-links">${v.files.map((f) => button(`${icon("file")} ${esc(f)}`, "document", `data-path="${esc(v.id + "/" + f)}"`, "small")).join("")}</div>${!v.modular ? '<p class="notice">Video del motor anterior. Conserva sus documentos originales.</p>' : ""}<p class="doc-path">${esc(v.id)}</p>${v.scenes.length ? `<p class="doc-path">Escenarios: ${v.scenes.map((s) => esc(s.id) + (s.exists ? "" : " (módulo pendiente)")).join(", ")}</p>` : ""}`,
     );
   }
-  async function documentDialog(path) {
-    const doc = await api("/mundo/document?path=" + encodeURIComponent(path));
-    openDialog(path.split("/").at(-1), doc.path, `<pre>${esc(doc.text)}</pre>`);
+  async function documentDialog(path: string) {
+    const doc = (await api(
+      "/mundo/document?path=" + encodeURIComponent(path),
+    )) as { path: string; text: string };
+    openDialog(
+      path.split("/").at(-1)!,
+      doc.path,
+      `<pre>${esc(doc.text)}</pre>`,
+    );
   }
-  function assignDialog(agentId, videoId) {
+  function assignDialog(agentId?: string, videoId?: string) {
     const enabled = data.agents.filter((a) => a.enabled);
     if (!enabled.length)
       return toast("Activa un agente para crear un encargo.");
@@ -571,7 +618,7 @@ export function montarPanel(
         )}</select></label><label for="task-instruction">Objetivo del encargo<textarea id="task-instruction" name="instruction" required maxlength="8000" rows="5" placeholder="Qué debe revisar, qué archivos debe entregar y cómo sabrás que terminó…">${agentId === "recolector-tiktok" ? "Recopila las métricas actuales de los videos publicados desde TikTok Studio. Conserva vacíos los datos no disponibles, registra fecha y fuente y no publiques ni cambies contenido." : agentId === "analista" ? "Analiza las últimas tomas guardadas, compara a la misma edad y entrega recomendaciones con evidencia y nivel de confianza. Indica qué datos faltan." : ""}</textarea></label><p class="form-error" aria-live="polite"></p><button class="button primary" type="submit">Guardar encargo</button></form>`,
     );
   }
-  function agentConfig(id) {
+  function agentConfig(id: string | undefined) {
     const a = data.agents.find((a) => a.id === id);
     if (!a) return;
     openDialog(
@@ -580,7 +627,7 @@ export function montarPanel(
       `<form id="agent-form" data-id="${esc(a.id)}" class="form-stack"><label class="switch-row" for="agent-enabled"><span>Disponible para nuevos encargos</span><input id="agent-enabled" name="enabled" type="checkbox" ${a.enabled ? "checked" : ""}></label><label for="agent-notes">Instrucciones adicionales<textarea id="agent-notes" name="notes" maxlength="8000" rows="6" placeholder="Prioridades o criterios para este agente…">${esc(a.notes)}</textarea></label><p class="form-error" aria-live="polite"></p><button class="button primary" type="submit">Guardar configuración</button></form>`,
     );
   }
-  function exportJson(name, value) {
+  function exportJson(name: string, value: unknown) {
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }),
     );
@@ -591,7 +638,7 @@ export function montarPanel(
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast("Archivo exportado.");
   }
-  async function copy(value) {
+  async function copy(value: string) {
     try {
       await navigator.clipboard.writeText(value);
       toast("Copiado al portapapeles.");
@@ -603,17 +650,18 @@ export function montarPanel(
       );
     }
   }
-  function taskPrompt(t) {
+  function taskPrompt(t: WorldTask) {
     return `Lee AGENTS.md y .claude/agents/${t.agentId}.md.\n\n${t.instruction}\n\nVideo: ${t.videoId || "Canal completo"}\nNotas: ${data.agents.find((a) => a.id === t.agentId)?.notes || "Sin notas adicionales"}`;
   }
-  const actions = {
+  // A missing record throws inside the action; the click handler shows it.
+  const actions: Record<string, Action> = {
     close: async () => {
       if (
         hasUnsavedDialog() &&
         !(await discardChanges("Hay cambios sin guardar. ¿Quieres cerrar?"))
       )
         return;
-      $("#dialog").close();
+      dialog().close();
     },
     refresh: () => load(true),
     create: () => navigate("create"),
@@ -621,12 +669,12 @@ export function montarPanel(
     video: (b) => videoDetails(b.dataset.id),
     filter: (b) => setFilter(b.dataset.key, b.dataset.value),
     "clear-filters": () => navigate("videos"),
-    document: (b) => documentDialog(b.dataset.path),
+    document: (b) => documentDialog(b.dataset.path!),
     assign: (b) => assignDialog(b.dataset.agent, b.dataset.video),
     "agent-config": (b) => agentConfig(b.dataset.id),
     "copy-task": (b) => {
       const t = data.state.tasks.find((t) => t.id === b.dataset.id);
-      return copy(taskPrompt(t));
+      return copy(taskPrompt(t!));
     },
     "task-complete": async (b) => {
       await api("/mundo/tasks/status", {
@@ -647,12 +695,12 @@ export function montarPanel(
         id: b.dataset.id,
         status: "cancelled",
       });
-      $("#dialog").close();
+      dialog().close();
       await load(true);
       toast("Encargo cancelado.");
     },
     "copy-brief": (b) => {
-      const brief = data.state.briefs.find((x) => x.id === b.dataset.id);
+      const brief = data.state.briefs.find((x) => x.id === b.dataset.id)!;
       return copy(`# ${brief.title}\n\n${brief.brief}`);
     },
     "export-videos": () =>
@@ -674,7 +722,7 @@ export function montarPanel(
       ),
     "use-idea": async (b) => {
       const idea = data.ideas[Number(b.dataset.index)];
-      $("#dialog").close();
+      dialog().close();
       if (view() !== "create" && !(await navigate("create"))) return;
       $("#brief-title").value = idea.title;
       $("#brief-slug").value = slugify(idea.title);
@@ -684,11 +732,11 @@ export function montarPanel(
       $("#brief-text").focus();
     },
   };
-  function slugify(value) {
+  function slugify(value: string) {
     return value
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[̀-ͯ]/g, "")
       .replace(/^¿?que pasaria si\s*/, "")
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
@@ -701,22 +749,22 @@ export function montarPanel(
   function hasUnsavedForm() {
     return !!$('#main form[data-dirty="true"]');
   }
-  on(raiz, "click", async (event) => {
-    const b = event.target.closest("[data-action]");
+  on(raiz, "click", async (event: MouseEvent) => {
+    const b = target(event).closest<HTMLButtonElement>("[data-action]");
     if (b) {
-      const action = actions[b.dataset.action];
+      const action = actions[b.dataset.action!];
       if (!action) return;
       b.disabled = true;
       try {
         await action(b);
       } catch (e) {
-        toast(e.message);
+        toast(message(e));
       } finally {
         b.disabled = false;
       }
       return;
     }
-    const a = event.target.closest(
+    const a = target(event).closest<HTMLAnchorElement>(
       'a[href^="/projects/mundo-hipotetico?view="]',
     );
     if (
@@ -728,16 +776,16 @@ export function montarPanel(
       event.button === 0
     ) {
       event.preventDefault();
-      navigate(new URL(a.href).searchParams.get("view"));
+      navigate(new URL(a.href).searchParams.get("view") ?? undefined);
     }
   });
   on(raiz, "change", (event) => {
-    if (event.target.dataset.filter)
-      setFilter(event.target.dataset.filter, event.target.value);
-    if (event.target.id === "hidden-videos")
-      setFilter("hidden", String(event.target.checked));
-    if (event.target.id === "auto-refresh") {
-      autoRefresh = event.target.checked;
+    const field = target(event);
+    if (field.dataset.filter) setFilter(field.dataset.filter, field.value);
+    if (field.id === "hidden-videos")
+      setFilter("hidden", String(field.checked));
+    if (field.id === "auto-refresh") {
+      autoRefresh = field.checked;
       try {
         localStorage.setItem("mh-panel-auto", String(autoRefresh));
       } catch {}
@@ -747,25 +795,27 @@ export function montarPanel(
           : "Actualización manual activada.",
       );
     }
-    if (event.target.closest("form"))
-      event.target.closest("form").dataset.dirty = "true";
+    const changed = field.closest("form");
+    if (changed) changed.dataset.dirty = "true";
   });
   on(raiz, "input", (event) => {
-    const form = event.target.closest("form");
+    const field = target(event);
+    const form = field.closest("form");
     if (form) form.dataset.dirty = "true";
-    if (event.target.id === "brief-title" && !$("#brief-slug").dataset.edited)
-      $("#brief-slug").value = slugify(event.target.value);
-    if (event.target.id === "brief-slug") event.target.dataset.edited = "true";
+    if (field.id === "brief-title" && !$("#brief-slug").dataset.edited)
+      $("#brief-slug").value = slugify(field.value);
+    if (field.id === "brief-slug") field.dataset.edited = "true";
   });
   on(raiz, "submit", async (event) => {
-    const form = event.target;
+    const form = event.target as HTMLFormElement;
     if (!["brief-form", "task-form", "agent-form"].includes(form.id)) return;
     event.preventDefault();
-    const submit = form.querySelector('[type="submit"]'),
+    const submit = form.querySelector<HTMLButtonElement>('[type="submit"]')!,
       label = submit.innerHTML;
+    const error = form.querySelector<HTMLElement>(".form-error")!;
     submit.disabled = true;
     submit.textContent = "Guardando…";
-    form.querySelector(".form-error").textContent = "";
+    error.textContent = "";
     try {
       const values = Object.fromEntries(new FormData(form));
       if (form.id === "brief-form") {
@@ -776,33 +826,34 @@ export function montarPanel(
       }
       if (form.id === "task-form") {
         await api("/mundo/tasks", values);
-        $("#dialog").close();
+        dialog().close();
         toast("Encargo guardado en la cola.");
       }
       if (form.id === "agent-form") {
         await api("/mundo/agents", {
           id: form.dataset.id,
-          enabled: form.elements.enabled.checked,
+          enabled: (form.elements.namedItem("enabled") as HTMLInputElement)
+            .checked,
           notes: values.notes,
         });
-        $("#dialog").close();
+        dialog().close();
         toast("Configuración guardada.");
       }
       delete form.dataset.dirty;
       await load(true);
     } catch (e) {
-      form.querySelector(".form-error").textContent = e.message;
-      form.querySelector(".form-error").setAttribute("tabindex", "-1");
-      form.querySelector(".form-error").focus();
+      error.textContent = message(e);
+      error.setAttribute("tabindex", "-1");
+      error.focus();
     } finally {
       submit.disabled = false;
       submit.innerHTML = label;
     }
   });
-  let searchTimer;
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
   $("#search").value = query;
   $("#search").addEventListener("input", (event) => {
-    query = event.target.value;
+    query = target(event).value;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
       if (!data) return;
@@ -817,22 +868,22 @@ export function montarPanel(
       }
     }, 180);
   });
-  on(document, "keydown", (event) => {
+  on(document, "keydown", (event: KeyboardEvent) => {
     if (
       event.key === "/" &&
-      !["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName) &&
-      !$("#dialog").open
+      !["INPUT", "TEXTAREA", "SELECT"].includes(target(event).tagName) &&
+      !dialog().open
     ) {
       event.preventDefault();
       $("#search").focus();
     }
   });
-  on($("#dialog"), "cancel", (event) => {
+  on(dialog(), "cancel", (event) => {
     if (!hasUnsavedDialog()) return;
     event.preventDefault();
-    void actions.close();
+    void actions.close(dialog());
   });
-  on(window, "beforeunload", (event) => {
+  on(window, "beforeunload", (event: BeforeUnloadEvent) => {
     if (hasUnsavedForm() || hasUnsavedDialog()) {
       event.preventDefault();
       event.returnValue = "";
@@ -860,7 +911,7 @@ export function montarPanel(
     } catch (e) {
       if (control.signal.aborted) return;
       $("#main").innerHTML =
-        `<div class="error-panel"><h2>No se pudo conectar con el servidor</h2><p>${esc(e.message)}</p>${button("Volver a intentar", "refresh")}</div>`;
+        `<div class="error-panel"><h2>No se pudo conectar con el servidor</h2><p>${esc(message(e))}</p>${button("Volver a intentar", "refresh")}</div>`;
     }
   })();
 
