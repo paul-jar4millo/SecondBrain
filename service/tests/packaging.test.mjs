@@ -48,6 +48,10 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
   await put("service/http/routes/vault.mjs", "export const routes = true;");
   await put("service/http/route-types.d.ts", "export {};");
   await put("launcher/execution/state.mjs", "export const state = true;");
+  await put(
+    "launcher/version-registry.mjs",
+    "export const SESSION_REGISTRY_VERSION = 2;\n",
+  );
   await put("dashboard/dist/index.html", "<main>synthetic</main>");
   await put("assets/reference-bank/references.json", "{}");
   await put("assets/reference-bank/auth.json", "secret");
@@ -91,12 +95,20 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
     "index.mjs",
     "package-lock.json",
     "package.json",
+    "registro-version.mjs",
     "skills",
+    "version-registry.mjs",
   ]);
   assert.deepEqual(await readdir(path.join(target, "lanzador/skills")), [
     "equipo-cuatro-fases.md",
     "resumen-matutino.md",
   ]);
+  // The helper already installed on hosts reads the old marker name.
+  assert.match(
+    await readFile(path.join(target, "lanzador/registro-version.mjs"), "utf8"),
+    // The exact pattern of the v0.1.2 helper.
+    /^(?:[ \t]*(?:\/\/[^\n]*)?\r?\n)*\s*export const REGISTRO_VERSION = 2;\s*$/,
+  );
   const lanzadorLock = JSON.parse(
     await readFile(path.join(target, "lanzador/package-lock.json"), "utf8"),
   );

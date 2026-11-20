@@ -54,6 +54,10 @@ test("empaqueta recursos de operación sin configuración privada local", async 
     "ops/aviso/aviso.env",
   ])
     await put(file);
+  await put(
+    "launcher/version-registry.mjs",
+    "export const SESSION_REGISTRY_VERSION = 2;\n",
+  );
   const target = path.join(dir, "release");
   await packageRelease(target, { sourceRoot: source });
   assert.deepEqual((await readdir(path.join(target, "ops/backup"))).sort(), [
