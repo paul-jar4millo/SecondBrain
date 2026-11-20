@@ -1,6 +1,14 @@
-import { cp, mkdir, readdir, readFile, stat } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { workspaceLock } from "./release-lock.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -33,8 +41,17 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
     path.join(target, "dashboard/dist"),
     { recursive: true },
   );
+  // One lockfile in the repository (npm workspaces); each released module
+  // gets its own slice, so the hosts keep installing modules one by one.
+  const rootLock = JSON.parse(
+    await readFile(path.join(root, "package-lock.json"), "utf8"),
+  );
   for (const [module, output] of RELEASE_MODULES) {
     await mkdir(path.join(target, output));
+    await writeFile(
+      path.join(target, output, "package-lock.json"),
+      JSON.stringify(workspaceLock(rootLock, module), null, 2) + "\n",
+    );
     for (const entry of await readdir(path.join(root, module), {
       withFileTypes: true,
     })) {
@@ -42,7 +59,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
         entry.isFile() &&
         (entry.name.endsWith(".mjs") ||
           (module === "launcher" && entry.name === "terminal.py") ||
-          ["package.json", "package-lock.json"].includes(entry.name))
+          entry.name === "package.json")
       )
         await cp(
           path.join(root, module, entry.name),

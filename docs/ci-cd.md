@@ -81,7 +81,9 @@ Deployment is **tag-driven**: pushing to `main` never deploys.
    verifies its checksum and calls the privileged helper
    `/usr/local/sbin/secondbrain-deploy` through a narrow `sudo` rule.
 4. The helper (`dashboard/ops/deploy-release.sh`) unpacks into
-   `/opt/secondbrain/releases/<sha>`, installs runtime dependencies, switches
+   `/opt/secondbrain/releases/<sha>`, installs runtime dependencies (one
+   `npm ci` per module, from the lockfile the packager cut for it out of the
+   root workspace lockfile; see [ADR 0008](adr/0008-npm-workspaces.md)), switches
    the `current` symlink, restarts the service and checks `/api/v1/health`.
    If the check fails it switches back to the previous release.
 5. When `SB_PUBLIC_URL` is set, the job checks the public health endpoint too.

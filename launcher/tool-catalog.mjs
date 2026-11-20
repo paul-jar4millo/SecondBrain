@@ -188,14 +188,23 @@ function defaultEngineEntries(
   identity,
   operatorBillingAuthorized = false,
 ) {
-  const sdkPath = path.join(
-    MODULE_ROOT,
-    "node_modules",
-    "@anthropic-ai",
-    "claude-agent-sdk",
-    "package.json",
-  );
-  const claudeSdkInstalled = inspectFileNonEmptySync(sdkPath).exists;
+  // Node's lookup: lanzador/node_modules in a release, the workspace root's
+  // node_modules in the repository.
+  let claudeSdkInstalled = false;
+  for (let dir = MODULE_ROOT; ; dir = path.dirname(dir)) {
+    const sdkPath = path.join(
+      dir,
+      "node_modules",
+      "@anthropic-ai",
+      "claude-agent-sdk",
+      "package.json",
+    );
+    if (inspectFileNonEmptySync(sdkPath).exists) {
+      claudeSdkInstalled = true;
+      break;
+    }
+    if (path.dirname(dir) === dir) break;
+  }
   const claudeConfigured =
     Boolean(String(env.CLAUDE_CODE_OAUTH_TOKEN || "").trim()) ||
     inspectDirSync(env.AGENTES_CLAUDE_DIR);

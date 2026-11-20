@@ -39,11 +39,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: |
-            dashboard/package-lock.json
-            service/package-lock.json
-            mcp/package-lock.json
-            launcher/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm run setup
       - name: Test
         run: |
