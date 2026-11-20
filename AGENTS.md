@@ -12,6 +12,9 @@ of each module you touch.
   `brain_context`, write full notes with the current hash, keep unknown YAML
   and links, re-read on conflict. Structured finance changes only through
   `brain_finance_operation`. Never store secrets or conversation transcripts.
+- `contracts/` holds the shared Zod schemas in native TypeScript
+  ([ADR 0011](docs/adr/0011-native-typescript-and-contracts.md)); new backend
+  code is `.ts` with only erasable syntax (`tsconfig.node.json`).
 - `service/` is the single writer (no SQL mirror); `mcp/` uses its API;
   `dashboard/` is the interface; `launcher/` runs agent CLIs in isolation;
   `ops/` packages and operates the system. CI/CD ships code, never knowledge.

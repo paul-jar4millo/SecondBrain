@@ -1,0 +1,16 @@
+{
+  "name": "@secondbrain/contracts",
+  "version": "0.3.1",
+  "private": true,
+  "type": "module",
+  "description": "Shared Zod 4 schemas for threads, items, events and commands (native TypeScript, no build).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
+}
