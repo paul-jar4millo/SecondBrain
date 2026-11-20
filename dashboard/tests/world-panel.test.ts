@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { montarPanel } from "../src/features/world/panel.js";
+import { montarPanel } from "../src/features/world/panel";
 
 let dispose: (() => void) | undefined;
 afterEach(() => {
