@@ -13,13 +13,12 @@ if [[ ! -s $servicio/lanzador-token ]]; then
   (umask 077; openssl rand -hex 32 | tr -d '\n' >"$servicio/lanzador-token")
   chown secondbrain:secondbrain "$servicio/lanzador-token"
 fi
-for par in "$servicio/lanzador-token:/etc/sb-agente/lanzador-control.sha256"; do
-  sha256sum <"${par%%:*}" | cut -d' ' -f1 >"${par##*:}"
-  chown root:sb-agente "${par##*:}"
-  chmod 0440 "${par##*:}"
-done
+hash=/etc/sb-agente/lanzador-control.sha256
+sha256sum <"$servicio/lanzador-token" | cut -d' ' -f1 >"$hash"
+chown root:sb-agente "$hash"
+chmod 0440 "$hash"
 
-# Proyectos disponibles para las sesiones (carpetas de sb-agente, nunca el vault).
+# Proyectos disponibles para los threads (carpetas de sb-agente, nunca el vault).
 install -d -m 750 -o root -g sb-agente /etc/sb-agente
 /opt/node/bin/node -e '
 const fs = require("fs"), path = require("path");
