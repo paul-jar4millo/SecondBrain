@@ -87,4 +87,4 @@ Closing (`engine/closing.ts`, `POST /threads/:id/close` with `mode`
   files. Otherwise the base branch fast-forwards to the merge commit (in its
   checkout when it has one) and the worktree and branch are removed.
 - `discard` removes the worktree and branch, or the scratch folder.
-- Archiving removes the worktree but always keeps the branch.
+- Archiving removes the worktree and the branch, except a branch with a PR.

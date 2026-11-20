@@ -195,7 +195,7 @@ test("pr pushes the branch and opens the pull request", async (t) => {
     "--body",
     "cuerpo",
   ]);
-  // The worktree stays until the thread is archived; the branch always stays.
+  // The worktree stays until the thread is archived; a PR branch stays.
   assert.ok(existsSync(thread.repo.worktree));
   const archived = await env.engine.archive(thread.id);
   assert.equal(archived.status, "archived");
@@ -235,4 +235,14 @@ test("closing needs a finished turn and a repo for pr or merge", async (t) => {
     env.engine.close(scratch.id, { mode: "discard" }),
     /ya está cerrado/,
   );
+});
+
+test("archiving without a PR removes the worktree and the branch", async (t) => {
+  const env = await setup(t, edit("a.txt", "x\n"));
+  const thread = await env.create();
+  const archived = await env.engine.archive(thread.id);
+  assert.equal(archived.status, "archived");
+  assert.equal(existsSync(thread.repo.worktree), false);
+  assert.equal(gitSync(env.repo, "branch", "--list", thread.repo.branch), "");
+  assert.equal((await env.engine.archive(thread.id)).status, "archived");
 });

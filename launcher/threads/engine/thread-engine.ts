@@ -941,7 +941,7 @@ export function createThreadEngine(deps: EngineDeps) {
       return requireThread(threadId);
     },
 
-    /** Hides a thread; removes its worktree but always keeps its branch. */
+    /** Hides a thread and removes its worktree and branch (kept when it has a PR). */
     async archive(threadId: string): Promise<Thread> {
       const thread = requireThread(threadId);
       if (thread.status === "archived") return thread;
@@ -957,7 +957,7 @@ export function createThreadEngine(deps: EngineDeps) {
             path: thread.repo.path,
             worktree: thread.repo.worktree,
             branch: thread.repo.branch,
-            keepBranch: true,
+            keepBranch: Boolean(thread.prUrl),
           })
           .catch(() => undefined);
       await stopController(threadId);
