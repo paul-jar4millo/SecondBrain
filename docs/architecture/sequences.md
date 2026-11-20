@@ -15,7 +15,7 @@ sequenceDiagram
   participant V as Vault (Markdown)
   participant G as isomorphic-git
 
-  C->>S: GET /vault/note?path=… 
+  C->>S: GET /vault/note?path=…
   S->>V: read file
   S-->>C: content + sha256
   C->>S: POST /vault/note {path, content, expectedHash}

@@ -1,10 +1,13 @@
-// @ts-check
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createBrainMcp } from "./index.mjs";
 
 /**
  * Serves one stateless Streamable HTTP MCP request. The caller has already
  * authenticated the OAuth client; tools reach the service over loopback.
+ * @param {import("node:http").IncomingMessage} request
+ * @param {import("node:http").ServerResponse} response
+ * @param {unknown} cuerpo
+ * @param {Pick<Parameters<typeof createBrainMcp>[0], "baseUrl" | "token" | "cliente">} options
  */
 export async function atenderMcp(
   request,

@@ -1,4 +1,3 @@
-// @ts-check
 import net from "node:net";
 import dgram from "node:dgram";
 import { performance } from "node:perf_hooks";
@@ -6,6 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { readFile, realpath } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
+/** @param {unknown} mac */
 export function magicPacket(mac) {
   if (typeof mac !== "string" || !/^([a-f0-9]{2}:){5}[a-f0-9]{2}$/i.test(mac))
     throw new Error("MAC inválida");
@@ -16,6 +16,14 @@ export function magicPacket(mac) {
   ]);
 }
 
+/**
+ * @typedef {{ state: "responding" | "unknown", responding: boolean, sent?: never }} ProbeResult
+ */
+
+/**
+ * @param {{ host: string, port?: number, timeoutMs?: number }} options
+ * @returns {Promise<ProbeResult>}
+ */
 export function probe({ host, port = 445, timeoutMs = 1000 }) {
   if (
     net.isIP(host) !== 4 ||
@@ -29,6 +37,7 @@ export function probe({ host, port = 445, timeoutMs = 1000 }) {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port });
     let done = false;
+    /** @param {boolean} responding */
     const finish = (responding) => {
       if (done) return;
       done = true;
@@ -41,6 +50,7 @@ export function probe({ host, port = 445, timeoutMs = 1000 }) {
   });
 }
 
+/** @param {{ host: string, port?: number, mac: string, broadcast: string, wolPort?: number, deadlineMs?: number }} options */
 export async function wake({
   host,
   port = 445,
@@ -67,23 +77,26 @@ export async function wake({
   )
     return { state: "responding", sent: false };
   if (remaining() <= 0) return { state: "unknown", sent: false };
-  await new Promise((resolve, reject) => {
-    const socket = dgram.createSocket("udp4");
-    const timeout = setTimeout(() => {
-      socket.close();
-      reject(new Error("Se agotó el plazo de envío"));
-    }, Math.ceil(remaining()));
-    const finish = (error) => {
-      clearTimeout(timeout);
-      socket.close();
-      error ? reject(error) : resolve();
-    };
-    socket.once("error", finish);
-    socket.bind(() => {
-      socket.setBroadcast(true);
-      socket.send(packet, wolPort, broadcast, finish);
-    });
-  });
+  await /** @type {Promise<void>} */ (
+    new Promise((resolve, reject) => {
+      const socket = dgram.createSocket("udp4");
+      const timeout = setTimeout(() => {
+        socket.close();
+        reject(new Error("Se agotó el plazo de envío"));
+      }, Math.ceil(remaining()));
+      /** @param {Error | null} error */
+      const finish = (error) => {
+        clearTimeout(timeout);
+        socket.close();
+        error ? reject(error) : resolve();
+      };
+      socket.once("error", finish);
+      socket.bind(() => {
+        socket.setBroadcast(true);
+        socket.send(packet, wolPort, broadcast, finish);
+      });
+    })
+  );
   while (remaining() > 0) {
     await delay(Math.min(500, remaining()));
     if (remaining() <= 0) break;

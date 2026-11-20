@@ -1,6 +1,6 @@
-// @ts-check
 import { readFile } from "node:fs/promises";
 
+/** @param {string} file */
 async function bounded(file) {
   try {
     const value = await readFile(file, "utf8");
@@ -9,6 +9,7 @@ async function bounded(file) {
     return null;
   }
 }
+/** @param {{ stateFile?: string, revisionFile?: string, launcherPinFile?: string, runtimeLauncherFile?: string, now?: number }} options */
 export async function operationalStatus({
   stateFile,
   revisionFile,
@@ -21,10 +22,11 @@ export async function operationalStatus({
       (file) => (file ? bounded(file) : null),
     ),
   );
-  const revision = /^[a-f0-9]{40}$/.test(revisionText?.trim())
-    ? revisionText.trim()
+  const revisionTrimmed = revisionText?.trim() ?? "";
+  const revision = /^[a-f0-9]{40}$/.test(revisionTrimmed)
+    ? revisionTrimmed
     : null;
-  const launcherText = (pinText || runtimeText)?.trim();
+  const launcherText = (pinText || runtimeText)?.trim() ?? "";
   const launcherRevision = /^\/opt\/secondbrain\/releases\/[a-f0-9]{40}$/.test(
     launcherText,
   )

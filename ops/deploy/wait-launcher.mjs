@@ -1,4 +1,3 @@
-// @ts-check
 import { readFile } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
 

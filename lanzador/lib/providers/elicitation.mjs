@@ -1,6 +1,5 @@
-// @ts-check
 // Validation of MCP elicitation forms (requested schema and the user's answers).
-import { ErrorLanzador } from "../../errores.mjs";
+import { ErrorLanzador } from "../../errors.mjs";
 
 const SUPPORTED_FORM_FIELD_TYPES = new Set([
   "string",
@@ -46,10 +45,11 @@ const TYPE_ALLOWED_FIELD_KEYS = {
     "exclusiveMaximum",
     "multipleOf",
   ]),
-  boolean: new Set([]),
+  boolean: /** @type {Set<string>} */ (new Set([])),
   array: new Set(["items", "minItems", "maxItems", "uniqueItems"]),
 };
 
+/** @type {Set<unknown>} */
 const SUPPORTED_STRING_FORMATS = new Set([
   "email",
   "uri",
@@ -58,6 +58,32 @@ const SUPPORTED_STRING_FORMATS = new Set([
   "date-time",
 ]);
 
+/** @typedef {keyof typeof TYPE_ALLOWED_FIELD_KEYS} FormFieldType */
+/**
+ * @typedef {object} FormFieldSchema
+ * @property {FormFieldType} [type]
+ * @property {unknown} [const]
+ * @property {unknown[]} [enum]
+ * @property {{ const: unknown }[]} [oneOf]
+ * @property {number} [minLength]
+ * @property {number} [maxLength]
+ * @property {string} [pattern]
+ * @property {string} [format]
+ * @property {number} [minimum]
+ * @property {number} [maximum]
+ * @property {number} [exclusiveMinimum]
+ * @property {number} [exclusiveMaximum]
+ * @property {number} [multipleOf]
+ * @property {number} [minItems]
+ * @property {number} [maxItems]
+ * @property {boolean} [uniqueItems]
+ * @property {FormFieldSchema} [items]
+ */
+
+/**
+ * @param {unknown} pattern
+ * @param {string} key
+ */
 function compileSchemaPattern(pattern, key) {
   if (typeof pattern !== "string" || pattern.length > 512) {
     throw new ErrorLanzador(
@@ -76,6 +102,11 @@ function compileSchemaPattern(pattern, key) {
   }
 }
 
+/**
+ * @param {string} key
+ * @param {string} value
+ * @param {string} format
+ */
 function validateStringFormat(key, value, format) {
   if (format === "email") {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
@@ -138,6 +169,7 @@ function validateStringFormat(key, value, format) {
   }
 }
 
+/** @param {number} num */
 function decimalPlaces(num) {
   const s = String(num).toLowerCase();
   if (s.includes("e")) return 9;
@@ -145,6 +177,10 @@ function decimalPlaces(num) {
   return idx === -1 ? 0 : Math.min(9, s.length - idx - 1);
 }
 
+/**
+ * @param {number} value
+ * @param {number} divisor
+ */
 function isMultipleOf(value, divisor) {
   if (!Number.isFinite(value) || !Number.isFinite(divisor) || divisor <= 0) {
     return false;
@@ -169,13 +205,18 @@ function isMultipleOf(value, divisor) {
   return Math.abs(quotient - Math.round(quotient)) < 1e-9;
 }
 
-function validateFormFieldSchema(key, field, depth = 0) {
-  if (!field || typeof field !== "object" || Array.isArray(field)) {
+/**
+ * @param {string} key
+ * @param {unknown} input
+ */
+function validateFormFieldSchema(key, input, depth = 0) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new ErrorLanzador(
       `Esquema de campo de formulario inválido (${key}).`,
       400,
     );
   }
+  const field = /** @type {Record<string, unknown>} */ (input);
   if (field.type !== undefined) {
     if (
       typeof field.type !== "string" ||
@@ -204,7 +245,7 @@ function validateFormFieldSchema(key, field, depth = 0) {
   }
 
   const allowedForType = field.type
-    ? TYPE_ALLOWED_FIELD_KEYS[field.type]
+    ? TYPE_ALLOWED_FIELD_KEYS[/** @type {FormFieldType} */ (field.type)]
     : new Set();
   for (const propKey of Object.keys(field)) {
     if (!COMMON_FIELD_KEYS.has(propKey) && !allowedForType.has(propKey)) {
@@ -220,7 +261,7 @@ function validateFormFieldSchema(key, field, depth = 0) {
       !Array.isArray(field.oneOf) ||
       field.oneOf.length === 0 ||
       field.oneOf.some(
-        (opt) =>
+        (/** @type {unknown} */ opt) =>
           !opt ||
           typeof opt !== "object" ||
           Array.isArray(opt) ||
@@ -243,13 +284,15 @@ function validateFormFieldSchema(key, field, depth = 0) {
   if (field.type === "string") {
     if (
       field.minLength !== undefined &&
-      (!Number.isInteger(field.minLength) || field.minLength < 0)
+      (!Number.isInteger(field.minLength) ||
+        /** @type {number} */ (field.minLength) < 0)
     ) {
       throw new ErrorLanzador(`minLength inválido en campo "${key}".`, 400);
     }
     if (
       field.maxLength !== undefined &&
-      (!Number.isInteger(field.maxLength) || field.maxLength < 0)
+      (!Number.isInteger(field.maxLength) ||
+        /** @type {number} */ (field.maxLength) < 0)
     ) {
       throw new ErrorLanzador(`maxLength inválido en campo "${key}".`, 400);
     }
@@ -298,7 +341,8 @@ function validateFormFieldSchema(key, field, depth = 0) {
     for (const bound of ["minItems", "maxItems"]) {
       if (
         field[bound] !== undefined &&
-        (!Number.isInteger(field[bound]) || field[bound] < 0)
+        (!Number.isInteger(field[bound]) ||
+          /** @type {number} */ (field[bound]) < 0)
       ) {
         throw new ErrorLanzador(
           `Límite "${bound}" inválido en campo "${key}".`,
@@ -318,11 +362,13 @@ function validateFormFieldSchema(key, field, depth = 0) {
   }
 }
 
-export function validateRequestedSchema(requestedSchema) {
-  if (requestedSchema === undefined || requestedSchema === null) return null;
-  if (typeof requestedSchema !== "object" || Array.isArray(requestedSchema)) {
+/** @param {unknown} input */
+export function validateRequestedSchema(input) {
+  if (input === undefined || input === null) return null;
+  if (typeof input !== "object" || Array.isArray(input)) {
     throw new ErrorLanzador("Esquema de formulario no soportado.", 400);
   }
+  const requestedSchema = /** @type {Record<string, unknown>} */ (input);
   for (const key of Object.keys(requestedSchema)) {
     if (!ALLOWED_ROOT_SCHEMA_KEYS.has(key)) {
       throw new ErrorLanzador(
@@ -372,9 +418,18 @@ export function validateRequestedSchema(requestedSchema) {
       throw new ErrorLanzador("Nombre de campo requerido inválido.", 400);
     }
   }
-  return { properties, required, schema: requestedSchema };
+  return {
+    properties: /** @type {Record<string, FormFieldSchema>} */ (properties),
+    required: /** @type {string[]} */ (required),
+    schema: requestedSchema,
+  };
 }
 
+/**
+ * @param {string} key
+ * @param {unknown} value
+ * @param {FormFieldSchema} spec
+ */
 function validateScalarValue(key, value, spec) {
   if (Object.hasOwn(spec, "const") && value !== spec.const) {
     throw new ErrorLanzador(
@@ -445,7 +500,8 @@ function validateScalarValue(key, value, spec) {
         400,
       );
     }
-    if (typeof spec.minimum === "number" && value < spec.minimum) {
+    const number = /** @type {number} */ (value);
+    if (typeof spec.minimum === "number" && number < spec.minimum) {
       throw new ErrorLanzador(
         `El campo "${key}" debe ser >= ${spec.minimum}.`,
         400,
@@ -453,14 +509,14 @@ function validateScalarValue(key, value, spec) {
     }
     if (
       typeof spec.exclusiveMinimum === "number" &&
-      value <= spec.exclusiveMinimum
+      number <= spec.exclusiveMinimum
     ) {
       throw new ErrorLanzador(
         `El campo "${key}" debe ser > ${spec.exclusiveMinimum}.`,
         400,
       );
     }
-    if (typeof spec.maximum === "number" && value > spec.maximum) {
+    if (typeof spec.maximum === "number" && number > spec.maximum) {
       throw new ErrorLanzador(
         `El campo "${key}" debe ser <= ${spec.maximum}.`,
         400,
@@ -468,7 +524,7 @@ function validateScalarValue(key, value, spec) {
     }
     if (
       typeof spec.exclusiveMaximum === "number" &&
-      value >= spec.exclusiveMaximum
+      number >= spec.exclusiveMaximum
     ) {
       throw new ErrorLanzador(
         `El campo "${key}" debe ser < ${spec.exclusiveMaximum}.`,
@@ -477,7 +533,7 @@ function validateScalarValue(key, value, spec) {
     }
     if (
       typeof spec.multipleOf === "number" &&
-      !isMultipleOf(value, spec.multipleOf)
+      !isMultipleOf(number, spec.multipleOf)
     ) {
       throw new ErrorLanzador(
         `El campo "${key}" debe ser múltiplo de ${spec.multipleOf}.`,
@@ -515,9 +571,10 @@ function validateScalarValue(key, value, spec) {
         seen.add(marker);
       }
     }
-    if (spec.items) {
+    const items = spec.items;
+    if (items) {
       value.forEach((item, idx) =>
-        validateScalarValue(`${key}[${idx}]`, item, spec.items),
+        validateScalarValue(`${key}[${idx}]`, item, items),
       );
     }
   }
@@ -526,6 +583,8 @@ function validateScalarValue(key, value, spec) {
 /**
  * Validates elicitation form content strictly against requestedSchema.
  * Never fabricates defaults or `false` values for omitted fields.
+ * @param {unknown} requestedSchema
+ * @param {unknown} providedContent
  */
 export function validateAndExtractElicitationContent(
   requestedSchema,
@@ -548,8 +607,11 @@ export function validateAndExtractElicitationContent(
     }
     return structuredClone(providedContent);
   }
+  // Non-null input always yields a schema; null is handled above.
   const { properties, required, schema } =
-    validateRequestedSchema(requestedSchema);
+    /** @type {NonNullable<ReturnType<typeof validateRequestedSchema>>} */ (
+      validateRequestedSchema(requestedSchema)
+    );
   if (providedContent === undefined || providedContent === null) {
     if (required.length > 0) {
       throw new ErrorLanzador(
@@ -565,11 +627,12 @@ export function validateAndExtractElicitationContent(
       400,
     );
   }
+  const content = /** @type {Record<string, unknown>} */ (providedContent);
   for (const reqKey of required) {
     if (
-      !Object.hasOwn(providedContent, reqKey) ||
-      providedContent[reqKey] === undefined ||
-      providedContent[reqKey] === null
+      !Object.hasOwn(content, reqKey) ||
+      content[reqKey] === undefined ||
+      content[reqKey] === null
     ) {
       throw new ErrorLanzador(
         `Falta campo obligatorio en el formulario: "${reqKey}".`,
@@ -578,7 +641,7 @@ export function validateAndExtractElicitationContent(
     }
   }
   if (schema.additionalProperties === false) {
-    for (const key of Object.keys(providedContent)) {
+    for (const key of Object.keys(content)) {
       if (!Object.hasOwn(properties, key)) {
         throw new ErrorLanzador(
           `Campo no permitido en el formulario: "${key}".`,
@@ -587,7 +650,7 @@ export function validateAndExtractElicitationContent(
       }
     }
   }
-  for (const [key, val] of Object.entries(providedContent)) {
+  for (const [key, val] of Object.entries(content)) {
     if (val === undefined) continue;
     if (val === null) {
       throw new ErrorLanzador(`El campo "${key}" no admite valor nulo.`, 400);

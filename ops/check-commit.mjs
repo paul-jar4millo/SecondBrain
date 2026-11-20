@@ -1,4 +1,3 @@
-// @ts-check
 import { readFileSync } from "node:fs";
 
 const message = readFileSync(process.argv[2] || 0, "utf8");

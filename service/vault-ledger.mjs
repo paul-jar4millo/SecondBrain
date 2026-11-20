@@ -1,4 +1,4 @@
-// @ts-check
+/** @this {import("./vault.mjs").Vault} */
 export async function ledger() {
   const { items } = await this.read();
   return items

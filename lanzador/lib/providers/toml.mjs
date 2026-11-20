@@ -1,4 +1,3 @@
-// @ts-check
 // Minimal TOML reader for Codex configuration files.
 
 const TOML_HEX4_RE = /^[0-9A-Fa-f]{4}$/;
@@ -6,6 +5,11 @@ const TOML_HEX8_RE = /^[0-9A-Fa-f]{8}$/;
 const TOML_BARE_KEY_CH_RE = /^[A-Za-z0-9_-]$/;
 const TOML_VALUE_CH_RE = /^[A-Za-z0-9_+.:TZtz-]$/;
 
+/** @typedef {import("./toml-types.mjs").TomlTable} TomlTable */
+/** @typedef {import("./toml-types.mjs").TomlValue} TomlValue */
+/** @typedef {{ enabled: boolean }} CodexMcpEntry */
+
+/** @param {unknown} tomlText */
 function parseTomlDocument(tomlText) {
   if (typeof tomlText !== "string") {
     throw new Error("config.toml inválido");
@@ -14,6 +18,7 @@ function parseTomlDocument(tomlText) {
   const len = src.length;
   let pos = 0;
 
+  /** @param {string} ch */
   const assertSafeCodeUnit = (ch) => {
     const code = ch.charCodeAt(0);
     if ((code < 0x20 && code !== 0x09) || code === 0x7f) {
@@ -258,12 +263,18 @@ function parseTomlDocument(tomlText) {
   const INLINE_META = new WeakSet();
   const ARRAY_TABLE_META = new WeakSet();
 
+  /** @returns {TomlTable} */
   const makeTable = (inline = false) => {
     const obj = Object.create(null);
     if (inline) INLINE_META.add(obj);
     return obj;
   };
 
+  /**
+   * @param {TomlTable} baseTable
+   * @param {string[]} parts
+   * @param {TomlValue} value
+   */
   const setNestedValue = (baseTable, parts, value) => {
     let cur = baseTable;
     for (let i = 0; i < parts.length - 1; i++) {
@@ -281,11 +292,11 @@ function parseTomlDocument(tomlText) {
           configurable: true,
         });
       } else if (Array.isArray(next) && ARRAY_TABLE_META.has(next)) {
-        next = next[next.length - 1];
+        next = /** @type {TomlTable[]} */ (next)[next.length - 1];
       } else if (!next || typeof next !== "object") {
         throw new Error("Conflicto de tipos de clave TOML en config.toml");
       }
-      cur = next;
+      cur = /** @type {TomlTable} */ (next);
     }
     const leaf = parts[parts.length - 1];
     Object.defineProperty(cur, leaf, {
@@ -296,6 +307,12 @@ function parseTomlDocument(tomlText) {
     });
   };
 
+  /**
+   * @param {TomlTable} root
+   * @param {string[]} parts
+   * @param {boolean} isArrayTable
+   * @returns {TomlTable}
+   */
   const navigateTableHeader = (root, parts, isArrayTable) => {
     let cur = root;
     for (let i = 0; i < parts.length; i++) {
@@ -304,6 +321,7 @@ function parseTomlDocument(tomlText) {
       const existing = Object.hasOwn(cur, seg) ? cur[seg] : undefined;
       if (isLast && isArrayTable) {
         if (existing === undefined) {
+          /** @type {TomlTable[]} */
           const arr = [];
           ARRAY_TABLE_META.add(arr);
           const elem = makeTable(false);
@@ -333,13 +351,13 @@ function parseTomlDocument(tomlText) {
         });
         cur = next;
       } else if (Array.isArray(existing) && ARRAY_TABLE_META.has(existing)) {
-        cur = existing[existing.length - 1];
+        cur = /** @type {TomlTable[]} */ (existing)[existing.length - 1];
       } else if (
         existing &&
         typeof existing === "object" &&
         !INLINE_META.has(existing)
       ) {
-        cur = existing;
+        cur = /** @type {TomlTable} */ (existing);
       } else {
         throw new Error("Conflicto de tabla TOML en config.toml");
       }
@@ -347,6 +365,7 @@ function parseTomlDocument(tomlText) {
     return cur;
   };
 
+  /** @returns {TomlValue[]} */
   const readArray = () => {
     pos++; // '['
     const arr = [];
@@ -407,6 +426,7 @@ function parseTomlDocument(tomlText) {
     throw new Error("Tabla inline TOML sin cierre en config.toml");
   };
 
+  /** @returns {TomlValue} */
   function readValue() {
     skipHorizontalWs();
     if (pos >= len) {
@@ -528,6 +548,10 @@ function parseTomlDocument(tomlText) {
   return root;
 }
 
+/**
+ * @param {unknown} tomlText
+ * @returns {Map<string, CodexMcpEntry>}
+ */
 export function parseCodexMcpServerEntries(tomlText) {
   const root = parseTomlDocument(tomlText);
   const section = root.mcp_servers;
@@ -550,6 +574,7 @@ export function parseCodexMcpServerEntries(tomlText) {
   return entries;
 }
 
+/** @param {unknown} tomlText */
 export function parseCodexMcpServerKeys(tomlText) {
   return new Set(parseCodexMcpServerEntries(tomlText).keys());
 }

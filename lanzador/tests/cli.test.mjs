@@ -8,8 +8,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { crearServidor } from "../index.mjs";
-import { abrirRegistro } from "../sesiones.mjs";
-import { crearEjecutor } from "../ejecucion.mjs";
+import { abrirRegistro } from "../sessions.mjs";
+import { crearEjecutor } from "../executor.mjs";
 import { ejecutarCli, analizar } from "../cli.mjs";
 
 const huella = (token) => createHash("sha256").update(token).digest("hex");

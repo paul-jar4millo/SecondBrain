@@ -1,4 +1,3 @@
-// @ts-check
 import { createHash } from "node:crypto";
 import {
   mkdir,
@@ -12,7 +11,13 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ErrorLanzador } from "./errores.mjs";
+import { ErrorLanzador } from "./errors.mjs";
+/** @import { LauncherSession, SessionCheckpoint, SessionRegistry } from "./session-types.d.ts" */
+
+/** @typedef {{ esRepo: boolean, tieneRemoto: boolean, remotoGithub: boolean }} RepositoryInfo */
+/** @typedef {{ env?: NodeJS.ProcessEnv, timeout?: number, max?: number, tolerarExceso?: boolean }} CheckpointGitOptions */
+/** @typedef {(cwd: string, args: string[], options?: CheckpointGitOptions) => Promise<{ stdout: string, excedido?: boolean }>} CheckpointGit */
+/** @typedef {Pick<SessionCheckpoint, "tipo" | "de">} CheckpointMetadata */
 
 export const MAX_CHECKPOINTS = 50;
 export const MAX_PARCHE = 1024 * 1024;
@@ -23,7 +28,9 @@ const IDENTIDAD = {
   GIT_COMMITTER_NAME: "SecondBrain",
   GIT_COMMITTER_EMAIL: "checkpoint@secondbrain.invalid",
 };
+/** @param {string} id @param {number} n */
 const refDe = (id, n) => `refs/secondbrain/checkpoints/${id}/${n}`;
+/** @param {unknown} texto */
 const plano = (texto) =>
   String(texto ?? "")
     .replace(/\s+/g, " ")
@@ -33,6 +40,11 @@ const plano = (texto) =>
 /**
  * Checkpoints of a working tree as hidden refs. Nothing here touches the user's
  * index, branch, stash or HEAD: trees are built in a throwaway index file.
+ * @param {object} options
+ * @param {Pick<ReturnType<typeof import("./git.mjs").crearGit>, "git">} options.git
+ * @param {() => Date} [options.ahora]
+ * @param {number} [options.max]
+ * @param {string} [options.dirIndices]
  */
 export function crearCheckpoints({
   git: ejecutor,
@@ -40,14 +52,18 @@ export function crearCheckpoints({
   max = MAX_CHECKPOINTS,
   dirIndices,
 }) {
-  const { git } = ejecutor;
+  const { git } = /** @type {{ git: CheckpointGit }} */ (ejecutor);
+  /** @type {Map<string, { en: number, valor: RepositoryInfo }>} */
   const cacheInfo = new Map();
 
+  /** @param {string} cwd */
   async function info(cwd) {
     const previo = cacheInfo.get(cwd);
     if (previo && Date.now() - previo.en < 30000) return previo.valor;
     const valor = { esRepo: false, tieneRemoto: false, remotoGithub: false };
-    const dentro = await stat(path.join(cwd, ".git")).catch(() => null);
+    const dentro = await stat(path.join(cwd, ".git")).catch(
+      /** @returns {null} */ () => null,
+    );
     if (dentro) {
       valor.esRepo = true;
       const url = await git(cwd, ["config", "--get", "remote.origin.url"])
@@ -60,12 +76,14 @@ export function crearCheckpoints({
     return valor;
   }
 
+  /** @param {string} cwd */
   const tieneHead = (cwd) =>
     git(cwd, ["rev-parse", "--verify", "-q", "HEAD"]).then(
       () => true,
       () => false,
     );
 
+  /** @template T @param {(env: { GIT_INDEX_FILE: string }) => Promise<T>} fn */
   async function conIndiceTemporal(fn) {
     const dir = await mkdtemp(path.join(tmpdir(), "sb-idx-"));
     try {
@@ -77,6 +95,7 @@ export function crearCheckpoints({
 
   // Seeding from HEAD keeps tracked files (even ignored ones) and lets
   // `add -A` register deletions.
+  /** @param {string} cwd @param {{ GIT_INDEX_FILE: string }} env @param {boolean} sembrar */
   async function sembrarYEscribir(cwd, env, sembrar) {
     if (sembrar && (await tieneHead(cwd)))
       await git(cwd, ["read-tree", "HEAD"], { env });
@@ -84,8 +103,14 @@ export function crearCheckpoints({
     return (await git(cwd, ["write-tree"], { env })).stdout.trim();
   }
 
+  /** @type {Map<string, Promise<unknown>>} */
   const colasRepo = new Map();
-  /** One index per repository: two sessions in one folder never share a write. */
+  /**
+   * One index per repository: two sessions in one folder never share a write.
+   * @template T
+   * @param {string} cwd
+   * @param {() => Promise<T>} fn
+   */
   function enRepo(cwd, fn) {
     const siguiente = (colasRepo.get(cwd) ?? Promise.resolve()).then(fn);
     const limpio = siguiente.catch(() => {});
@@ -99,6 +124,7 @@ export function crearCheckpoints({
    * With `dirIndices` the private index outlives the call, so git's stat cache
    * only rehashes what changed: a turn in a large repo no longer reads every
    * file. A new HEAD (a commit, a checkout) seeds it again.
+   * @param {string} cwd
    */
   function arbolActual(cwd) {
     if (!dirIndices)
@@ -115,8 +141,12 @@ export function crearCheckpoints({
         .then((r) => r.stdout.trim())
         .catch(() => "");
       await mkdir(dirIndices, { recursive: true, mode: 0o700 });
-      const previa = await readFile(marca, "utf8").catch(() => null);
-      const vigente = previa === head && (await stat(indice).catch(() => null));
+      const previa = await readFile(marca, "utf8").catch(
+        /** @returns {null} */ () => null,
+      );
+      const vigente =
+        previa === head &&
+        (await stat(indice).catch(/** @returns {null} */ () => null));
       try {
         if (!vigente) {
           await rm(indice, { force: true });
@@ -138,13 +168,19 @@ export function crearCheckpoints({
   /**
    * Adds a checkpoint to `lista` and returns the new bounded list. An unchanged
    * tree reuses the previous commit: only the entry is new.
+   * @param {string} cwd
+   * @param {string} sesionId
+   * @param {readonly SessionCheckpoint[]} lista
+   * @param {unknown} mensaje
+   * @param {CheckpointMetadata} [extra]
    */
   async function capturar(cwd, sesionId, lista, mensaje, extra = {}) {
     const arbol = await arbolActual(cwd);
     const ultimo = lista.at(-1);
     const n = (ultimo?.n ?? 0) + 1;
     let commit;
-    if (ultimo?.arbol === arbol && ultimo.commit) commit = ultimo.commit;
+    if (ultimo && ultimo.arbol === arbol && ultimo.commit)
+      commit = ultimo.commit;
     else {
       const padre = (await tieneHead(cwd)) ? ["-p", "HEAD"] : [];
       commit = (
@@ -175,6 +211,7 @@ export function crearCheckpoints({
     return nueva;
   }
 
+  /** @param {string} cwd @param {string} sesionId */
   async function borrarTodos(cwd, sesionId) {
     const { stdout } = await git(cwd, [
       "for-each-ref",
@@ -185,6 +222,7 @@ export function crearCheckpoints({
       await git(cwd, ["update-ref", "-d", ref]).catch(() => {});
   }
 
+  /** @param {string} cwd @param {string} archivo */
   async function quitarVacios(cwd, archivo) {
     let dir = path.dirname(archivo);
     while (dir.startsWith(cwd + path.sep) && dir !== cwd) {
@@ -198,6 +236,8 @@ export function crearCheckpoints({
    * Puts the working tree back as it was at `commit`: files of the checkpoint
    * return to their content and unignored files created later disappear.
    * HEAD, the branch and the index are not touched.
+   * @param {string} cwd
+   * @param {string} commit
    */
   async function restaurar(cwd, commit) {
     const objetivo = (
@@ -226,6 +266,7 @@ export function crearCheckpoints({
     });
   }
 
+  /** @param {string} salida */
   function analizarEstados(salida) {
     const partes = salida.split("\0");
     const lista = [];
@@ -238,8 +279,10 @@ export function crearCheckpoints({
     }
     return lista;
   }
+  /** @param {string} salida */
   function analizarNumeros(salida) {
     const partes = salida.split("\0");
+    /** @type {Map<string, { binario: boolean, añadidas: number, eliminadas: number }>} */
     const mapa = new Map();
     for (let i = 0; i < partes.length;) {
       const m = /^(\d+|-)\t(\d+|-)\t(.*)$/s.exec(partes[i++] ?? "");
@@ -258,7 +301,12 @@ export function crearCheckpoints({
     return mapa;
   }
 
-  /** Changes between two tree-ish values: file summary plus a bounded unified patch. */
+  /**
+   * Changes between two tree-ish values: file summary plus a bounded unified patch.
+   * @param {string} cwd
+   * @param {string} desde
+   * @param {string} hasta
+   */
   async function diff(cwd, desde, hasta) {
     const base = [
       "-c",
@@ -301,9 +349,15 @@ export function crearCheckpoints({
 /**
  * Keeps each session's checkpoint list: captures before a turn, reverts and
  * diffs. A failing capture is recorded and never blocks the turn.
+ * @param {object} options
+ * @param {Pick<SessionRegistry, "leer" | "actualizar">} options.registro
+ * @param {ReturnType<typeof crearCheckpoints>} options.checkpoints
+ * @param {(session: Readonly<LauncherSession>) => string | null | undefined} options.cwdDe
  */
 export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
+  /** @type {Map<string, Promise<unknown>>} */
   const colas = new Map();
+  /** @template T @param {string} id @param {() => Promise<T>} fn */
   function serial(id, fn) {
     const siguiente = (colas.get(id) ?? Promise.resolve()).then(fn);
     const limpio = siguiente.catch(() => {});
@@ -311,9 +365,11 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
     limpio.then(() => colas.get(id) === limpio && colas.delete(id));
     return siguiente;
   }
+  /** @param {string} id */
   const buscar = (id) =>
     registro.leer().find((s) => s.id === id && !s.eliminada);
 
+  /** @param {string} id @param {unknown} mensaje @param {CheckpointMetadata} [extra] */
   async function capturarSesion(id, mensaje, extra) {
     const sesion = buscar(id);
     const cwd = sesion && cwdDe(sesion);
@@ -333,7 +389,11 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
   }
 
   return {
-    /** Before a turn. Resolves even on failure, so the turn always goes on. */
+    /**
+     * Before a turn. Resolves even on failure, so the turn always goes on.
+     * @param {string} id
+     * @param {unknown} mensaje
+     */
     marcar(id, mensaje) {
       return serial(id, async () => {
         try {
@@ -348,6 +408,7 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
         }
       });
     },
+    /** @param {string} id @param {number} n */
     revertir(id, n) {
       return serial(id, async () => {
         const sesion = buscar(id);
@@ -363,6 +424,7 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
             `Antes de revertir al turno ${n}`,
             { tipo: "reversion", de: n },
           );
+          if (!cwd) throw new Error("No hay un directorio de sesión.");
           await checkpoints.restaurar(cwd, destino.commit);
         } catch {
           throw new ErrorLanzador(
@@ -373,12 +435,14 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
         return { revertido: n, seguridad: seguridad?.n ?? null };
       });
     },
+    /** @param {string} id @param {number} [desde] @param {number | "actual"} [hasta] */
     async diff(id, desde, hasta) {
       const sesion = buscar(id);
       const cwd = sesion && cwdDe(sesion);
       const lista = sesion?.checkpoints ?? [];
-      if (!lista.length)
+      if (!cwd || !lista.length)
         throw new ErrorLanzador("Esta sesión no tiene puntos de control.", 404);
+      /** @param {number} n */
       const punto = (n) => {
         const c = lista.find((x) => x.n === n);
         if (!c)
@@ -392,6 +456,7 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
           : punto(hasta);
       return checkpoints.diff(cwd, a, b);
     },
+    /** @param {string} id @param {string | null | undefined} cwd */
     async borrar(id, cwd) {
       if (cwd) await checkpoints.borrarTodos(cwd, id);
     },

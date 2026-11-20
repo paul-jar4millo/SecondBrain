@@ -1,4 +1,3 @@
-// @ts-check
 import { mexicoDay } from "./finance-domain.mjs";
 import { Document } from "yaml";
 import { Failure } from "./vault-identity.mjs";
@@ -12,6 +11,11 @@ import {
 } from "./vault-format.mjs";
 import { validate } from "./vault-validation.mjs";
 import path from "node:path";
+/** @import { VaultMetadata, VaultMutation, VaultRecord } from "./vault-types.d.ts" */
+/**
+ * @this {import("./vault.mjs").Vault}
+ * @param {VaultMutation} mutation
+ */
 export async function apply({ mutationId, baseVersion, entity }) {
   if (!uuid.test(mutationId || ""))
     throw new Failure("La operación necesita una identidad válida.");
@@ -74,7 +78,7 @@ export async function apply({ mutationId, baseVersion, entity }) {
         !x.deleted &&
         x.id !== item.id &&
         x.priority &&
-        !["done", "cancelled"].includes(x.status),
+        !["done", "cancelled"].includes(x.status ?? ""),
     ).length >= 3
   )
     throw new Failure("Ya tienes tres prioridades.");
@@ -82,9 +86,10 @@ export async function apply({ mutationId, baseVersion, entity }) {
     old?.item.sourceKind === "inline-task" ||
     (!old && item.kind === "task")
   ) {
+    /** @type {(Pick<VaultRecord, "relative" | "text" | "parts"> & { fileHash: string | null }) | undefined} */
     let parent = old;
     if (!parent) {
-      const project = snapshot.records.get(item.projectId);
+      const project = snapshot.records.get(item.projectId ?? "");
       if (project?.item.kind === "project") parent = project;
       else {
         const relative = "00-Inbox/Tareas/_Tareas.md";
@@ -97,6 +102,7 @@ export async function apply({ mutationId, baseVersion, entity }) {
       }
     }
 
+    /** @type {VaultMetadata} */
     const extra = {
       ...(old?.sb || {}),
       createdByApp: old ? old.sb.createdByApp === true : true,
@@ -122,7 +128,7 @@ export async function apply({ mutationId, baseVersion, entity }) {
             : " ";
     const text = `${old?.marker || "- "}[${marker}] ${item.title}${item.date ? " 📅 " + item.date : ""}${item.plannedDate ? " ⏳ " + item.plannedDate : ""} <!-- sb-task:${JSON.stringify({ ...extra, lastMutation: mutationId }).replaceAll("-->", "--\\u003e")} --> ^sb-${item.id}`;
     const lines = parent.parts.body.split(/\r?\n/);
-    if (old) lines[old.lineIndex] = text;
+    if (old) lines[/** @type {number} */ (old.lineIndex)] = text;
     else {
       if (lines.at(-1) === "") lines.pop();
       lines.push(text, "");
@@ -172,6 +178,7 @@ export async function apply({ mutationId, baseVersion, entity }) {
         if (item[key]) doc.set(fm, item[key]);
         else doc.delete(fm);
       }
+    /** @type {VaultMetadata} */
     const sb = {
       ...(old?.sb || {}),
       id: item.id,

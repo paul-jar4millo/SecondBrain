@@ -1,5 +1,5 @@
-// @ts-check
 import { Failure } from "./vault.mjs";
+/** @import { FinanceCard, FinanceData, FinanceHandler, FinanceInstallment, FinanceOperation, FinanceTransaction, FinanceTransactionType } from "./finance-types.d.ts" */
 const LEAK_DEFAULT = ["Comida fuera", "Rappi", "Antojos y conveniencia"];
 export const UNIDENTIFIED = "Sin identificar";
 /* ---------- small pure helpers ---------- */
@@ -10,20 +10,24 @@ export const mexicoDay = (date = new Date()) =>
     month: "2-digit",
     day: "2-digit",
   }).format(date);
+/** @param {unknown} v @returns {v is string} */
 export const isDay = (v) =>
   typeof v === "string" &&
   /^\d{4}-\d{2}-\d{2}$/.test(v) &&
   !Number.isNaN(Date.parse(v + "T12:00:00Z")) &&
   new Date(v + "T12:00:00Z").toISOString().slice(0, 10) === v;
+/** @param {string} day @param {number} n */
 export const addDays = (day, n) => {
   const d = new Date(day + "T12:00:00Z");
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 };
+/** @param {string} a @param {string} b */
 export const diffDays = (a, b) =>
   Math.round(
     (Date.parse(a + "T12:00:00Z") - Date.parse(b + "T12:00:00Z")) / 864e5,
   );
+/** @param {string} day */
 const monthBack = (day) => {
   const d = new Date(day + "T12:00:00Z");
   const anchor = d.getUTCDate();
@@ -35,6 +39,7 @@ const monthBack = (day) => {
   d.setUTCDate(Math.min(anchor, end));
   return d.toISOString().slice(0, 10);
 };
+/** @param {unknown} s */
 const norm = (s) =>
   String(s ?? "")
     .normalize("NFKD")
@@ -42,12 +47,16 @@ const norm = (s) =>
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+/** @param {string} s */
 const slug = (s) =>
   norm(s)
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
-/** Accepts pesos ("1,234.50", 1234.5) and returns integer centavos. */
+/**
+ * Accepts pesos ("1,234.50", 1234.5) and returns integer centavos.
+ * @param {unknown} value
+ */
 export function toMinor(value, label = "importe") {
   if (typeof value === "number") {
     const cents = Math.round(value * 100);
@@ -67,6 +76,7 @@ export function toMinor(value, label = "importe") {
     throw new Failure(`El ${label} está fuera de rango.`);
   return negative ? -cents : cents;
 }
+/** @param {FinanceOperation} op @param {string} key @param {string} label */
 const minorOf = (op, key, label) => {
   const n =
     op[key + "Minor"] !== undefined
@@ -75,19 +85,23 @@ const minorOf = (op, key, label) => {
   if (!Number.isSafeInteger(n)) throw new Failure(`El ${label} no es válido.`);
   return n;
 };
+/** @param {FinanceOperation} op @param {string} key @param {string} label */
 const amountOf = (op, key, label) => {
   const n = minorOf(op, key, label);
   if (n <= 0) throw new Failure(`El ${label} debe ser mayor que cero.`);
   return n;
 };
+/** @param {FinanceOperation} op @param {string} key */
 const has = (op, key) =>
   op[key] !== undefined || op[key + "Minor"] !== undefined;
+/** @param {unknown} value @param {string} label */
 const text = (value, label, max = 200) => {
   const s = String(value ?? "").trim();
   if (!s) throw new Failure(`Falta ${label}.`);
   if (s.length > max) throw new Failure(`${label} supera ${max} caracteres.`);
   return s;
 };
+/** @param {unknown} value @param {string} [fallback] */
 const dayOf = (value, fallback, label = "fecha") => {
   const d = value ?? fallback;
   if (!isDay(d)) throw new Failure(`La ${label} debe ser AAAA-MM-DD.`);
@@ -95,6 +109,7 @@ const dayOf = (value, fallback, label = "fecha") => {
 };
 
 /* ---------- data shape ---------- */
+/** @param {string} today @returns {FinanceData} */
 export function emptyFinance(today) {
   return {
     schemaVersion: 1,
@@ -112,19 +127,22 @@ export function emptyFinance(today) {
     questions: [],
   };
 }
+/** @param {unknown} raw @returns {FinanceData} */
 export function normalize(raw) {
-  const f = raw && typeof raw === "object" ? raw : {};
+  // Legacy documents are normalized shallowly and retain additional fields.
+  const f = /** @type {Partial<FinanceData>} */ (
+    raw && typeof raw === "object" ? raw : {}
+  );
+  /** @template T @param {T[] | undefined} v @returns {T[]} */
   const list = (v) =>
     Array.isArray(v) ? v.filter((x) => x && typeof x === "object") : [];
   return {
     ...f,
     schemaVersion: 1,
     currency: "MXN",
-    validityDays: Number.isFinite(f.validityDays) ? f.validityDays : 7,
-    staleAfterDays: Number.isFinite(f.staleAfterDays) ? f.staleAfterDays : 3,
-    incomeMonthlyMinor: Number.isFinite(f.incomeMonthlyMinor)
-      ? f.incomeMonthlyMinor
-      : 0,
+    validityDays: finiteOr(f.validityDays, 7),
+    staleAfterDays: finiteOr(f.staleAfterDays, 3),
+    incomeMonthlyMinor: finiteOr(f.incomeMonthlyMinor, 0),
     leakCategories: Array.isArray(f.leakCategories)
       ? f.leakCategories
       : [...LEAK_DEFAULT],
@@ -138,8 +156,14 @@ export function normalize(raw) {
 }
 
 /* ---------- derived overview ---------- */
+/** @template T @param {T[]} xs @param {(item: T) => number} f */
 const sum = (xs, f) => xs.reduce((n, x) => n + f(x), 0);
+/** @param {unknown} value @param {number} fallback */
+const finiteOr = (value, fallback) =>
+  typeof value === "number" && Number.isFinite(value) ? value : fallback;
+/** @param {FinanceTransaction} t */
 const spendsIn = (t) => t.type === "charge" || t.type === "reversal";
+/** @param {FinanceCard} card */
 function cycleWindow(card) {
   const end = isDay(card.cutDate) ? card.cutDate : undefined;
   const start = isDay(card.cycleStart)
@@ -149,6 +173,7 @@ function cycleWindow(card) {
       : undefined;
   return { start, end };
 }
+/** @param {FinanceInstallment} i */
 export function installmentView(i) {
   const months = Number(i.months) || 0;
   const paid = Math.min(Number(i.paid) || 0, months);
@@ -168,6 +193,7 @@ export function installmentView(i) {
   };
 }
 
+/** @param {unknown} rawData @param {string} today */
 export function overview(rawData, today) {
   const data = normalize(rawData);
   const cardName = new Map(data.cards.map((c) => [c.id, c.name]));
@@ -237,7 +263,7 @@ export function overview(rawData, today) {
     label: c.label,
     amountMinor: c.amountMinor || 0,
     card: c.card,
-    cardName: cardName.get(c.card),
+    cardName: c.card === undefined ? undefined : cardName.get(c.card),
     dayOfMonth: c.dayOfMonth,
     note: c.note,
   }));
@@ -254,6 +280,7 @@ export function overview(rawData, today) {
   const marginMinor =
     inflowsMinor - payMinor - installmentsMonthlyMinor - fixedMinor;
 
+  /** @type {Map<string, number>} */
   const catMap = new Map();
   for (const c of cards)
     for (const t of txs.filter(
@@ -300,6 +327,7 @@ export function overview(rawData, today) {
   );
   const pendingTxs = txs.filter((t) => t.status === "pending");
 
+  /** @type {Array<{ date: string, type: "cut" | "due", label: string, card: string, estimated: boolean, amountMinor?: number, overdue?: boolean }>} */
   const upcoming = [];
   for (const c of cards) {
     if (c.cutDate && c.cutDate >= today)
@@ -323,12 +351,15 @@ export function overview(rawData, today) {
   }
   upcoming.sort((a, b) => a.date.localeCompare(b.date));
 
+  /** @type {Array<{ level: "info" | "warning" | "danger", code: string, text: string, card?: string }>} */
   const alerts = [];
+  /** @param {number} n */
   const fmt = (n) =>
     new Intl.NumberFormat("es-MX", {
       style: "currency",
       currency: "MXN",
     }).format(n / 100);
+  /** @param {string | undefined} d */
   const longDay = (d) =>
     new Intl.DateTimeFormat("es-MX", {
       day: "numeric",
@@ -445,7 +476,7 @@ export function overview(rawData, today) {
     installments,
     installmentsRemainingMinor: sum(
       activeInstallments,
-      (i) => i.remainingMinor,
+      (i) => /** @type {number} */ (i.remainingMinor),
     ),
     categories,
     leak: {
@@ -465,6 +496,26 @@ export function overview(rawData, today) {
 }
 
 /* ---------- operations (the only way agents change finance data) ---------- */
+/**
+ * @overload
+ * @param {FinanceData} data
+ * @param {unknown} ref
+ * @returns {FinanceCard}
+ */
+/**
+ * @overload
+ * @param {FinanceData} data
+ * @param {unknown} ref
+ * @param {{ optional: boolean }} options
+ * @returns {FinanceCard | undefined}
+ */
+/**
+ * Throws for a missing, unknown or ambiguous card unless `optional`.
+ * @param {FinanceData} data
+ * @param {unknown} ref
+ * @param {{ optional?: boolean }} [options]
+ * @returns {FinanceCard | undefined}
+ */
 function findCard(data, ref, { optional = false } = {}) {
   const key = norm(ref);
   if (!key) {
@@ -484,6 +535,7 @@ function findCard(data, ref, { optional = false } = {}) {
     `${fuzzy.length ? "Tarjeta ambigua" : "Tarjeta desconocida"}: "${ref}". Disponibles: ${data.cards.map((c) => c.name).join(", ") || "ninguna"}.`,
   );
 }
+/** @param {{ id: string }[]} rows @param {string} prefix */
 const nextId = (rows, prefix, width = 3) => {
   const n = Math.max(
     0,
@@ -491,6 +543,7 @@ const nextId = (rows, prefix, width = 3) => {
   );
   return prefix + String(n + 1).padStart(width, "0");
 };
+/** @param {FinanceData} data @param {string} desc */
 function guessCategory(data, desc) {
   const key = norm(desc);
   const prior = [...data.transactions]
@@ -504,18 +557,25 @@ function guessCategory(data, desc) {
     );
   return prior?.category;
 }
+/** @param {FinanceCard} card @param {FinanceTransaction} t */
 function applyBalance(card, t) {
   card.balanceMinor = (card.balanceMinor || 0) + t.amountMinor;
-  if (t.type === "payment" && Number.isFinite(card.payMinor))
-    card.payMinor = Math.max(0, card.payMinor + t.amountMinor);
+  const pay = card.payMinor;
+  if (t.type === "payment" && typeof pay === "number" && Number.isFinite(pay))
+    card.payMinor = Math.max(0, pay + t.amountMinor);
 }
+/** @param {FinanceData} data @param {FinanceOperation} op @param {FinanceTransactionType} type @param {string} today */
 function addTx(data, op, type, today) {
   const card = findCard(data, op.card);
   const amount = amountOf(op, "amount", "importe");
   const status = op.status === "pending" ? "pending" : "posted";
   const date = dayOf(op.date, today);
   const desc = text(
-    op.desc ?? { payment: "Pago a tarjeta", cashback: "Cashback" }[type],
+    op.desc ??
+      /** @type {Partial<Record<FinanceTransactionType, string>>} */ ({
+        payment: "Pago a tarjeta",
+        cashback: "Cashback",
+      })[type],
     "la descripción",
   );
   if (op.ref) {
@@ -545,6 +605,7 @@ function addTx(data, op, type, today) {
       : type === "cashback"
         ? "Cashback"
         : guessCategory(data, desc) || UNIDENTIFIED);
+  /** @type {FinanceTransaction} */
   const tx = {
     id: nextId(data.transactions, "t"),
     date,
@@ -561,6 +622,13 @@ function addTx(data, op, type, today) {
   if (status === "posted") applyBalance(card, tx);
   return { tx, balanceMinor: card.balanceMinor };
 }
+/**
+ * @template T
+ * @param {T[]} rows
+ * @param {(row: T) => boolean} match
+ * @param {() => NoInfer<T>} make
+ * @param {(row: T) => void} update
+ */
 function upsert(rows, match, make, update) {
   const found = rows.find(match);
   if (found) {
@@ -571,12 +639,16 @@ function upsert(rows, match, make, update) {
   rows.push(created);
   return created;
 }
+/** @template T @param {T} target @param {Partial<T>} source */
 const assign = (target, source) => {
-  for (const [k, v] of Object.entries(source))
+  for (const [k, v] of /** @type {[keyof T, T[keyof T]][]} */ (
+    Object.entries(source)
+  ))
     if (v !== undefined) target[k] = v;
   return target;
 };
 
+/** @satisfies {Record<string, FinanceHandler>} */
 const handlers = {
   init(data) {
     return { created: true, cards: data.cards.length };
@@ -638,7 +710,7 @@ const handlers = {
           ? undefined
           : op.estimated === true || op.estimated === "true",
     };
-    for (const k of ["months", "paid"])
+    for (const k of /** @type {const} */ (["months", "paid"]))
       if (
         patch[k] !== undefined &&
         (!Number.isInteger(patch[k]) || patch[k] < 0)
@@ -788,12 +860,13 @@ const handlers = {
   },
   settings(data, op) {
     if (op.leakCategories !== undefined) {
+      /** @type {unknown[]} */
       const list = Array.isArray(op.leakCategories)
         ? op.leakCategories
         : String(op.leakCategories).split(",");
       data.leakCategories = list.map((s) => String(s).trim()).filter(Boolean);
     }
-    for (const k of ["validityDays", "staleAfterDays"])
+    for (const k of /** @type {const} */ (["validityDays", "staleAfterDays"]))
       if (op[k] !== undefined) {
         const n = Number(op[k]);
         if (!Number.isInteger(n) || n < 1 || n > 90)
@@ -807,9 +880,12 @@ const handlers = {
     return { reconciledAt: today };
   },
 };
+/** @param {FinanceData} data @param {FinanceOperation} op @param {string} today @param {boolean} create */
 function cardSet(data, op, today, create) {
-  let card = create ? undefined : findCard(data, op.card ?? op.name);
-  if (create) {
+  /** @type {FinanceCard} */
+  let card;
+  if (!create) card = findCard(data, op.card ?? op.name);
+  else {
     const name = text(op.name, "el nombre de la tarjeta", 60);
     if (findCard(data, name, { optional: true }))
       throw new Failure(`La tarjeta ${name} ya existe.`, 409);
@@ -818,6 +894,7 @@ function cardSet(data, op, today, create) {
       throw new Failure("Una tarjeta nueva necesita --limit.");
     data.cards.push(card);
   }
+  /** @type {Partial<FinanceCard>} */
   const patch = {
     name:
       create || op.rename === undefined
@@ -861,8 +938,9 @@ function cardSet(data, op, today, create) {
 
 export const OPERATIONS = Object.keys(handlers);
 
+/** @param {unknown} rawData @param {FinanceOperation} op @param {string} today */
 export function applyOperation(rawData, op, today) {
-  const handler = handlers[op?.op];
+  const handler = handlers[/** @type {keyof typeof handlers} */ (op?.op)];
   if (!handler)
     throw new Failure(
       `Operación desconocida: ${op?.op}. Disponibles: ${OPERATIONS.join(", ")}.`,
