@@ -133,12 +133,21 @@ export function createProviderContextFactory({
        */
       spawn(bin, args, processEnv = childEnv) {
         const spec = sessionCommand({ bin, args }, scopeId, env);
-        return spawn(spec.bin, spec.args, {
+        const child = spawn(spec.bin, spec.args, {
           cwd,
           env: processEnv,
           detached: process.platform !== "win32",
           stdio: ["pipe", "pipe", "pipe"],
         });
+        // Nothing else reads stderr: drain it into the launcher's journal so
+        // a provider that dies at startup says why, and a full pipe never
+        // blocks it.
+        child.stderr?.on("data", (chunk) => {
+          for (const line of String(chunk).split("\n"))
+            if (line.trim())
+              process.stderr.write(`[${scopeId}] ${line.slice(0, 2000)}\n`);
+        });
+        return child;
       },
     };
   }
