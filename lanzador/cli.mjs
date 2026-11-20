@@ -20,14 +20,14 @@ export function esPrincipal(argv1, url) {
 }
 
 /** @type {Record<string, string>} */
-const AGENTES = {
+const AGENTS_BY_ID = {
   ambar: "claude",
   menta: "codex",
   lira: "agy",
   marina: "deepseek",
 };
 const NOMBRES = Object.fromEntries(
-  Object.entries(AGENTES).map(([a, m]) => [m, a]),
+  Object.entries(AGENTS_BY_ID).map(([a, m]) => [m, a]),
 );
 const FINALES = new Set(["terminada", "error", "cancelada", "interrumpida"]);
 const VALORES = new Set([
@@ -382,7 +382,7 @@ export async function ejecutarCli(
 
   try {
     if (comando === "iniciar") {
-      const motor = opciones.agente ? AGENTES[opciones.agente] : undefined;
+      const motor = opciones.agente ? AGENTS_BY_ID[opciones.agente] : undefined;
       if (!motor) return uso("Elige --agente ambar, menta, lira o marina.");
       if (!opciones.proyecto) return uso("Falta --proyecto.");
       const brief = resto.join(" ").trim();

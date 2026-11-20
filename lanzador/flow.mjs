@@ -12,9 +12,9 @@ const MAX_PENDIENTE = 4 * 1024 * 1024;
  * `salida` deltas, structured `items`, `estado` and heartbeats. The reader keeps
  * `seq` continuity; any gap means reconnecting for a new snapshot.
  * Throws before writing anything when the session has no terminal.
- * @param {{ res: import("node:http").ServerResponse, id: string, ejecutor: ReturnType<typeof import("./executor.mjs").crearEjecutor>, registro: import("./session-types.d.ts").SessionRegistry, items?: ReturnType<typeof import("./items.mjs").crearItems>, ms?: number, latido?: number }} options
+ * @param {{ res: import("node:http").ServerResponse, id: string, ejecutor: ReturnType<typeof import("./executor.mjs").createExecutor>, registro: import("./session-types.d.ts").SessionRegistry, items?: ReturnType<typeof import("./items.mjs").createItems>, ms?: number, latido?: number }} options
  */
-export function servirFlujo({
+export function serveFlow({
   res,
   id,
   ejecutor,

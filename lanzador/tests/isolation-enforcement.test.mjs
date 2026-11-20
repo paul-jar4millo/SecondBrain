@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import { TOOL_PROFILES_BASE } from "../tool-catalog.mjs";
-import { crearEjecutor } from "../executor.mjs";
+import { createExecutor } from "../executor.mjs";
 import {
   createAcpController,
   createClaudeController,
@@ -25,7 +25,7 @@ import {
   parseCodexMcpServerKeys,
 } from "../provider-controllers.mjs";
 import { createProviderConversations } from "../provider-conversations.mjs";
-import { abrirRegistro } from "../sessions.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -536,7 +536,9 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
   // 2. DeepSeek spending policy blocked BEFORE spawn and BEFORE consultarSaldo, ignoring spoofed billingAuthorized
   let saldoCalls = 0;
   let claudeSdkCalled = false;
-  const registro = await abrirRegistro(path.join(dataDir, "sesiones.json"));
+  const registro = await openSessionRegistry(
+    path.join(dataDir, "sesiones.json"),
+  );
   const conversations = createProviderConversations({
     directory: path.join(dataDir, "conv"),
     registro,
@@ -557,7 +559,7 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
       },
     },
   });
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     equipos: {
       estado: () => ({ id: "eq-1", miembros: [] }),
@@ -614,7 +616,7 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
       },
     },
   });
-  const exec2 = crearEjecutor({
+  const exec2 = createExecutor({
     registro,
     equipos: {
       estado: () => ({ id: "eq-2", miembros: [] }),

@@ -1012,7 +1012,7 @@
   display: none;
 }
 
-/* Compact HUD: phones in portrait and landscape (same query as sala.ts). */
+/* Compact HUD: phones in portrait and landscape (same query as room.ts). */
 @media (max-width: 700px), (max-height: 500px) {
   .sala {
     --dock-clear: 84px;

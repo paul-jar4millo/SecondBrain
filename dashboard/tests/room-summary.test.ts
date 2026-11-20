@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { newItem } from "../src/core/model";
-import { roomSummary } from "../src/features/sala/sala-summary";
+import { roomSummary } from "../src/features/room/room-summary";
 
 const day = "2026-11-07";
 it("uses actionable records and never exposes hidden source notes", () => {

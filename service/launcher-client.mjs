@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
  * @param {typeof import("./vault.mjs").Failure} Failure
  * @param {{ url?: string, tokenFile?: string, token?: string }} [options]
  */
-export function createLanzador(
+export function createLauncherClient(
   Failure,
   {
     url = process.env.LANZADOR_URL,

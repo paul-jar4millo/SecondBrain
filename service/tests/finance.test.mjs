@@ -12,7 +12,7 @@ import {
   toMinor,
   applyOperation,
 } from "../finance.mjs";
-import { parseRegistro } from "../finance-import.mjs";
+import { parseLedgerExport } from "../finance-import.mjs";
 
 const TODAY = "2026-11-06";
 // Synthetic data only: never the real vault.
@@ -70,7 +70,7 @@ async function fixture(fn) {
   }
 }
 const seeded = async (finance) => {
-  const { data } = parseRegistro(REGISTRO, TODAY);
+  const { data } = parseLedgerExport(REGISTRO, TODAY);
   await finance.create(data, TODAY);
 };
 
@@ -83,7 +83,7 @@ test("toMinor parses pesos without float drift and rejects bad input", () => {
 });
 
 test("the importer reproduces the indicators declared by the export", () => {
-  const { data, expected } = parseRegistro(REGISTRO, TODAY);
+  const { data, expected } = parseLedgerExport(REGISTRO, TODAY);
   const view = overview(data, TODAY);
   assert.equal(view.totals.cycleChargesMinor, expected.cycleChargesMinor);
   assert.equal(view.totals.usedMinor, expected.usedMinor);
@@ -98,7 +98,7 @@ test("the importer reproduces the indicators declared by the export", () => {
 });
 
 test("payments and cashback are never spending; pending rows still count in the cycle", () => {
-  const { data } = parseRegistro(REGISTRO, TODAY);
+  const { data } = parseLedgerExport(REGISTRO, TODAY);
   const view = overview(data, TODAY);
   const beta = view.cards.find((c) => c.id === "beta");
   assert.equal(beta.cycleChargesMinor, 20000);
@@ -107,7 +107,7 @@ test("payments and cashback are never spending; pending rows still count in the 
 });
 
 test("alerts state the arithmetic: expired data, over-income, due soon, cut passed", () => {
-  const { data } = parseRegistro(REGISTRO, TODAY);
+  const { data } = parseLedgerExport(REGISTRO, TODAY);
   const late = overview(data, "2026-11-22");
   const codes = late.alerts.map((a) => a.code);
   assert.ok(codes.includes("expired"));
@@ -120,7 +120,7 @@ test("alerts state the arithmetic: expired data, over-income, due soon, cut pass
 });
 
 test("charge learns categories, rejects duplicates, is idempotent by ref and moves the balance", () => {
-  const { data } = parseRegistro(REGISTRO, TODAY);
+  const { data } = parseLedgerExport(REGISTRO, TODAY);
   const first = applyOperation(
     data,
     { op: "charge", card: "alfa", amount: "300", desc: "Tacos", date: TODAY },
@@ -156,7 +156,7 @@ test("charge learns categories, rejects duplicates, is idempotent by ref and mov
 });
 
 test("payments reduce the balance and amount due; pending ones wait for settle", () => {
-  const { data } = parseRegistro(REGISTRO, TODAY);
+  const { data } = parseLedgerExport(REGISTRO, TODAY);
   const paid = applyOperation(
     data,
     { op: "payment", card: "alfa", amount: 100 },
@@ -179,7 +179,7 @@ test("payments reduce the balance and amount due; pending ones wait for settle",
 });
 
 test("unknown cards and invalid input fail with actionable messages", () => {
-  const { data } = parseRegistro(REGISTRO, TODAY);
+  const { data } = parseLedgerExport(REGISTRO, TODAY);
   assert.throws(
     () =>
       applyOperation(
@@ -212,7 +212,7 @@ test("unknown cards and invalid input fail with actionable messages", () => {
 });
 
 test("installments, commitments and cash flow feed the margin", () => {
-  const { data } = parseRegistro(REGISTRO, TODAY);
+  const { data } = parseLedgerExport(REGISTRO, TODAY);
   let state = applyOperation(
     data,
     { op: "installment-pay", label: "Consola", count: 2 },

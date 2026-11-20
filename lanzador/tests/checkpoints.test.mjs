@@ -10,19 +10,19 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { crearGit } from "../git.mjs";
+import { createGit } from "../git.mjs";
 import {
   MAX_CHECKPOINTS,
-  crearCheckpoints,
-  crearSeguimiento,
+  createCheckpoints,
+  createTracking,
 } from "../checkpoints.mjs";
-import { abrirRegistro } from "../sessions.mjs";
-import { crearEjecutor } from "../executor.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { createExecutor } from "../executor.mjs";
 import { git, repoSintetico } from "./helpers-git.mjs";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 
-const cp = (max) => crearCheckpoints({ git: crearGit(), max });
+const cp = (max) => createCheckpoints({ git: createGit(), max });
 const leer = (cwd, archivo) => readFile(path.join(cwd, archivo), "utf8");
 const existe = (cwd, archivo) =>
   stat(path.join(cwd, archivo)).then(
@@ -157,7 +157,7 @@ test("el seguimiento revierte un turno, guarda un punto de seguridad y permite d
   const cwd = await repoSintetico(t);
   const dir = await mkdtemp(path.join(tmpdir(), "sb-seg-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(dir, "sesiones.json"));
+  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
   const sesion = await registro.crear({
     motor: "claude",
     origen: "sala",
@@ -165,7 +165,7 @@ test("el seguimiento revierte un turno, guarda un punto de seguridad y permite d
     encargo: "tarea",
     directorio: cwd,
   });
-  const seguimiento = crearSeguimiento({
+  const seguimiento = createTracking({
     registro,
     checkpoints: cp(),
     cwdDe: (s) => s.directorio,
@@ -202,7 +202,7 @@ test("el seguimiento revierte un turno, guarda un punto de seguridad y permite d
 test("un fallo al capturar se registra y no aborta; fuera de un repo no hace nada", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-seg-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(dir, "sesiones.json"));
+  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
   const plano = await registro.crear({
     motor: "claude",
     origen: "sala",
@@ -216,14 +216,14 @@ test("un fallo al capturar se registra y no aborta; fuera de un repo no hace nad
       throw new Error("boom");
     },
   };
-  const seguimiento = crearSeguimiento({
+  const seguimiento = createTracking({
     registro,
     checkpoints: falso,
     cwdDe: (s) => s.directorio,
   });
   assert.equal(await seguimiento.marcar(plano.id, "x"), null);
   assert.match(registro.leer()[0].checkpointError, /punto de control/);
-  const sinRepo = crearSeguimiento({
+  const sinRepo = createTracking({
     registro,
     checkpoints: cp(),
     cwdDe: (s) => s.directorio,
@@ -244,13 +244,13 @@ test("el ejecutor guarda un punto de control antes de cada turno y borra las ref
 writeFileSync("a.txt", "editado por el agente");
 console.log(JSON.stringify({ type: "result", session_id: "conv", result: "ok" }));`,
   );
-  const registro = await abrirRegistro(path.join(dir, "sesiones.json"));
-  const seguimiento = crearSeguimiento({
+  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
+  const seguimiento = createTracking({
     registro,
     checkpoints: cp(),
     cwdDe: (s) => s.directorio || null,
   });
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     proyectos: { repo: cwd },
     seguimiento,
@@ -293,7 +293,7 @@ test("el índice persistente da el mismo árbol que uno temporal y se resiembra 
   const cwd = await repoSintetico(t);
   const dirIndices = await mkdtemp(path.join(tmpdir(), "sb-idx-"));
   t.after(() => rm(dirIndices, { recursive: true, force: true }));
-  const rapido = crearCheckpoints({ git: crearGit(), dirIndices });
+  const rapido = createCheckpoints({ git: createGit(), dirIndices });
   const temporal = cp();
   const igual = async (mensaje) =>
     assert.equal(
@@ -332,15 +332,15 @@ test("un Enter tecleado en la terminal con el agente en espera guarda un punto d
   const cwd = await repoSintetico(t);
   const dir = await mkdtemp(path.join(tmpdir(), "sb-tecla-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(dir, "sesiones.json"));
-  const seguimiento = crearSeguimiento({
+  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
+  const seguimiento = createTracking({
     registro,
     checkpoints: cp(),
     cwdDe: (s) => s.directorio || null,
   });
   const escrito = [];
   let hijo;
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     proyectos: { repo: cwd },
     seguimiento,

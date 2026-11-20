@@ -5,7 +5,7 @@ import path from "node:path";
 /**
  * @param {{ archivo: string, proyectos: Record<string, string>, workspaces: string }} options
  */
-export async function abrirEspacios({ archivo, proyectos, workspaces }) {
+export async function openWorkspaces({ archivo, proyectos, workspaces }) {
   /** @type {string[]} */
   const repositorios = [];
   for (const [name, dir] of Object.entries(proyectos)) {

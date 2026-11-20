@@ -15,11 +15,11 @@ import { DomainError } from "../domain-error.mjs";
 import { GitHistory } from "../vault-git.mjs";
 import { Auth } from "../auth.mjs";
 import { Finance } from "../finance.mjs";
-import { createSala } from "../room.mjs";
-import { createMundo } from "../world.mjs";
-import { createLanzador } from "../launcher-client.mjs";
-import { crearMcpRemoto } from "../remote-mcp.mjs";
-import { crearColaAprobaciones } from "../approvals.mjs";
+import { createRoom } from "../room.mjs";
+import { createWorld } from "../world.mjs";
+import { createLauncherClient } from "../launcher-client.mjs";
+import { createRemoteMcp } from "../remote-mcp.mjs";
+import { createApprovalQueue } from "../approvals.mjs";
 import { createSharedFiles } from "../shared-files.mjs";
 import { createWorkOrderStore } from "../work-orders.mjs";
 import { createUserRequestStore } from "../user-requests.mjs";
@@ -86,13 +86,13 @@ export async function createContext(options) {
         (process.env.NODE_ENV === "production" && process.env.AUTH !== "off")),
   });
   await auth.init();
-  const sala = await createSala(dataDirectory, Failure);
-  const mundo = createMundo(
+  const sala = await createRoom(dataDirectory, Failure);
+  const mundo = createWorld(
     dataDirectory,
     Failure,
     options.mundoPaquete ?? process.env.MUNDO_PAQUETE,
   );
-  const lanzador = createLanzador(Failure, options.lanzador);
+  const lanzador = createLauncherClient(Failure, options.lanzador);
   /** @type {Set<ServerResponse>} */
   const clients = new Set();
   /** @type {import("node:fs").FSWatcher[]} */
@@ -110,7 +110,7 @@ export async function createContext(options) {
   const stopLanzadorEvents = lanzador.subscribe(change);
   /** @type {import("node:http").Server} */
   let servidorHttp;
-  const mcpRemoto = await crearMcpRemoto({
+  const mcpRemoto = await createRemoteMcp({
     directory: path.join(dataDirectory, "oauth"),
     auth,
     Failure,
@@ -123,7 +123,7 @@ export async function createContext(options) {
     now: options.mcpRemoto?.now,
     onChange: change,
   });
-  const aprobaciones = await crearColaAprobaciones(
+  const aprobaciones = await createApprovalQueue(
     path.join(dataDirectory, "aprobaciones"),
     { ...options.aprobaciones, onChange: change },
   );

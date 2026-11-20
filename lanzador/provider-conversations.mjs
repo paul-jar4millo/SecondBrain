@@ -5,7 +5,7 @@ import {
   PROVIDER_ADAPTERS,
   validateAndExtractElicitationContent,
 } from "./provider-adapters.mjs";
-import { ErrorLanzador } from "./errors.mjs";
+import { LauncherError } from "./errors.mjs";
 import { sha256Hex } from "./lib/hash.mjs";
 
 /** @import {ConversationAdapter, ConversationAnswer, ConversationCommand, ConversationConnection, ConversationContext, ConversationController, ConversationEvent, ConversationEventInput, ConversationItem, ConversationJob, ConversationReceipt, ConversationRequest, ConversationState, ConversationStore, MessageDeliveryStatus, NativeCallbackStatus, PendingConversationCallback, QueuedConversationMessage, RunConversationOptions, SendConversationMessageOptions} from "./provider-conversation-types.mjs" */
@@ -95,7 +95,7 @@ export function createProviderConversations({
    * @returns {Promise<ConversationStore>}
    */
   async function load(id) {
-    if (!validId(id)) throw new ErrorLanzador("Sesión inválida.", 400);
+    if (!validId(id)) throw new LauncherError("Sesión inválida.", 400);
     let pending = stores.get(id);
     if (!pending) {
       pending = (async () => {
@@ -989,13 +989,13 @@ export function createProviderConversations({
     } = {},
   ) {
     if (!clientMessageId || typeof clientMessageId !== "string") {
-      throw new ErrorLanzador("clientMessageId inválido.", 400);
+      throw new LauncherError("clientMessageId inválido.", 400);
     }
     if (!["send", "steer", "queue"].includes(mode)) {
-      throw new ErrorLanzador("Modo de envío inválido.", 400);
+      throw new LauncherError("Modo de envío inválido.", 400);
     }
     if (!String(text || "").trim() && attachments.length === 0) {
-      throw new ErrorLanzador("El mensaje no puede estar vacío.", 400);
+      throw new LauncherError("El mensaje no puede estar vacío.", 400);
     }
     const store = await load(id);
     await store.queue;
@@ -1167,7 +1167,7 @@ export function createProviderConversations({
     error = null,
   ) {
     if (!MESSAGE_DELIVERY_STATUSES.has(deliveryStatus)) {
-      throw new ErrorLanzador("Estado de entrega inválido.", 400);
+      throw new LauncherError("Estado de entrega inválido.", 400);
     }
     const store = await load(id);
     await store.queue;
@@ -1176,7 +1176,7 @@ export function createProviderConversations({
       const cmd = state.commands.find(
         (c) => c.id === commandId || c.clientMessageId === commandId,
       );
-      if (!cmd) throw new ErrorLanzador("Comando no encontrado.", 404);
+      if (!cmd) throw new LauncherError("Comando no encontrado.", 404);
       cmd.deliveryStatus = deliveryStatus;
       cmd.error = error;
       cmd.updatedAt = new Date().toISOString();
@@ -1205,7 +1205,7 @@ export function createProviderConversations({
         q.commandId === clientMessageId,
     );
     if (idx === -1) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         "El mensaje ya fue entregado o no está en la cola.",
         409,
       );
@@ -1269,13 +1269,13 @@ export function createProviderConversations({
      */
     async readArtifact(sessionId, artifactId) {
       if (!validId(sessionId) || !validId(artifactId)) {
-        throw new ErrorLanzador("Identificador de artefacto inválido.", 400);
+        throw new LauncherError("Identificador de artefacto inválido.", 400);
       }
       const store = await load(sessionId);
       await store.queue;
       const entry = store.state.artifacts.find((a) => a.id === artifactId);
       if (!entry) {
-        throw new ErrorLanzador("Artefacto no encontrado.", 404);
+        throw new LauncherError("Artefacto no encontrado.", 404);
       }
       const blobPath = path.join(
         directory,
@@ -1288,7 +1288,7 @@ export function createProviderConversations({
         buffer = await readFile(blobPath);
       } catch (err) {
         if (err?.code === "ENOENT") {
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "Los bytes inmutables de esta versión no están disponibles.",
             404,
           );
@@ -1297,7 +1297,7 @@ export function createProviderConversations({
       }
       const actualHash = sha256Hex(buffer);
       if (entry.sha256 && actualHash !== entry.sha256) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "Verificación SHA-256 del artefacto fallida.",
           500,
         );
@@ -1307,7 +1307,7 @@ export function createProviderConversations({
     /** @param {string} id */
     async remove(id) {
       if (running.has(id))
-        throw new ErrorLanzador("Detén la sesión antes de eliminarla", 409);
+        throw new LauncherError("Detén la sesión antes de eliminarla", 409);
       if (controllers.has(id)) {
         await shutdownController(id, { reason: "Conversación eliminada" });
       }
@@ -1337,7 +1337,7 @@ export function createProviderConversations({
      */
     async answer(id, { requestId, responseId, answers, decision, content }) {
       if (!validId(requestId) || !validId(responseId))
-        throw new ErrorLanzador("Respuesta inválida.", 400);
+        throw new LauncherError("Respuesta inválida.", 400);
       const store = await load(id);
       await store.queue;
       const incomingAnswer = {
@@ -1354,7 +1354,7 @@ export function createProviderConversations({
           canonicalStringify(receipt.answer) !==
             canonicalStringify(incomingAnswer)
         )
-          throw new ErrorLanzador("Conflicto de respuesta.", 409);
+          throw new LauncherError("Conflicto de respuesta.", 409);
         return structuredClone(receipt);
       }
       const request = store.state.requests.find((r) => r.id === requestId);
@@ -1370,7 +1370,7 @@ export function createProviderConversations({
         request.status !== "pending" ||
         request.nativeCallbackStatus !== "open"
       )
-        throw new ErrorLanzador("La solicitud ya no está vigente.", 409);
+        throw new LauncherError("La solicitud ya no está vigente.", 409);
       // A callback is only found through its running job.
       const job = /** @type {ConversationJob} */ (liveJob);
       if (callback.isConnectionAlive && !callback.isConnectionAlive()) {
@@ -1384,14 +1384,14 @@ export function createProviderConversations({
             request.requiresNewTurn = true;
           }
         }).catch(() => {});
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "La conexión con el proveedor cerró antes de enviar la respuesta.",
           409,
         );
       }
       if (request.kind === "approval") {
         if (!decision || !request.choices?.includes(decision)) {
-          throw new ErrorLanzador("Decisión inválida.", 400);
+          throw new LauncherError("Decisión inválida.", 400);
         }
         if (
           decision === "accept" &&
@@ -1417,7 +1417,7 @@ export function createProviderConversations({
             return typeof val !== "string" || !val.trim();
           }))
       )
-        throw new ErrorLanzador("Completa todas las respuestas.", 400);
+        throw new LauncherError("Completa todas las respuestas.", 400);
 
       // Step 1: Claim synchronously and persist answer durably ("respuesta_recibida") BEFORE dispatch.
       request._claiming = true;
@@ -1611,7 +1611,7 @@ export async function serveProviderConversation({
 }) {
   const session = registro.leer().find((s) => s.id === id && !s.eliminada);
   if (!session?.structured)
-    throw new ErrorLanzador("Conversación estructurada no disponible.", 409);
+    throw new LauncherError("Conversación estructurada no disponible.", 409);
   let closed = false;
   /** @type {Promise<void | import("node:http").ServerResponse>} */
   let pending = Promise.resolve();

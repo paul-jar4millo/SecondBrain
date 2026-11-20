@@ -54,7 +54,7 @@ export const LIMITE_CONTEXTO = 400_000;
  * @param {string} motor
  * @param {string} texto
  */
-export function leerContexto(motor, texto) {
+export function readContextUsage(motor, texto) {
   let usados = null;
   for (const linea of texto.split("\n")) {
     /** @type {TranscriptRecord} */
@@ -104,7 +104,7 @@ export function leerContexto(motor, texto) {
  * @param {string} motor
  * @param {string} texto
  */
-export function leerConversacion(motor, texto) {
+export function readConversation(motor, texto) {
   /** @type {SessionMessage[]} */
   const mensajes = [];
   for (const line of texto.split("\n")) {
@@ -163,7 +163,7 @@ export function leerConversacion(motor, texto) {
 /**
  * @param {{ registro: Pick<SessionRegistry, "leer" | "actualizar" | "crear">, env: NodeJS.ProcessEnv, proyectos: Readonly<Record<string, string>>, intervalo?: number }} options
  */
-export function observarConversaciones({
+export function watchConversations({
   registro,
   env,
   proyectos,
@@ -250,9 +250,9 @@ export function observarConversaciones({
           )
             continue;
           const texto = await readFile(fuente.archivo, "utf8");
-          const mensajes = leerConversacion(fuente.motor, texto);
+          const mensajes = readConversation(fuente.motor, texto);
           if (!mensajes.length) continue;
-          const contexto = leerContexto(fuente.motor, texto);
+          const contexto = readContextUsage(fuente.motor, texto);
           if (fuente.motor === "codex") {
             /** @type {TranscriptRecord["payload"]} */
             let meta;

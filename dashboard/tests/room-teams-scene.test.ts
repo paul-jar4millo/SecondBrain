@@ -4,9 +4,9 @@ import {
   figurasEsperandoOk,
   puestosEquipo,
   relevosNuevos,
-} from "../src/features/sala/sala-equipos";
-import { figuraDeSesion } from "../src/features/sala/sala-sesiones";
-import type { SesionObservada } from "../src/features/sala/sala-sesiones";
+} from "../src/features/room/room-teams";
+import { figuraDeSesion } from "../src/features/room/room-sessions";
+import type { SesionObservada } from "../src/features/room/room-sessions";
 
 const sesion = (
   id: string,

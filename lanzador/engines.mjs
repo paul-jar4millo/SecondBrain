@@ -10,7 +10,7 @@ import path from "node:path";
  * @param {string} texto
  * @param {MotorOptions} [options]
  */
-export function comandoMotor(
+export function engineCommand(
   motor,
   texto,
   { modelo, esfuerzo, conversacionId } = {},
@@ -103,7 +103,7 @@ export const entornoEsfuerzo = (motor, esfuerzo) => {
     : {};
 };
 
-export const AGENTES = {
+export const AGENTS_BY_ID = {
   ambar: { proveedor: "claude", nombre: "Claude", acceso: "suscripcion" },
   menta: { proveedor: "chatgpt", nombre: "ChatGPT", acceso: "suscripcion" },
   lira: { proveedor: "gemini", nombre: "Gemini", acceso: "suscripcion" },
@@ -150,9 +150,9 @@ export function entornoDe(proveedor, env) {
     ...(tokenVault
       ? {
           SB_BRAIN_TOKEN_FILE: tokenVault,
-          SB_AGENTE: /** @type {(keyof typeof AGENTES)[]} */ (
-            Object.keys(AGENTES)
-          ).find((id) => AGENTES[id].proveedor === proveedor),
+          SB_AGENTE: /** @type {(keyof typeof AGENTS_BY_ID)[]} */ (
+            Object.keys(AGENTS_BY_ID)
+          ).find((id) => AGENTS_BY_ID[id].proveedor === proveedor),
           SB_BRAIN_URL: env.AGENTES_BRAIN_URL || "http://127.0.0.1:8080/api/v1",
           SB_BRAIN_CLI: env.AGENTES_BRAIN_CLI,
         }
@@ -198,7 +198,7 @@ const fecha = (segundos) =>
  * Folds Claude Code's stream-json lines; also used for DeepSeek through its Anthropic API.
  * @returns {StreamResult}
  */
-export function nuevoClaude() {
+export function newClaudeState() {
   return {
     sessionId: null,
     texto: "",
@@ -214,7 +214,7 @@ export function nuevoClaude() {
  * @param {StreamResult} r
  * @param {ClaudeStreamEvent} e
  */
-export function leerClaude(r, e) {
+export function readClaudeEvent(r, e) {
   if (e.session_id) r.sessionId = e.session_id;
   if (e.type === "assistant" && !e.parent_tool_use_id && e.message?.usage) {
     const u = e.message.usage;
@@ -339,7 +339,7 @@ export function ventanasAgy(cuota, modelo) {
  * @param {StreamResult} r
  * @param {GeminiStreamEvent} e
  */
-export function leerGemini(r, e) {
+export function readGeminiEvent(r, e) {
   const id = e.conversation_id || e.result?.conversation_id;
   if (id) r.sessionId = id;
   const paso = e.step_update;
@@ -408,7 +408,7 @@ export function actividadEvento(e) {
  * @param {string | null} clave
  * @param {FetchBalance} [fetchFn]
  */
-export async function saldoDeepSeek(clave, fetchFn = fetch) {
+export async function deepSeekBalance(clave, fetchFn = fetch) {
   if (!clave) throw new Error("Saldo DeepSeek no disponible");
   const respuesta = await fetchFn("https://api.deepseek.com/user/balance", {
     headers: { Authorization: `Bearer ${clave}` },
@@ -564,7 +564,7 @@ export function capacidadesDe(sesion, repo = {}) {
  * @param {string} [cwd]
  * @returns {NormalizedAttachment[]}
  */
-export function validarAdjuntosMotor(motor, attachments = [], cwd = "") {
+export function validateEngineAttachments(motor, attachments = [], cwd = "") {
   const caps = CAPACIDADES[/** @type {keyof typeof CAPACIDADES} */ (motor)];
   if (!caps) throw new Error("Motor desconocido");
   const allowed = new Set(caps.adjuntos || ["text"]);
@@ -619,7 +619,7 @@ export function validarAdjuntosMotor(motor, attachments = [], cwd = "") {
  * @param {string} motor
  * @param {{ id: string }[]} [catalogo]
  */
-export function modeloEconomico(motor, catalogo = []) {
+export function economyModel(motor, catalogo = []) {
   const ids = catalogo.map((m) => m.id);
   if (motor === "claude") return ids.find((id) => /haiku/i.test(id)) ?? null;
   if (motor === "deepseek") return DEEPSEEK_MODEL;

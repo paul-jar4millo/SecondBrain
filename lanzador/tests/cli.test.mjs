@@ -7,9 +7,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { crearServidor } from "../index.mjs";
-import { abrirRegistro } from "../sessions.mjs";
-import { crearEjecutor } from "../executor.mjs";
+import { createLauncherServer } from "../index.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { createExecutor } from "../executor.mjs";
 import { ejecutarCli, analizar } from "../cli.mjs";
 
 const huella = (token) => createHash("sha256").update(token).digest("hex");
@@ -27,8 +27,8 @@ if (brief.includes("DORMIR")) setInterval(() => {}, 1000);
 else if (brief.includes("FALLAR")) { console.log(JSON.stringify({ type: "result", is_error: true, result: "mal" })); process.exit(1); }
 else setTimeout(() => { console.log(JSON.stringify({ type: "result", session_id: "conv-1", result: "Respuesta para: " + brief })); }, 150);`,
   );
-  const registro = await abrirRegistro(path.join(dir, "sesiones.json"));
-  const ejecutor = crearEjecutor({
+  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
+  const ejecutor = createExecutor({
     registro,
     proyectos: { demo: dir },
     comando: (_motor, brief) => ({
@@ -36,7 +36,7 @@ else setTimeout(() => { console.log(JSON.stringify({ type: "result", session_id:
       args: [falso, brief],
     }),
   });
-  const servidor = crearServidor({
+  const servidor = createLauncherServer({
     registro,
     ejecutor,
     proyectos: { demo: dir },

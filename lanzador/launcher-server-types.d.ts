@@ -1,10 +1,10 @@
-import type { crearAcciones } from "./actions.mjs";
+import type { createActions } from "./actions.mjs";
 import type { createToolCatalogStore } from "./tool-catalog.mjs";
-import type { crearEjecutor } from "./executor.mjs";
-import type { abrirEquipos } from "./teams.mjs";
-import type { abrirEspacios } from "./workspaces.mjs";
-import type { crearItems } from "./items.mjs";
-import type { crearCatalogo } from "./models.mjs";
+import type { createExecutor } from "./executor.mjs";
+import type { openTeams } from "./teams.mjs";
+import type { openWorkspaces } from "./workspaces.mjs";
+import type { createItems } from "./items.mjs";
+import type { createModelCatalog } from "./models.mjs";
 import type { ConversationAnswer } from "./provider-conversation-types.mjs";
 import type { createProviderConversations } from "./provider-conversations.mjs";
 import type { SessionRegistry } from "./session-types.d.ts";
@@ -12,18 +12,18 @@ import type { DeliveryInput, IntegrationOptions } from "./team-types.d.ts";
 import type { ExecutionRequest, TerminalInput } from "./types.d.ts";
 
 type ToolCatalog = Awaited<ReturnType<typeof createToolCatalogStore>>;
-type WorkspaceRegistry = Awaited<ReturnType<typeof abrirEspacios>>;
+type WorkspaceRegistry = Awaited<ReturnType<typeof openWorkspaces>>;
 
 export interface LauncherServerOptions {
   registro: SessionRegistry;
-  ejecutor: ReturnType<typeof crearEjecutor>;
+  ejecutor: ReturnType<typeof createExecutor>;
   conversations?: ReturnType<typeof createProviderConversations> | null;
   toolCatalog?: ToolCatalog | null;
-  catalogo?: ReturnType<typeof crearCatalogo>;
+  catalogo?: ReturnType<typeof createModelCatalog>;
   uso?: () => Promise<unknown>;
-  items?: ReturnType<typeof crearItems>;
-  acciones?: ReturnType<typeof crearAcciones>;
-  equipos?: Awaited<ReturnType<typeof abrirEquipos>>;
+  items?: ReturnType<typeof createItems>;
+  acciones?: ReturnType<typeof createActions>;
+  equipos?: Awaited<ReturnType<typeof openTeams>>;
   proyectos?: Record<string, string>;
   espacios?: WorkspaceRegistry;
   controlHash: string;

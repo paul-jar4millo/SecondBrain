@@ -3,25 +3,25 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { abrirRegistro } from "../sessions.mjs";
-import { abrirEquipos } from "../teams.mjs";
-import { crearEjecutor } from "../executor.mjs";
-import { abrirEspacios } from "../workspaces.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { openTeams } from "../teams.mjs";
+import { createExecutor } from "../executor.mjs";
+import { openWorkspaces } from "../workspaces.mjs";
 
 test("a project without a repository shares its original workspace with delegated sessions", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-project-team-"));
   await mkdir(path.join(dir, ".git"));
-  const registro = await abrirRegistro(path.join(dir, "sessions.json"));
-  const equipos = await abrirEquipos(path.join(dir, "teams"), {
+  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const equipos = await openTeams(path.join(dir, "teams"), {
     activo: (id) =>
       registro.leer().some((s) => s.id === id && s.estado === "trabajando"),
   });
-  const espacios = await abrirEspacios({
+  const espacios = await openWorkspaces({
     archivo: path.join(dir, "spaces.json"),
     proyectos: { repo: dir },
     workspaces: path.join(dir, "workspaces"),
   });
-  const runner = crearEjecutor({
+  const runner = createExecutor({
     registro,
     equipos,
     espacios,
@@ -66,8 +66,8 @@ test("un líder encarga hijas de otros motores y respeta el límite antes de arr
   t.after(() => rm(dir, { recursive: true, force: true }));
   const fake = path.join(dir, "fake.mjs");
   await writeFile(fake, "setTimeout(() => {}, 3000)");
-  const registro = await abrirRegistro(path.join(dir, "sesiones.json"));
-  const equipos = await abrirEquipos(path.join(dir, "equipos"), {
+  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
+  const equipos = await openTeams(path.join(dir, "equipos"), {
     activo: (id) =>
       registro
         .leer()
@@ -75,7 +75,7 @@ test("un líder encarga hijas de otros motores y respeta el límite antes de arr
           (s) => s.id === id && ["pendiente", "trabajando"].includes(s.estado),
         ),
   });
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     equipos,
     proyectos: { prueba: dir },
@@ -120,8 +120,8 @@ test("el padre puede esperar el resultado de su hija o recibir pendiente", async
     fake,
     'setTimeout(() => console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:"hecho"}})), 150)',
   );
-  const registro = await abrirRegistro(path.join(dir, "sesiones.json"));
-  const equipos = await abrirEquipos(path.join(dir, "equipos"), {
+  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
+  const equipos = await openTeams(path.join(dir, "equipos"), {
     activo: (id) =>
       registro
         .leer()
@@ -129,7 +129,7 @@ test("el padre puede esperar el resultado de su hija o recibir pendiente", async
           (s) => s.id === id && ["pendiente", "trabajando"].includes(s.estado),
         ),
   });
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     equipos,
     proyectos: { prueba: dir },

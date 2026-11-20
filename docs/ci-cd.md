@@ -58,7 +58,7 @@ raise the floor in the same pull request.
 
 The dashboard figure only counts `.ts`/`.tsx` files (see
 `dashboard/vitest.config.ts`); the remaining `.js` files in
-`src/features/sala` and `src/features/mundo` are not measured until they are
+`src/features/room` and `src/features/world` are not measured until they are
 converted to TypeScript.
 
 `service/tests/route-smoke.test.mjs` calls every route declared in

@@ -1,7 +1,7 @@
 // Controller for Claude Code through the Claude Agent SDK.
 import { randomUUID } from "node:crypto";
-import { ErrorLanzador } from "../../errors.mjs";
-import { IDENTIDAD_MARINA, validarAdjuntosMotor } from "../../engines.mjs";
+import { LauncherError } from "../../errors.mjs";
+import { IDENTIDAD_MARINA, validateEngineAttachments } from "../../engines.mjs";
 import {
   validateAndExtractElicitationContent,
   validateRequestedSchema,
@@ -400,7 +400,7 @@ export function createClaudeController(queryOverride = null) {
             }
             const mode = request?.mode || "form";
             if (mode !== "form") {
-              throw new ErrorLanzador(
+              throw new LauncherError(
                 `Modo de elicitación no soportado: "${mode}".`,
                 400,
               );
@@ -605,7 +605,7 @@ export function createClaudeController(queryOverride = null) {
         "DeepSeek bloqueado por la política de gasto sin autorización explícita de gasto. Usa un motor de suscripción o autoriza la ruta facturada.",
       );
     }
-    validarAdjuntosMotor(
+    validateEngineAttachments(
       /** @type {string} */ (ctx.session.motor),
       ctx.attachments || [],
       /** @type {string} */ (ctx.cwd),

@@ -3,7 +3,7 @@
  * @param {unknown} valor
  * @param {{ env?: NodeJS.ProcessEnv, textos?: string[] }} [options]
  */
-export function ocultarDiagnostico(
+export function redactDiagnostic(
   valor,
   { env = process.env, textos = [] } = {},
 ) {

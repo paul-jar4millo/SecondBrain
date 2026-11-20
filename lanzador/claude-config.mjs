@@ -1,6 +1,6 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { carpetaAgy, esLineaUso, lineaUso } from "./usage.mjs";
+import { carpetaAgy, isUsageLine, usageLine } from "./usage.mjs";
 
 /** @typedef {{ command?: string, type?: string, stack_with_default?: boolean }} StatusLine */
 /**
@@ -21,7 +21,7 @@ import { carpetaAgy, esLineaUso, lineaUso } from "./usage.mjs";
  * @param {string | undefined} firma
  */
 const lineaMedidora = (actual, motor, carpeta, firma) =>
-  actual && !esLineaUso(actual) ? null : lineaUso(motor, carpeta, firma);
+  actual && !isUsageLine(actual) ? null : usageLine(motor, carpeta, firma);
 
 /**
  * An unattended harness cannot answer Claude Code's first-run dialogs, so the
@@ -33,7 +33,7 @@ const lineaMedidora = (actual, motor, carpeta, firma) =>
  * @param {string} cwd
  * @param {{ firma?: string, medir?: boolean }} [options]
  */
-export async function prepararClaude(configDir, cwd, { firma, medir } = {}) {
+export async function prepareClaude(configDir, cwd, { firma, medir } = {}) {
   if (!configDir || !cwd) return;
   await modificar(path.join(configDir, ".claude.json"), (datos) => {
     const proyecto = datos.projects?.[cwd] || {};
@@ -69,7 +69,7 @@ export async function prepararClaude(configDir, cwd, { firma, medir } = {}) {
  * @param {string | undefined} home
  * @param {string} cwd
  */
-export async function prepararAgy(home, cwd) {
+export async function prepareAgy(home, cwd) {
   if (!home || !cwd) return;
   const carpeta = carpetaAgy(home);
   await modificar(path.join(carpeta, "settings.json"), (datos) => {

@@ -9,7 +9,7 @@ export const teamApi = async (
   timeout?: number,
 ) =>
   isDemo
-    ? (await import("../sala/sala-demo")).apiDemo(path, body)
+    ? (await import("../room/room-demo")).apiDemo(path, body)
     : api(path, {
         ...(body === undefined
           ? {}

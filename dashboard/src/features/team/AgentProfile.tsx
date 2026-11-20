@@ -3,7 +3,7 @@ import { ArrowLeft, Copy } from "lucide-react";
 import { useUI } from "../../components/ui";
 import { projectPrompt, taskPrompt } from "../../core/agent-prompt";
 import { today } from "../../core/model";
-import { espaciosDe } from "../sala/sala-espacios";
+import { espaciosDe } from "../room/room-workspaces";
 import { character } from "./characters";
 import { type AgentTarget } from "./team-controller";
 import { useTeam } from "./team-store";
