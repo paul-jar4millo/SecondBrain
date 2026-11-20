@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
 
-// Read live state: a missing/corrupt journal must never authorize a restart.
+// Waits until no thread is mid-turn, so the deploy can restart the launcher.
+// Read live state: an unreachable launcher or an unexpected answer must never
+// authorize a restart.
+const BUSY = "setting-up,running,closing";
+
 try {
   const wait = Number(process.env.SB_DEPLOY_WAIT_MS ?? 900000);
   const poll = Number(process.env.SB_DEPLOY_POLL_MS ?? 5000);
@@ -14,7 +18,7 @@ try {
     )
   ).trim();
   const endpoint = new URL(
-    "/estado",
+    `/threads?status=${BUSY}`,
     process.env.LANZADOR_URL || "http://127.0.0.1:8092",
   );
   if (endpoint.hostname !== "127.0.0.1" || endpoint.protocol !== "http:")
@@ -28,24 +32,15 @@ try {
       ),
     });
     if (!response.ok) throw new Error();
-    const sessions = await response.json();
-    if (
-      !Array.isArray(sessions) ||
-      sessions.some((s) => !s || typeof s.estado !== "string")
-    )
-      throw new Error();
-    if (
-      !sessions.some(
-        (s) => ["pendiente", "trabajando"].includes(s.estado) || s.interactiva,
-      )
-    )
-      break;
+    const body = await response.json();
+    if (!Array.isArray(body?.threads)) throw new Error();
+    if (body.threads.length === 0) break;
     if (Date.now() >= deadline) throw new Error();
     await setTimeout(Math.min(poll, Math.max(1, deadline - Date.now())));
   }
 } catch {
   console.error(
-    "Lanzador pendiente: hay sesiones activas o no se pudo confirmar su estado. Reintentar al terminar.",
+    "Lanzador pendiente: hay threads trabajando o no se pudo confirmar su estado. Reintentar al terminar.",
   );
   process.exitCode = 1;
 }
