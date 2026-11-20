@@ -60,8 +60,7 @@ it("keeps an invalid transfer open and saves only after choosing a different des
           trash: vi.fn(),
           notify,
           ask: vi.fn(),
-          openAgent: vi.fn(),
-          openTeam: vi.fn(),
+          openThread: vi.fn(),
         }}
       >
         <ItemEditor value={transfer} onClose={close} />
@@ -96,8 +95,7 @@ it("recovers the typed task after closing and reopening its local draft", async 
     trash: vi.fn(),
     notify: vi.fn(),
     ask: vi.fn(),
-    openAgent: vi.fn(),
-    openTeam: vi.fn(),
+    openThread: vi.fn(),
   };
   const view = render(
     <UI.Provider value={context}>

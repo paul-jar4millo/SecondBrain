@@ -1,10 +1,6 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { plainTitle } from "../src/core/labels";
 import { financeUpdatePrompt } from "../src/core/agent-prompt";
-import { prepareAgentDraft } from "../src/features/team/agent-draft";
-
-afterEach(() => vi.unstubAllGlobals());
-
 it("shows vault titles without Markdown or wikilink markup", () => {
   expect(plainTitle("**Probar una restauración real** y documentarla")).toBe(
     "Probar una restauración real y documentarla",
@@ -39,20 +35,4 @@ it("names each capture and treats the typed balances as already recorded", () =>
       balances: [],
     }),
   ).not.toContain("Saldos que ya registré");
-});
-
-it("prefills the agent draft without losing what was already written", () => {
-  const values = new Map<string, string>([
-    ["sb-chat-draft:general:claude", "Borrador previo"],
-  ]);
-  vi.stubGlobal("localStorage", {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => values.set(key, value),
-  });
-  const route = prepareAgentDraft("general", "ambar", "Mensaje");
-  expect(route).toBe("/team?project=general&agent=ambar&chat=new");
-  expect(values.get("sb-chat-draft:general:claude")).toBe(
-    "Borrador previo\n\nMensaje",
-  );
-  expect(values.get("sb-chat-selected:general:claude")).toBe("new");
 });

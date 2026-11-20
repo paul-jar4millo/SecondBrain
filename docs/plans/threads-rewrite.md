@@ -1,9 +1,11 @@
 # Plan: reescritura del chat de agentes como sistema de **Threads**
 
-> **Estado (2026-11-20).** En `main`: A0–A9 (#41–#50), fixes #51 y #53;
-> v0.4.0 desplegada y paso de datos de A9 hecho; v0.4.1 pendiente de
-> aprobación. Falta la lista e2e con Codex y A10. Después: **fase 1.5**
-> (despliegue robusto y servidor en inglés), luego B, C y D.
+> **Estado (2026-11-20).** A0–A10 quedan incluidos en v0.4.2. El paso de
+> datos de A9 está hecho. La prueba con Codex real en el LXC pasó sobre
+> v0.4.1: turno, redirección dentro del mismo turno, diff, merge y archivado
+> sin worktree, rama ni scope residual. También se comprobaron los límites
+> del scope activo y las reglas de nftables del lanzador. Sigue la
+> **fase 1.5** (despliegue robusto y servidor en inglés), luego B, C y D.
 
 ## Contexto
 

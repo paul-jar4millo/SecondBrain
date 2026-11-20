@@ -5,15 +5,6 @@ import { Markdown } from "../../components/Markdown";
 import { DiffFiles } from "./DiffView";
 import type { Item, ItemOf } from "./thread-types";
 
-const CHARACTER: Record<string, string> = {
-  claude: "Ámbar",
-  codex: "Menta",
-  agy: "Lira",
-  deepseek: "Marina",
-};
-export const agentName = (engine?: string) =>
-  (engine && CHARACTER[engine]) || engine || "Agente";
-
 const STEP_MARK = { pending: "○", in_progress: "◐", completed: "●" } as const;
 
 function Steps({

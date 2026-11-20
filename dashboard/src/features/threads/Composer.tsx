@@ -6,19 +6,22 @@ import {
   saveChoice,
   type Model,
   type ModelChoice,
-} from "../team/ModelEffortPicker";
-import { agentName } from "./items";
+} from "../agents/ModelEffortPicker";
+import { UsageBars } from "../agents/UsageBars";
+import { agentName, characters } from "../agents/characters";
+import { isDemo } from "../../core/store";
 import { threadsApi } from "./thread-api";
 import type { ThreadView } from "./thread-store";
 import type { AgentRef, Engine } from "./thread-types";
 
-export const ENGINES: Engine[] = ["claude", "codex", "agy", "deepseek"];
+const ENGINES = characters.map((agent) => agent.engine);
 
 let catalog: Promise<Record<string, Model[]>> | null = null;
 /** The launcher's model list, loaded once per page. */
 export function useModels() {
   const [models, setModels] = useState<Record<string, Model[]>>({});
   useEffect(() => {
+    if (isDemo) return;
     let alive = true;
     catalog ??= threadsApi.models().catch(() => {
       catalog = null;
@@ -51,6 +54,7 @@ export function AgentPicker({
       <label>
         Agente
         <select
+          aria-label="Agente"
           value={engine}
           onChange={(e) => onEngine(e.target.value as Engine)}
         >
@@ -148,6 +152,9 @@ export function Composer({
           onChoice={setChoice}
           models={models}
         />
+      )}
+      {!isDemo && (
+        <UsageBars motor={showAgent ? engine : thread.agent.engine} />
       )}
       <textarea
         aria-label="Mensaje"

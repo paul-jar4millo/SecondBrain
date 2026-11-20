@@ -91,7 +91,6 @@ in [modules/service.md](modules/service.md#threads-adr-0010).
 | GET        | `/agentes/mi-capacidad`                                             | room — capabilities of the calling thread  |
 | GET / POST | `/agentes/espacios`                                                 | Project ↔ repository links                 |
 | GET        | `/agentes/proyectos-lanzador`                                       | Registered repositories                    |
-| GET        | `/agentes/sesiones`                                                 | Always empty; kept for the scene until A10 |
 | GET        | `/agentes/herramientas/catalogo`                                    | room — tool and skill catalog              |
 | POST       | `/agentes/herramientas/perfiles`                                    | Tool profiles                              |
 | POST       | `/agentes/herramientas/skills/resolver`                             | room — resolve skills for a profile        |

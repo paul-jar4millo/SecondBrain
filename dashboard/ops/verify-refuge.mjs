@@ -72,7 +72,6 @@ const noOverflow = async (page) => {
 const TOOLS = [
   "Proyectos",
   "Threads",
-  "Equipo",
   "Tareas",
   "Finanzas",
   "Maletín",
@@ -220,12 +219,12 @@ try {
     await librarySays("5 tareas pendientes", "4 para hoy");
     report.worldDataUpdates = true;
 
-    // Proximity and E: the Terrace opens Equipo.
+    // Proximity and E: the Terrace opens Threads.
     await page.evaluate(() => window.__refugio.walkTo(0.25, 3.75));
     await page.waitForFunction(
       () =>
         document.querySelector("#room-quick-action")?.textContent ===
-        "E · Equipo en la Terraza",
+        "E · Threads en la Terraza",
       undefined,
       // Match the Library's allowance for software WebGL on slower CI runners.
       { timeout: 60000 },
@@ -233,7 +232,7 @@ try {
     console.log("Refugio: proximidad lista");
     await page.locator("canvas").focus();
     await page.keyboard.press("KeyE");
-    await page.waitForURL(/\/team$/);
+    await page.waitForURL(/\/threads$/);
     assert.equal(
       await page.evaluate(() => localStorage.getItem("sb-room-tour-v1")),
       "done",
@@ -256,9 +255,9 @@ try {
       underTool,
       { polling: 100, timeout: 10000 },
     );
-    report.proximityE = "E · Equipo en la Terraza";
+    report.proximityE = "E · Threads en la Terraza";
 
-    // A click in empty air where the hidden Terrace sign hangs must not open Equipo.
+    // A click in empty air where the hidden Terrace sign hangs must not open Threads.
     const sign = await page.evaluate(() =>
       window.__refugio.project(0, 3.1, 2.2),
     );
@@ -332,9 +331,11 @@ try {
     );
     await page.locator("canvas").focus();
     await page.keyboard.press("KeyE");
-    await page
-      .locator(".conversation-heading h2", { hasText: "Marina" })
-      .waitFor();
+    const draft = page.getByRole("dialog", { name: "Nuevo thread" });
+    assert.equal(
+      await draft.getByLabel("Agente", { exact: true }).inputValue(),
+      "deepseek",
+    );
     assert.ok(await page.locator('[data-status="marina"]').innerText());
     await page.keyboard.press("Escape");
     await page.locator("dialog[open]").waitFor({ state: "detached" });
@@ -393,17 +394,10 @@ try {
     assert.equal(await page.locator("#room-guide").isHidden(), true);
     report.firstWalkAndSound = true;
 
-    // Team configuration now lives in the shared tools dialog.
     await page.locator(".team-toggle").click();
     await page
-      .getByRole("combobox", { name: "Proyecto", exact: true })
+      .getByRole("button", { name: "Nuevo thread", exact: true })
       .waitFor();
-    await page.locator(".team-character-card").first().waitFor();
-    assert.equal(await page.locator(".team-character-card").count(), 4);
-    assert.equal(
-      await page.getByRole("button", { name: "Nuevo flujo" }).count(),
-      0,
-    );
     await page.keyboard.press("Escape");
     await page.locator("dialog[open]").waitFor({ state: "detached" });
     report.overlayStack = {
@@ -434,19 +428,19 @@ try {
     }
     await page.keyboard.press("Escape");
     await page.locator('[data-agent="ambar"]').click();
-    await page
-      .locator(".conversation-heading h2", { hasText: "Ámbar" })
-      .waitFor();
-    await page
-      .getByRole("button", { name: "Abrir conversación", exact: true })
-      .waitFor();
-    await page
-      .locator(".team-character-card")
-      .filter({ hasText: "Ámbar" })
-      .click();
-    await page
-      .getByRole("textbox", { name: "Mensaje para Ámbar" })
+    assert.equal(
+      await draft.getByLabel("Agente", { exact: true }).inputValue(),
+      "claude",
+    );
+    await draft
+      .getByRole("textbox", { name: "Tarea" })
       .fill("Borrador de prueba");
+    await page.keyboard.press("Escape");
+    await draft.waitFor({ state: "detached" });
+    await page
+      .getByRole("navigation", { name: "Herramientas del HUD" })
+      .getByText("Tareas", { exact: true })
+      .click();
     report.escapeFromTextarea = true;
     // The reference board belongs to each project.
     await page
@@ -720,8 +714,8 @@ try {
       viewport: { width: 1280, height: 720 },
       reducedMotion: "reduce",
     });
-    await privateView.route("**/api/v1/agentes/sesiones*", (route) =>
-      route.fulfill({ json: [] }),
+    await privateView.route("**/api/v1/threads", (route) =>
+      route.fulfill({ json: { threads: [] } }),
     );
     await privateView.route("**/api/v1/finance/overview", (route) =>
       route.fulfill({
@@ -823,9 +817,13 @@ try {
     await privatePage.keyboard.press("Escape");
     report.moneyPrivacyAcrossToolAndWorld = true;
     await privatePage.locator('[data-agent="marina"]').click();
-    await privatePage
-      .locator(".conversation-heading h2", { hasText: "Marina" })
-      .waitFor();
+    assert.equal(
+      await privatePage
+        .getByRole("dialog", { name: "Nuevo thread" })
+        .getByLabel("Agente", { exact: true })
+        .inputValue(),
+      "deepseek",
+    );
     report.agentPanelWithoutRunner = true;
     await privateView.close();
   }
@@ -846,9 +844,13 @@ try {
       .getByText("No se pudo abrir el mundo 3D.", { exact: false })
       .waitFor();
     await withoutGL.locator('[data-agent="marina"]').click();
-    await withoutGL
-      .locator(".conversation-heading h2", { hasText: "Marina" })
-      .waitFor();
+    assert.equal(
+      await withoutGL
+        .getByRole("dialog", { name: "Nuevo thread" })
+        .getByLabel("Agente", { exact: true })
+        .inputValue(),
+      "deepseek",
+    );
     report.noWebGLFallback = true;
     await fallback.close();
   }

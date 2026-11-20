@@ -8,9 +8,6 @@ export const agentCatalogRoutes = (ctx, req) => {
   const { lanzador } = ctx;
   const { request, response } = req;
   return {
-    // The session-era list is gone (ADR 0010); the scene and the old panels
-    // read an empty list until they move to the thread projection.
-    "GET /agentes/sesiones": async () => send(response, 200, []),
     "GET /agentes/espacios": async () =>
       send(response, 200, await lanzador.espacios()),
     "POST /agentes/espacios": async () =>

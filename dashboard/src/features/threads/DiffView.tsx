@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { lineKind } from "../team/harness-changes";
+import { lineKind } from "./diff-lines";
 import { threadsApi } from "./thread-api";
 import type { FileDiff } from "./thread-types";
 

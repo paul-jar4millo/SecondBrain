@@ -19,7 +19,7 @@ import {
 } from "../core/model";
 import { labels } from "./item-labels";
 import { searchableItems } from "../core/overview";
-import type { AgentTarget, TeamTarget } from "../features/team/team-controller";
+import type { ThreadTarget } from "../features/threads/thread-target";
 export const UI = createContext<{
   items: Item[];
   edit: (item: Item | Kind) => void;
@@ -27,16 +27,14 @@ export const UI = createContext<{
   trash: (item: Item) => void;
   /** Opens the agent handoff with a ready-to-copy prompt. */
   ask: (prompt: string) => void;
-  openAgent: (target: AgentTarget) => void;
-  openTeam: (target?: TeamTarget) => void;
+  openThread: (target?: ThreadTarget) => void;
 }>({
   items: [],
   edit: () => {},
   notify: () => {},
   trash: () => {},
   ask: () => {},
-  openAgent: () => {},
-  openTeam: () => {},
+  openThread: () => {},
 });
 export const useUI = () => useContext(UI);
 export function Modal({

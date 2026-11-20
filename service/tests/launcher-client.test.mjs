@@ -118,7 +118,6 @@ test("catalog routes deny the room credential and the session routes are gone", 
   const projects = await fetch(base + "/agentes/proyectos-lanzador");
   assert.equal(projects.status, 200);
   assert.deepEqual(await projects.json(), ["demo"]);
-  assert.deepEqual(await (await fetch(base + "/agentes/sesiones")).json(), []);
   for (const route of [
     "/agentes/espacios",
     "/agentes/proyectos-lanzador",
@@ -134,6 +133,7 @@ test("catalog routes deny the room credential and the session routes are gone", 
       route,
     );
   for (const route of [
+    "/agentes/sesiones",
     "/agentes/terminal/stream?id=f1111111-1111-4111-8111-111111111111",
     "/agentes/sesiones/diff?id=f1111111-1111-4111-8111-111111111111",
     "/encargos",

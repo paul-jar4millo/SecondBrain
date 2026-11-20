@@ -1,67 +1,42 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageHeading } from "../../components/PageHeading";
 import { useConfirmation } from "../../components/useConfirmation";
 import { Composer } from "./Composer";
 import { DiffView } from "./DiffView";
 import { CloseDialog, NewThreadDialog } from "./dialogs";
-import { WorkItem, agentName } from "./items";
+import { WorkItem } from "./items";
+import { agentName } from "../agents/characters";
+import { isDemo } from "../../core/store";
+import { threadProjection, useThreadProjection } from "./thread-projection";
 import { threadsApi } from "./thread-api";
 import { STATUS_LABEL, openRequests, type ThreadView } from "./thread-store";
-import { followFeed, useThread } from "./thread-stream";
+import { useThread } from "./thread-stream";
 import type { InboxEntry, Thread } from "./thread-types";
 import { Timeline } from "./Timeline";
 import "./threads.css";
 
-const ACTIVE =
-  "setting-up,idle,running,waiting-user,in-review,ready-for-review,needs-decision,closing";
-
-/** Thread list and inbox, refreshed by the global feed. */
-function useThreadList() {
-  const [threads, setThreads] = useState<Thread[]>([]);
-  const [inbox, setInbox] = useState<InboxEntry[]>([]);
+function useInbox(projection: ReturnType<typeof useThreadProjection>) {
+  const [entries, setEntries] = useState<InboxEntry[]>([]);
   const [error, setError] = useState("");
-  const [loaded, setLoaded] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const refresh = useCallback(async () => {
-    try {
-      const [list, box] = await Promise.all([
-        threadsApi.list(ACTIVE),
-        threadsApi.inbox(),
-      ]);
-      setThreads(list.threads);
-      setInbox(box.entries);
-      setError("");
-      return list.globalSeq ?? null;
-    } catch (e) {
-      setError((e as Error).message);
-      return null;
-    } finally {
-      setLoaded(true);
-    }
-  }, []);
   useEffect(() => {
-    let stop = () => {};
-    let alive = true;
-    void refresh().then((globalSeq) => {
-      if (!alive || globalSeq === null) return;
-      stop = followFeed(globalSeq, (event) => {
-        // Deltas are not in the feed; a thread or request change is enough.
-        if (event.type.startsWith("item.")) return;
-        if (timer.current) return;
-        timer.current = setTimeout(() => {
-          timer.current = null;
-          void refresh();
-        }, 500);
+    if (isDemo || !projection.loaded || projection.error) return;
+    let active = true;
+    void threadsApi
+      .inbox()
+      .then(({ entries }) => {
+        if (!active) return;
+        setEntries(entries);
+        setError("");
+      })
+      .catch((error: Error) => {
+        if (active) setError(error.message);
       });
-    });
     return () => {
-      alive = false;
-      stop();
-      if (timer.current) clearTimeout(timer.current);
+      active = false;
     };
-  }, [refresh]);
-  return { threads, inbox, error, loaded, refresh };
+  }, [projection]);
+  return { entries, error };
 }
 
 function ThreadList({
@@ -279,7 +254,8 @@ function ThreadDetail({
 export function ThreadsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const list = useThreadList();
+  const list = useThreadProjection();
+  const inbox = useInbox(list);
   const [creating, setCreating] = useState(false);
   return (
     <div className="threads-page" data-selected={id ? true : undefined}>
@@ -292,9 +268,11 @@ export function ThreadsPage() {
         >
           Nuevo thread
         </button>
-        {list.error && <p className="inline-error">{list.error}</p>}
-        <InboxList entries={list.inbox} />
-        {list.loaded ? (
+        {(list.error || inbox.error) && (
+          <p className="inline-error">{list.error || inbox.error}</p>
+        )}
+        <InboxList entries={inbox.entries} />
+        {list.loaded || isDemo ? (
           <ThreadList threads={list.threads} selected={id} />
         ) : (
           <p role="status">Cargando threads…</p>
@@ -305,7 +283,7 @@ export function ThreadsPage() {
           <ThreadDetail
             key={id}
             id={id}
-            onChanged={() => void list.refresh()}
+            onChanged={() => void threadProjection.refresh()}
           />
         ) : (
           <p className="muted thread-empty">
@@ -318,7 +296,7 @@ export function ThreadsPage() {
           onClose={() => setCreating(false)}
           onCreated={(thread) => {
             setCreating(false);
-            void list.refresh();
+            void threadProjection.refresh();
             navigate(`/threads/${thread.id}`);
           }}
         />
