@@ -4,6 +4,26 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `dashboard`: a failed, overdue or unreadable off-host backup appears in the
+  reminders panel, read from `maintenance.backup` in `/api/v1/health`.
+
+### Fixed
+
+- `lanzador`: a message sent just as a turn ends is queued and delivered in the
+  next turn instead of being accepted and never sent; a message queued after
+  the session went idle starts that turn too.
+- `service`: a work order keeps recording a follow-up turn started by a message
+  sent during the previous one, including its artifacts.
+- `lanzador`: an interactive session attaches its output and exit listeners
+  before its first await, so early output is no longer lost from the screen and
+  a fast exit can no longer leave the session working forever.
+- Tests: the artifact end-to-end test reproduces the follow-up race on purpose
+  and two terminal tests no longer depend on timing.
+
 ## [0.1.1] - 2026-11-19
 
 ### Fixed
