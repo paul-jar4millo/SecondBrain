@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -106,4 +106,24 @@ test("selecciona la release compatible retenida cuando current apunta a un rollb
   assert.equal(select(compatible, old).stdout.trim(), compatible);
   await writeFile(index, "corrupto");
   assert.equal(select(compatible, old).status, 1);
+});
+
+test("la marca real del lanzador cumple también el formato estricto de helpers ya instalados", async (t) => {
+  const marker = await readFile(
+    new URL("../../lanzador/registro-version.mjs", import.meta.url),
+    "utf8",
+  );
+  // Helpers installed before 0.1.1 only accept a file made of the export line.
+  assert.match(marker, /^\s*export const REGISTRO_VERSION = ([1-9]\d*);\s*$/);
+  const run = await fixture(t, migrated, marker);
+  assert.equal(run().status, 0);
+});
+
+test("la marca admite comentarios de línea antes de la exportación", async (t) => {
+  const run = await fixture(
+    t,
+    migrated,
+    "// @ts-check\n\nexport const REGISTRO_VERSION = 2;\n",
+  );
+  assert.equal(run().status, 0);
 });

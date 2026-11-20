@@ -54,9 +54,11 @@ async function supports(release, required) {
     path.join(release, "lanzador/registro-version.mjs"),
     "utf8",
   ).catch(() => "");
-  const version = /^\s*export const REGISTRO_VERSION = ([1-9]\d*);\s*$/.exec(
-    marker,
-  )?.[1];
+  // Only line comments may precede the export; any other statement is rejected.
+  const version =
+    /^(?:[ \t]*(?:\/\/[^\n]*)?\r?\n)*\s*export const REGISTRO_VERSION = ([1-9]\d*);\s*$/.exec(
+      marker,
+    )?.[1];
   return Number(version) >= required;
 }
 

@@ -5,7 +5,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile, stat, realpath, open } from "node:fs/promises";
-import { watch } from "node:fs";
+import { readFileSync, watch } from "node:fs";
 import { zip, strToU8 } from "fflate";
 import { acquireInstance } from "./instance.mjs";
 import { hash } from "./vault.mjs";
@@ -40,6 +40,10 @@ import {
   createEffectsExecutor,
 } from "./effects-executor.mjs";
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
+// Reported by /health; the release package always ships service/package.json.
+const APP_VERSION = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+).version;
 export async function createApplication(options = {}) {
   const root = await discoverVault(
     options.vaultRoot || process.env.VAULT_ROOT || "/srv/secondbrain/vault",
@@ -1032,7 +1036,7 @@ export async function createApplication(options = {}) {
               .catch(() => false);
             return send(response, ready ? 200 : 503, {
               status: ready ? "ready" : "unavailable",
-              version: "0.2.0",
+              version: APP_VERSION,
               storage: "obsidian-markdown",
               maintenance: await operationalStatus({
                 stateFile: "/var/lib/secondbrain-ops/backup-status.json",
