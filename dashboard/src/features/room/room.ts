@@ -13,7 +13,8 @@ import {
   MODEL_NAMES,
   cargarTodos,
   createCharacter,
-} from "./room-characters.js";
+  type SceneSpec,
+} from "./room-characters";
 import {
   createNavigation,
   activityFor,
@@ -25,7 +26,7 @@ import {
   zoneGuide,
   tourInstructions,
 } from "./room-life";
-import { FONDO, dressWorld } from "./room-world.js";
+import { FONDO, dressWorld } from "./room-world";
 import { characterState, etiquetaRoster } from "./team-panel";
 import { cursorFor, pickTarget } from "./room-pick";
 import { createOverlayStack } from "./room-overlays";
@@ -79,7 +80,7 @@ import type {
   TeamEvent,
 } from "../team/team-controller";
 import type { RoomSummary } from "./room-summary";
-type Spec = (typeof AGENT_SPECS)[number];
+type Spec = SceneSpec;
 type Person = Awaited<ReturnType<typeof createCharacter>>;
 interface Actor extends Person {
   route: Point[];

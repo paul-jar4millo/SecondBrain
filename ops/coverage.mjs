@@ -34,7 +34,7 @@ const linePercent = (file) => {
 
 // Minimum line coverage per module. Raise a floor when coverage improves; never
 // lower it. Baseline 2026-11-19 (v0.1.2), raised after the type work.
-const floors = { service: 87, mcp: 41, launcher: 68, dashboard: 40 };
+const floors = { service: 87, mcp: 41, launcher: 68, dashboard: 42 };
 /** @type {string[]} */
 const failures = [];
 /** @param {keyof typeof floors} module */
