@@ -21,7 +21,7 @@ async function runWait(t, responses) {
   let calls = 0;
   const server = createServer((req, res) => {
     assert.equal(req.headers.authorization, "Bearer synthetic-control");
-    assert.equal(req.url, "/estado");
+    assert.equal(req.url, "/threads?status=setting-up,running,closing");
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(responses[Math.min(calls++, responses.length - 1)]));
   });
@@ -49,20 +49,26 @@ async function runWait(t, responses) {
   return { code, calls };
 }
 
-test("espera las sesiones activas antes de autorizar el reinicio", async (t) => {
+test("waits for busy threads before allowing the restart", async (t) => {
   const result = await runWait(t, [
-    [{ estado: "trabajando" }],
-    [{ estado: "terminada" }],
+    { threads: [{ id: "thr_a", status: "running" }], globalSeq: 1 },
+    { threads: [], globalSeq: 2 },
   ]);
   assert.equal(result.code, 0);
   assert.ok(result.calls >= 2);
 });
 
-test("no autoriza reiniciar un terminal interactivo ni al agotarse el plazo", async (t) => {
+test("never allows the restart once the wait runs out", async (t) => {
   assert.equal(
-    (await runWait(t, [[{ estado: "terminada", interactiva: true }]])).code,
+    (await runWait(t, [{ threads: [{ id: "thr_a" }], globalSeq: 1 }])).code,
     1,
   );
+});
+
+// A9 changed /estado to {ok:true}; the old check read it as "sessions busy"
+// forever and every deploy pinned the previous launcher.
+test("the launcher health answer is not a list of threads", async (t) => {
+  assert.equal((await runWait(t, [{ ok: true }])).code, 1);
 });
 
 test("una respuesta inválida nunca equivale a cero sesiones", async (t) => {
