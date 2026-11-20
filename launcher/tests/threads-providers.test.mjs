@@ -7,6 +7,7 @@ import { spawn as nodeSpawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { createGit } from "../git.mjs";
 import { openThreads } from "../threads/runtime.mjs";
 import { createProviderContextFactory } from "../threads/provider-context.mjs";
@@ -16,14 +17,15 @@ import {
   isPidAlive,
   waitFor,
 } from "./helpers/provider-fakes.mjs";
+import { repoSintetico } from "./helpers-git.mjs";
 
 const TIMEOUT = 15000;
 
 /**
  * @param {import("node:test").TestContext} t
- * @param {{ mode?: string }} [options]
+ * @param {{ mode?: string, projects?: Record<string, string> }} [options]
  */
-async function setup(t, { mode } = {}) {
+async function setup(t, { mode, projects = {} } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-threads-providers-"));
   const codexScript = path.join(dir, "codex-fake.mjs");
   const acpScript = path.join(dir, "acp-fake.mjs");
@@ -60,7 +62,7 @@ async function setup(t, { mode } = {}) {
   const threads = openThreads({
     env,
     dataDir: path.join(dir, "data"),
-    projects: {},
+    projects,
     git: createGit({ env: process.env }).git,
     maxActive: 2,
     context,
@@ -196,5 +198,30 @@ test(
     assert.match(second, /turno=2/);
     assert.equal(pidOf(first), pidOf(second));
     assert.equal(env.spawned.length, 1);
+  },
+);
+
+test(
+  "closing a repo thread stops the agent before removing its worktree",
+  { timeout: TIMEOUT },
+  async (t) => {
+    const repo = await repoSintetico(t);
+    const env = await setup(t, { projects: { demo: repo } });
+    const thread = await env.engine.create({
+      kind: "repo",
+      repoPath: "demo",
+      prompt: "hola",
+      agent: { engine: "codex" },
+    });
+    await waitFor(() => env.replies(thread.id).length === 1, TIMEOUT);
+    await env.engine.idle(thread.id);
+    const pid = Number(pidOf(env.replies(thread.id)[0]));
+    assert.ok(isPidAlive(pid));
+    // The agent's process lives inside the worktree; Windows refuses to
+    // remove a folder that is a process's working directory.
+    const closed = await env.engine.close(thread.id, { mode: "discard" });
+    assert.equal(closed.status, "done");
+    assert.equal(existsSync(thread.repo.worktree), false);
+    await waitFor(() => !isPidAlive(pid), TIMEOUT);
   },
 );
