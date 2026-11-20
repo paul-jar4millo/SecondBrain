@@ -265,6 +265,135 @@ test("mensajería estructurada: idempotencia, steer en vivo, cola cancelable y l
   );
 });
 
+/**
+ * A turn ends in two steps: the provider layer forgets it first, the executor
+ * frees the session afterwards. `gate` holds the session in between so a
+ * message can land exactly there.
+ */
+async function turnBoundary(t) {
+  const dir = await mkdtemp(path.join(tmpdir(), "sb-proto-boundary-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const prompts = [];
+  const inner = createProviderConversations({
+    directory: dir,
+    adapters: {
+      codex: async (ctx) => {
+        prompts.push(ctx.prompt);
+        await ctx.nativeId("th-boundary");
+        ctx.message(`m${prompts.length}`, "Hecho: " + ctx.prompt);
+        return { status: "completed" };
+      },
+    },
+  });
+  const gate = { hold: null, reached: false, release: () => {} };
+  const conversations = {
+    ...inner,
+    run: async (...args) => {
+      const result = await inner.run(...args);
+      gate.reached = true;
+      if (gate.hold) await gate.hold;
+      return result;
+    },
+  };
+  const registro = await abrirRegistro(path.join(dir, "sessions.json"));
+  const ejecutor = crearEjecutor({
+    registro,
+    proyectos: { demo: dir },
+    conversations,
+    env: {},
+  });
+  const holdNextTurn = () => {
+    gate.hold = new Promise((r) => {
+      gate.release = () => {
+        gate.hold = null;
+        r();
+      };
+    });
+  };
+  // The provider has completed the turn; the executor still holds it.
+  const turnHeld = async () => {
+    for (let i = 0; i < 200 && !gate.reached; i++)
+      await new Promise((r) => setTimeout(r, 5));
+  };
+  const deliveredSecond = async () => {
+    for (let i = 0; i < 200 && prompts.length < 2; i++)
+      await new Promise((r) => setTimeout(r, 5));
+  };
+  return {
+    prompts,
+    registro,
+    ejecutor,
+    inner,
+    conversations,
+    gate,
+    holdNextTurn,
+    turnHeld,
+    deliveredSecond,
+  };
+}
+
+test("un mensaje enviado justo cuando termina el turno se entrega en el siguiente", async (t) => {
+  const f = await turnBoundary(t);
+  f.holdNextTurn();
+  const s = await f.ejecutor.encargar({
+    motor: "codex",
+    origen: "encargo",
+    proyecto: "demo",
+    structured: true,
+    brief: "Primero",
+  });
+  await f.turnHeld();
+  const sent = await f.ejecutor.enviarMensaje(s.id, {
+    clientMessageId: "cm-boundary",
+    text: "Segundo",
+    mode: "send",
+  });
+  assert.equal(sent.queued, true);
+  f.gate.release();
+  await f.deliveredSecond();
+  await f.ejecutor.esperar(s.id);
+  assert.deepEqual(f.prompts, ["Primero", "Segundo"]);
+  const [command] = (await f.inner.snapshot(s.id)).commands.filter(
+    (c) => c.clientMessageId === "cm-boundary",
+  );
+  assert.ok(
+    ["entregado", "confirmado_proveedor"].includes(command.deliveryStatus),
+    command.deliveryStatus,
+  );
+});
+
+test("un mensaje encolado después de revisar la cola no queda varado", async (t) => {
+  const f = await turnBoundary(t);
+  const s = await f.ejecutor.encargar({
+    motor: "codex",
+    origen: "encargo",
+    proyecto: "demo",
+    structured: true,
+    brief: "Primero",
+  });
+  // The message is accepted while the turn runs, but reaches the queue only
+  // after the executor has freed the session and found the queue empty.
+  let enqueue;
+  const late = new Promise((r) => (enqueue = r));
+  const sendMessage = f.conversations.sendMessage;
+  f.conversations.sendMessage = async (...args) => {
+    await late;
+    return sendMessage(...args);
+  };
+  const sending = f.ejecutor.enviarMensaje(s.id, {
+    clientMessageId: "cm-late",
+    text: "Segundo",
+    mode: "send",
+  });
+  await f.ejecutor.esperar(s.id);
+  await new Promise((r) => setTimeout(r, 20));
+  enqueue();
+  assert.equal((await sending).queued, true);
+  await f.deliveredSecond();
+  await f.ejecutor.esperar(s.id);
+  assert.deepEqual(f.prompts, ["Primero", "Segundo"]);
+});
+
 test("recorrido vertical completo con puente service <-> lanzador: pregunta, respuesta, artefacto hash, interrupción sin contaminación y reanudación", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-vertical-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
