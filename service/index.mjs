@@ -33,6 +33,7 @@ import {
   validateNotePath,
 } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
+import { authRoutes } from "./http/routes/auth.mjs";
 import { roomRoutes } from "./http/routes/room.mjs";
 import { worldRoutes } from "./http/routes/world.mjs";
 
@@ -379,6 +380,7 @@ export async function createApplication(options = {}) {
         const req = { request, response, consulta, required, callerCap };
         /** @type {Partial<Record<string, () => Promise<unknown>>>} */
         const routes = {
+          ...authRoutes(context, req),
           ...roomRoutes(context, req),
           ...worldRoutes(context, req),
           "GET /health": async () => {
@@ -396,34 +398,6 @@ export async function createApplication(options = {}) {
                 runtimeLauncherFile: "/run/secondbrain-launcher-release",
               }),
             });
-          },
-          "GET /auth/status": async () => {
-            return send(response, 200, {
-              authenticated: auth.authenticated(request),
-              enabled: auth.enabled,
-              needsSetup: auth.enabled && !auth.state.passwordHash,
-              // Display name only (SB_OWNER_NAME); empty keeps the UI neutral.
-              ownerName: String(process.env.SB_OWNER_NAME ?? "")
-                .trim()
-                .slice(0, 60),
-            });
-          },
-          "GET /auth/csrf": async () => {
-            return send(response, 200, auth.csrf(request, response));
-          },
-          "POST /auth/setup": async () => {
-            return send(
-              response,
-              200,
-              await auth.setup(await body(request), request, response),
-            );
-          },
-          "POST /auth/login": async () => {
-            return send(
-              response,
-              200,
-              await auth.login(await body(request), request, response),
-            );
           },
           "GET /agentes/sesiones": async () => {
             const sesiones = await lanzador.leer();
@@ -840,20 +814,6 @@ export async function createApplication(options = {}) {
             change();
             return send(response, 200, { path: relative, hash: hash(content) });
           },
-          "POST /auth/logout": async () => {
-            await auth.logout(request, response);
-            return send(response, 204);
-          },
-          "POST /auth/totp/start": async () => {
-            return send(response, 200, await auth.startTotp());
-          },
-          "POST /auth/totp/enable": async () => {
-            return send(
-              response,
-              200,
-              await auth.enableTotp((await body(request)).code),
-            );
-          },
           "GET /vault/status": async () => {
             const snapshot = await vault.read();
             return send(response, 200, {
@@ -953,12 +913,6 @@ export async function createApplication(options = {}) {
               );
             change();
             return send(response, 200, result);
-          },
-          "GET /oauth/clientes": async () =>
-            send(response, 200, mcpRemoto.listar()),
-          "POST /oauth/clientes/revocar": async () => {
-            await mcpRemoto.revocar((await body(request)).id);
-            return send(response, 200, { ok: true });
           },
           "GET /aprobaciones": async () =>
             send(response, 200, aprobaciones.listar()),
