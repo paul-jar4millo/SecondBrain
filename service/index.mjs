@@ -12,21 +12,7 @@ import { MOTOR_ACTOR, intersectProfileBounds } from "./agent-profiles.mjs";
 
 import { body, send } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
-import { systemRoutes } from "./http/routes/system.mjs";
-import { vaultRoutes } from "./http/routes/vault.mjs";
-
-import { agentSessionRoutes } from "./http/routes/agents-sessions.mjs";
-import { agentToolRoutes } from "./http/routes/agents-tools.mjs";
-import { agentConversationRoutes } from "./http/routes/agents-conversation.mjs";
-import { workOrderRoutes } from "./http/routes/work-orders.mjs";
-import { requestRoutes } from "./http/routes/requests.mjs";
-import { effectRoutes } from "./http/routes/effects.mjs";
-import { approvalRoutes } from "./http/routes/approvals.mjs";
-import { fileRoutes } from "./http/routes/files.mjs";
-import { financeRoutes } from "./http/routes/finance.mjs";
-import { authRoutes } from "./http/routes/auth.mjs";
-import { roomRoutes } from "./http/routes/room.mjs";
-import { worldRoutes } from "./http/routes/world.mjs";
+import { buildRoutes } from "./http/routes/index.mjs";
 
 /** @import { ApplicationOptions, HttpRequest, ToolProfile } from "./types.d.ts" */
 /** @import { WorkOrderManifest } from "./work-order-types.d.ts" */
@@ -361,23 +347,7 @@ export async function createApplication(options = {}) {
           /** @type {string} */ (consulta.get(name));
         /** @type {import("./http/route-types.d.ts").RouteRequest} */
         const req = { request, response, consulta, required, callerCap };
-        /** @type {Partial<Record<string, () => Promise<unknown>>>} */
-        const routes = {
-          ...systemRoutes(context, req),
-          ...vaultRoutes(context, req),
-          ...agentSessionRoutes(context, req),
-          ...agentToolRoutes(context, req),
-          ...agentConversationRoutes(context, req),
-          ...workOrderRoutes(context, req),
-          ...requestRoutes(context, req),
-          ...effectRoutes(context, req),
-          ...approvalRoutes(context, req),
-          ...fileRoutes(context, req),
-          ...financeRoutes(context, req),
-          ...authRoutes(context, req),
-          ...roomRoutes(context, req),
-          ...worldRoutes(context, req),
-        };
+        const routes = buildRoutes(context, req);
         const handler = routes[method + " " + route];
         if (handler) return await handler();
         throw new Failure("Ruta de API no encontrada.", 404);
