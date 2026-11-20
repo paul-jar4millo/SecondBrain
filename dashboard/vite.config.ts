@@ -21,12 +21,21 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          three: ["three"],
-          react: ["react", "react-dom", "react-router-dom"],
-          offline: ["dexie", "fflate"],
+        // Vite 8 bundles with Rolldown, which has no object form of manualChunks.
+        codeSplitting: {
+          groups: [
+            { name: "three", test: /[\\/]node_modules[\\/]three[\\/]/ },
+            {
+              name: "react",
+              test: /[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/,
+            },
+            {
+              name: "offline",
+              test: /[\\/]node_modules[\\/](dexie|fflate)[\\/]/,
+            },
+          ],
         },
       },
     },
