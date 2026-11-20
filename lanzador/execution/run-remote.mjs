@@ -64,7 +64,7 @@ export function createRemoteRunner(config, state, deps) {
     const hijo = lanzarPty(
       "python3",
       [
-        fileURLToPath(new URL("./terminal.py", import.meta.url)),
+        fileURLToPath(new URL("../terminal.py", import.meta.url)),
         spec.bin,
         ...spec.args,
       ],
