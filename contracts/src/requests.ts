@@ -33,6 +33,15 @@ export const RequestAnswer = z
   });
 export type RequestAnswer = z.infer<typeof RequestAnswer>;
 
+/** A question an agent asks the owner through MCP (thread_ask_user). */
+export const AgentQuestion = z.object({
+  title: z.string().min(1).max(300),
+  body: z.string().max(20_000).default(""),
+  options: z.array(z.string().min(1).max(200)).max(20).optional(),
+  fields: z.array(RequestField).min(1).max(20).optional(),
+});
+export type AgentQuestion = z.infer<typeof AgentQuestion>;
+
 export const RequestStatus = z.enum([
   "open",
   "answered",

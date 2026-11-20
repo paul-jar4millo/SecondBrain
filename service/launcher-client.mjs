@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createThreadsClient } from "./launcher-threads-client.mjs";
 
 /** @import { LauncherSessionSummary } from "./types.d.ts" */
 
@@ -297,5 +298,6 @@ export function createLauncherClient(
         throw new Failure("Sesión inválida.", 400);
       return request(`/sesiones/${id}/eliminar`, {});
     },
+    threads: createThreadsClient({ base, secret, request, Failure }),
   };
 }

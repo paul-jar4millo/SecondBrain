@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApplication } from "../../service/index.mjs";
+import { isToolAllowedForOperations } from "../index.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -228,5 +229,16 @@ test("B: MCP stdio y brain-cli omiten herramientas fuera de perfil, ignoran SB_T
         },
       },
     ),
+  );
+});
+
+test("thread_ask_user follows user.ask like the usuario_* tools", () => {
+  assert.equal(
+    isToolAllowedForOperations("thread_ask_user", new Set(["user.ask"])),
+    true,
+  );
+  assert.equal(
+    isToolAllowedForOperations("thread_ask_user", new Set(["vault.read"])),
+    false,
   );
 });
