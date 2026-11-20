@@ -3,7 +3,7 @@ import { Failure } from "../../vault.mjs";
 import {
   THREAD_ID,
   THREAD_REQUEST_ID,
-  asSolicitud,
+  toLegacyRequest,
   waitThreadRequest,
 } from "./threads.mjs";
 /** @import { RouteModule } from "../route-types.d.ts" */
@@ -53,7 +53,7 @@ export const requestRoutes = (ctx, req) => {
           thread,
           query.get("id"),
         );
-        return send(response, 200, { solicitud: asSolicitud(found) });
+        return send(response, 200, { solicitud: toLegacyRequest(found) });
       }
       const solicitud = userRequests.get(query.get("id"));
       if (!solicitud) throw new Failure("Solicitud no encontrada.", 404);
@@ -80,7 +80,10 @@ export const requestRoutes = (ctx, req) => {
           body: prompt,
           ...(options ? { options } : {}),
         });
-        return send(response, 200, { ok: true, solicitud: asSolicitud(asked) });
+        return send(response, 200, {
+          ok: true,
+          solicitud: toLegacyRequest(asked),
+        });
       }
       const { agentId, sessionUuid } = agentHeaders(request);
       if (
@@ -117,7 +120,7 @@ export const requestRoutes = (ctx, req) => {
       if (thread)
         return send(response, 200, {
           ok: true,
-          solicitud: asSolicitud(
+          solicitud: toLegacyRequest(
             await waitThreadRequest(lanzador.threads, thread, id, timeout),
           ),
         });

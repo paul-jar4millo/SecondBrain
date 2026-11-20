@@ -21,7 +21,7 @@ const STATUS_ES = /** @type {Record<string, string>} */ ({
  * A thread request in the shape the usuario_* MCP tools already read.
  * @param {any} request
  */
-export function asSolicitud(request) {
+export function toLegacyRequest(request) {
   return {
     id: request.id,
     threadId: request.threadId,
@@ -235,12 +235,14 @@ export const threadRoutes = (ctx, req) => {
       const result = await threads.ask(agentThread(), data);
       return send(response, 201, {
         ok: true,
-        solicitud: asSolicitud(result.request),
+        solicitud: toLegacyRequest(result.request),
       });
     },
     "GET /threads/agente/solicitud": async () => {
       const result = await threads.request(agentThread(), query.get("id"));
-      return send(response, 200, { solicitud: asSolicitud(result.request) });
+      return send(response, 200, {
+        solicitud: toLegacyRequest(result.request),
+      });
     },
   };
 };
