@@ -83,7 +83,7 @@ try {
     `type=bind,src=${root},dst=/vault`,
     "--mount",
     `type=bind,src=${data},dst=/data`,
-    "second-brain:0.1.2",
+    "second-brain:0.2.0",
   ]);
   base = "http://127.0.0.1:" + docker(["port", name, "8080"]).split(":").pop();
   let ready = false;
@@ -155,7 +155,7 @@ try {
       docker([
         "image",
         "inspect",
-        "second-brain:0.1.2",
+        "second-brain:0.2.0",
         "--format",
         "{{.Size}}",
       ]),
