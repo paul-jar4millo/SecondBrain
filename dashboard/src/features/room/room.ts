@@ -1,17 +1,9 @@
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import {
-  createThirdPersonCamera,
-  followPlayer,
-  resetCamera,
-} from "./room-camera";
+import type { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { createThirdPersonCamera, followPlayer } from "./room-camera";
 import {
   AGENT_SPECS,
   JUGADOR,
-  MODEL_NAMES,
-  cargarTodos,
   createCharacter,
   type SceneSpec,
 } from "./room-characters";
@@ -23,12 +15,10 @@ import {
   PUESTOS,
   normalizeOrder,
   ZONES,
-  zoneGuide,
   tourInstructions,
 } from "./room-life";
-import { FONDO, dressWorld } from "./room-world";
+import { dressWorld } from "./room-world";
 import { characterState, etiquetaRoster } from "./team-panel";
-import { cursorFor, pickTarget } from "./room-pick";
 import { createOverlayStack } from "./room-overlays";
 import { createWorldBoards } from "./room-boards";
 import {
@@ -47,7 +37,6 @@ import {
 import { createThreads } from "./room-threads";
 import {
   advanceTour,
-  thumbAxis,
   observedCompletions,
   createRoomSound,
   waitingFlow,
@@ -56,12 +45,29 @@ import {
   QUALITY,
   QUALITY_LABELS,
   createFrameMeter,
-  createLoadProgress,
   minFrameInterval,
   nextPixelRatio,
   qualityFor,
   shadowUpdateDue,
 } from "./room-quality";
+import { animateAgent, stepActor, turnToward, type Actor } from "./room-actors";
+import { paintHud, startClock, type Nearby } from "./room-hud";
+import { createRefugeLoad } from "./room-assets";
+import { createWalkInput } from "./room-input";
+import { createPointer } from "./room-pointer";
+import { createRelayReplay } from "./room-replay";
+import { sceneFromSnapshot, unreadJobs } from "./room-snapshot";
+import { CANVAS_LABEL, ICONS, esc, roomMarkup, toPlace } from "./room-markup";
+import {
+  CORAL,
+  disposeObject,
+  disposeSprite,
+  floorRing,
+  label,
+  leisureProps,
+  placeLabels,
+} from "./room-props";
+import { createOrbit, createStage, nudgeCamera } from "./room-stage";
 
 import type {
   AgentsState,
@@ -77,28 +83,9 @@ import type {
   TeamController,
   AgentTarget,
   TeamTarget,
-  TeamEvent,
 } from "../team/team-controller";
 import type { RoomSummary } from "./room-summary";
 type Spec = SceneSpec;
-type Person = Awaited<ReturnType<typeof createCharacter>>;
-interface Actor extends Person {
-  route: Point[];
-  speed: number;
-  angle: number;
-  phase: string;
-  remaining: number;
-  walking?: boolean;
-  activity: ReturnType<typeof activityFor> & { angle?: number };
-  leisureMode?: boolean;
-  nombreTag?: THREE.Sprite;
-  cueTag?: THREE.Sprite | null;
-  okTag?: THREE.Sprite | null;
-  celebrateUntil: number;
-  liveKey?: string;
-  cueText?: string;
-  props: Record<string, THREE.Object3D>;
-}
 type SavedOrder = ReturnType<typeof normalizeOrder>;
 interface RoomData {
   encargos?: Record<string, SavedOrder>;
@@ -114,76 +101,9 @@ interface RoomOptions {
   /** Pending approvals of the service; the same list the approval panel reads. */
   aprobaciones?: () => Promise<unknown>;
 }
-const esc = (value: unknown) =>
-  String(value ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const icon = (paths: string, transform = "") =>
-  `<svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g transform="${transform}">${paths}</g></svg>`;
-const ICONS = {
-  rotateLeft: icon('<path d="M3 9h5M3 9V4M3.5 9a8 8 0 1 1 .8 8"/>'),
-  rotateRight: icon(
-    '<path d="M3 9h5M3 9V4M3.5 9a8 8 0 1 1 .8 8"/>',
-    "translate(24 0) scale(-1 1)",
-  ),
-  close: icon('<path d="m6 6 12 12M18 6 6 18"/>'),
-  plus: icon('<path d="M12 5v14M5 12h14"/>'),
-  minus: icon('<path d="M5 12h14"/>'),
-  chevron: icon('<path d="m9 6 6 6-6 6"/>'),
-};
 // Same breakpoint as the compact HUD in room.css: phones in both orientations.
 const COMPACT_QUERY = "(max-width: 700px), (max-height: 500px)";
 const QUALITY_KEY = "sb-refugio-calidad";
-const CORAL = "#ff6f61";
-
-function label(text: string, color = "#f1f7ff", zone = false) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 128;
-  const ctx = canvas.getContext("2d")!;
-  ctx.font = zone ? '46px "Dela Gothic One"' : "600 44px Fredoka, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const w = Math.min(470, ctx.measureText(text).width + 64),
-    x = 256 - w / 2,
-    slant = 18;
-  const shard = (dx: number, dy: number, fill: string) => {
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.moveTo(x + slant + dx, 20 + dy);
-    ctx.lineTo(x + w + dx, 14 + dy);
-    ctx.lineTo(x + w - slant + dx, 98 + dy);
-    ctx.lineTo(x + dx, 104 + dy);
-    ctx.closePath();
-    ctx.fill();
-  };
-  shard(7, 8, zone ? "#2f66e6" : color);
-  shard(0, 0, "#0f1a55");
-  ctx.fillStyle = zone ? "#f1f7ff" : color;
-  ctx.fillText(text, 256, 60, w - 44);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      depthTest: false,
-    }),
-  );
-  sprite.scale.set(zone ? 4.4 : 2.7, zone ? 1.1 : 0.675, 1);
-  sprite.renderOrder = 5;
-  return sprite;
-}
-
-// "a la Terraza", "al Café".
-const toPlace = (zone: { place: string } = ZONES[0]) =>
-  zone.place.startsWith("el ")
-    ? `al ${zone.place.slice(3)}`
-    : `a ${zone.place}`;
-
-// Same 32 x 24 plan as the painted floor, so the minimap reads as the place itself.
-const MAP_ART = `<svg class="map-art" viewBox="-16 -12 32 24" aria-hidden="true"><rect x="-16" y="-12" width="32" height="24" fill="#cfe6ff"/><rect x="-16" y="-12" width="11" height="13" fill="#1e2f85"/><rect x="-16" y="1" width="11" height="11" fill="#131d5e"/><rect x="-5" y="-12" width="10" height="8.5" fill="#f1f7ff"/><rect x="5" y="-12" width="11" height="11.5" fill="#0e6f92"/><rect x="8" y="-12" width="4" height="11.5" fill="#bfe6f2"/><circle cx="0" cy="4" r="7" fill="#2340c8"/><circle cx="0" cy="4" r="4.6" fill="#1a2a78"/><circle cx="0" cy="4" r="1.7" fill="#e7f0ff"/><circle cx="-9" cy="6" r="4" fill="#0a1238"/><circle cx="-9" cy="6" r="1.3" fill="#2f66e6"/><circle cx="12" cy="4" r="2.8" fill="#3f8ff0"/><rect x="-16" y="-12" width="32" height="24" fill="none" stroke="#f1f7ff" stroke-width=".5"/></svg>`;
-
-const CANVAS_LABEL =
-  "Refugio 3D. Clic o toque en el suelo para caminar; WASD o flechas; E para interactuar; Esc cierra el panel abierto; rueda para zoom; arrastra con el botón derecho para girar.";
 
 function readSavedQuality() {
   try {
@@ -253,27 +173,11 @@ export function montar(
     cycles.set(a.id, 0);
   });
   root.classList.toggle("is-compact", compact);
-  root.innerHTML = `<canvas tabindex="0" aria-label="${CANVAS_LABEL}"></canvas>
-    <button class="room-help-trigger" id="room-help-button" aria-expanded="false" aria-controls="room-help">Ayuda</button><div class="room-location"><h1 id="room-zone">Terraza</h1></div>
-    <div class="room-clock"><svg class="moon-dial" viewBox="0 0 64 64" aria-hidden="true"><circle class="dial-track" cx="32" cy="32" r="26"/><g id="room-orbit"><path class="dial-moon" d="M32 0a6.4 6.4 0 1 0 5.3 10 5 5 0 1 1-5.3-10z"/></g><path class="dial-gem" d="M32 20 42 32 32 44 22 32z"/><path class="dial-gem-lit" d="M32 20 42 32H22z"/></svg><span><b id="room-time"></b><small id="room-date"></small></span></div>
-    <div class="room-loading"><p id="room-loading-text" role="status">Preparando el refugio…</p><div class="room-progress"><progress id="room-progress" max="100" value="0" aria-label="Carga del refugio"></progress><span id="room-progress-value" aria-hidden="true">0 %</span></div><button type="button" id="room-retry" hidden>Reintentar</button></div>
-    <div class="room-side">
-      <div class="team-shortcuts"><button class="team-toggle" aria-haspopup="dialog">Equipo <span>4</span></button><button class="team-collapse" aria-label="${compact ? "Mostrar personajes" : "Ocultar personajes"}" aria-expanded="${!compact}" aria-controls="room-team">${ICONS.chevron}</button></div>
-      <aside class="room-team ${compact ? "collapsed" : ""}" id="room-team" aria-label="Cuatro agentes base">
-        <h2 class="team-heading">Tu equipo</h2>
-        <div id="room-roster"></div>
-        <p id="team-handoff" class="team-handoff" hidden></p>
-      </aside>
-      <div class="room-camera" role="group" aria-label="Cámara"><button data-camera="out" aria-label="Alejar cámara">${ICONS.minus}</button><button data-camera="in" aria-label="Acercar cámara">${ICONS.plus}</button><button data-camera="left" aria-label="Girar a la izquierda">${ICONS.rotateLeft}</button><button data-camera="right" aria-label="Girar a la derecha">${ICONS.rotateRight}</button><button data-camera="home" aria-label="Centrar cámara en ti">Centrar</button></div>
-    </div>
-
-    <div class="room-map"><div class="map-title"><b>Mapa del refugio</b><button id="map-toggle" aria-expanded="${!compact}" aria-controls="map-body">${compact ? "Mostrar" : "Ocultar"}</button></div><div id="map-body" ${compact ? "hidden" : ""}><div class="map-stage"><div class="map-zones" id="map-zones">${MAP_ART}${ZONES.map((z) => `<button data-zone="${z.id}" style="left:${((z.x + 16) / 32) * 100}%;top:${((z.z + 12) / 24) * 100}%" title="Ir ${toPlace(z)} · ${esc(z.toolName)}"><span>${esc(z.name)}</span></button>`).join("")}<i class="map-player" aria-label="Tu posición"></i></div></div></div></div>
-    <div class="equipo-replay" hidden><p id="team-replay-status" role="status"></p><button id="team-replay-stop">Volver a flujos</button></div>
-    <div class="room-help" id="room-help" role="dialog" aria-labelledby="room-help-title" hidden><b id="room-help-title">Muévete a tu ritmo</b><p>Clic o toque en el suelo, o <kbd>WASD</kbd> / flechas, para caminar. Si el punto está ocupado, vas al lugar libre más cercano.</p><p>Cerca de una agente, <kbd>E</kbd> o el aviso inferior abre su ficha. Cada zona abre su herramienta: ${esc(zoneGuide())}. También están en el HUD inferior.</p><p>Rueda o + / − para zoom. Arrastra con el botón derecho para girar. En pantalla táctil, dos dedos para zoom y giro.</p><p><kbd>Esc</kbd> cierra el panel abierto. <kbd>Ctrl K</kbd> busca y <kbd>N</kbd> crea.</p><label class="room-quality" for="room-quality">Calidad gráfica<select id="room-quality">${["auto", "alta", "media", "baja"].map((v) => `<option value="${v}" ${v === savedQuality ? "selected" : ""}>${QUALITY_LABELS[v as keyof typeof QUALITY_LABELS]}</option>`).join("")}</select></label><p class="room-quality-note" id="room-quality-note"></p><label class="room-volume" for="room-volume">Sonido del refugio <input id="room-volume" type="range" min="0" max="100" step="5" value="${Number(stored("sb-room-volume", "0")) * 100}"></label><p>Empieza silenciado. El control Mover permite caminar en pantalla táctil. El mapa muestra las cuatro agentes y tu destino.</p><button id="room-guide-restart">Repetir primer paseo</button><button id="room-help-close">Entendido</button></div>
-    <button class="room-interact" id="room-interact" hidden><strong id="room-quick-title"></strong><span id="room-quick-lines"></span><span id="room-quick-action"></span></button>
-    <aside class="room-guide" id="room-guide" hidden aria-label="Primer paseo"><p id="room-guide-text" role="status"></p><button id="room-guide-skip">Saltar guía</button></aside>
-    <div class="room-joystick" id="room-joystick" role="group" aria-label="Movimiento táctil"><span>Mover</span><i aria-hidden="true"></i></div>
-    <p class="room-completion" id="room-completion" role="status" hidden></p>`;
+  root.innerHTML = roomMarkup({
+    compact,
+    savedQuality,
+    volume: Number(stored("sb-room-volume", "0")),
+  });
   const q = <T extends HTMLElement = HTMLInputElement>(selector: string) =>
     root.querySelector<T>(selector)!;
   function paintTour() {
@@ -404,15 +308,13 @@ export function montar(
   function dropCue(actor: Actor) {
     if (!actor.cueTag) return;
     actor.raiz.remove(actor.cueTag);
-    actor.cueTag.material.map?.dispose();
-    actor.cueTag.material.dispose();
+    disposeSprite(actor.cueTag);
     actor.cueTag = null;
   }
   function dropOk(actor: Actor) {
     if (!actor.okTag) return;
     actor.raiz.remove(actor.okTag);
-    actor.okTag.material.map?.dispose();
-    actor.okTag.material.dispose();
+    disposeSprite(actor.okTag);
     actor.okTag = null;
   }
   // «Esperando tu OK» hovers over the figure until the approval is decided or expires.
@@ -600,24 +502,7 @@ export function montar(
       `Yendo ${toPlace(ZONES.find((z) => z.id === activity.zone))}`,
     );
   }
-  const updateClock = () => {
-    const now = new Date();
-    q("#room-time").textContent = now.toLocaleTimeString("es-MX", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "America/Mexico_City",
-    });
-    const [hour, minute] = q("#room-time").textContent.split(":").map(Number);
-    q("#room-orbit").style.transform =
-      `rotate(${((hour * 60 + minute) / 1440) * 360}deg)`;
-    q("#room-date").textContent = now.toLocaleDateString("es-MX", {
-      day: "numeric",
-      month: "short",
-      timeZone: "America/Mexico_City",
-    });
-  };
-  updateClock();
-  const clock = setInterval(updateClock, 30000);
+  const stopClock = startClock(root);
   paintRoster();
   const click = async (e: MouseEvent) => {
     if (
@@ -668,34 +553,13 @@ export function montar(
     const cam = (e.target as HTMLElement).closest<HTMLButtonElement>(
       "[data-camera]",
     );
-    if (cam && controls) {
-      const action = cam.dataset.camera;
-      if (action === "in" || action === "out") {
-        const offset = camera.position.clone().sub(controls.target);
-        offset.setLength(
-          THREE.MathUtils.clamp(
-            offset.length() * (action === "in" ? 1 / 1.2 : 1.2),
-            controls.minDistance,
-            controls.maxDistance,
-          ),
-        );
-        camera.position.copy(controls.target).add(offset);
-      }
-      if (action === "left" || action === "right") {
-        const offset = camera.position
-          .clone()
-          .sub(controls.target)
-          .applyAxisAngle(
-            new THREE.Vector3(0, 1, 0),
-            action === "left" ? 0.35 : -0.35,
-          );
-        camera.position.copy(controls.target).add(offset);
-      }
-      if (action === "home" && player) {
-        resetCamera(camera, controls.target, player.raiz.position);
-      }
-      controls.update();
-    }
+    if (cam && controls)
+      nudgeCamera(
+        cam.dataset.camera,
+        camera,
+        controls,
+        player?.raiz.position ?? null,
+      );
     if ((e.target as HTMLElement).closest<HTMLButtonElement>("#room-interact"))
       interact();
   };
@@ -735,46 +599,12 @@ export function montar(
   const pointerKind = (e: PointerEvent) =>
     setDevice(e.pointerType === "mouse" ? "keyboard" : "touch");
   root.addEventListener("pointerdown", pointerKind, true);
-  const keys = new Set();
-  let stick = { x: 0, y: 0 },
-    stickPointer: number | null = null;
-  const joystick = q("#room-joystick");
-  function resetStick() {
-    if (stickPointer !== null && joystick.hasPointerCapture(stickPointer))
-      joystick.releasePointerCapture(stickPointer);
-    stickPointer = null;
-    stick = { x: 0, y: 0 };
-    joystick.style.setProperty("--stick-x", "0px");
-    joystick.style.setProperty("--stick-y", "0px");
-  }
-  const stickMove = (e: PointerEvent) => {
-    if (e.pointerId !== stickPointer) return;
-    const rect = joystick.getBoundingClientRect();
-    stick = thumbAxis(
-      e.clientX - rect.x - rect.width / 2,
-      e.clientY - rect.y - rect.height / 2,
-      rect.width * 0.36,
-    );
-    joystick.style.setProperty("--stick-x", `${stick.x * 30}px`);
-    joystick.style.setProperty("--stick-y", `${stick.y * 30}px`);
-  };
-  const stickDown = (e: PointerEvent) => {
-    if (stickPointer !== null || inputActive() || overlays.list().length)
-      return;
-    e.preventDefault();
-    stickPointer = e.pointerId;
-    joystick.setPointerCapture(e.pointerId);
-    if (player) player.route = [];
-    stickMove(e);
-  };
-  const stickEnd = (e: PointerEvent) => {
-    if (e.pointerId === stickPointer) resetStick();
-  };
-  joystick.addEventListener("pointerdown", stickDown);
-  joystick.addEventListener("pointermove", stickMove);
-  joystick.addEventListener("pointerup", stickEnd);
-  joystick.addEventListener("pointercancel", stickEnd);
-  joystick.addEventListener("lostpointercapture", stickEnd);
+  const walkInput = createWalkInput(q("#room-joystick"), {
+    canStartStick: () => !inputActive() && !overlays.list().length,
+    onWalkInput: () => {
+      if (player) player.route = [];
+    },
+  });
   const visibility = () => {
     if (document.hidden) blur();
   };
@@ -804,25 +634,18 @@ export function montar(
     if (!["Shift", "Control", "Alt", "Meta"].includes(e.key))
       setDevice("keyboard");
     if (inputActive()) return;
-    if (/^(Key[WASD]|Arrow(Up|Down|Left|Right))$/.test(e.code)) {
-      e.preventDefault();
-      keys.add(e.code);
-      if (player) player.route = [];
-    }
+    walkInput.keyDown(e);
     if (e.code === "KeyE") {
       e.preventDefault();
       interact();
     }
   };
-  const keyup = (e: KeyboardEvent) => keys.delete(e.code),
-    blur = () => {
-      keys.clear();
-      resetStick();
-    };
+  const keyup = (e: KeyboardEvent) => walkInput.keyUp(e),
+    blur = () => walkInput.release();
   addEventListener("keydown", keydown);
   addEventListener("keyup", keyup);
   addEventListener("blur", blur);
-  let nearby: Actor | (typeof ZONES)[number] | undefined;
+  let nearby: Nearby;
   function paintPrompt() {
     const button = q("#room-interact");
     button.hidden = !nearby;
@@ -852,90 +675,30 @@ export function montar(
         if (alive) toast(`No se pudo leer la sala: ${e.message}`);
       });
 
-  // Pointer: pick what is drawn, walk to the closest free spot, refuse the sea.
-  const rays = new THREE.Raycaster(),
-    mouse = new THREE.Vector2(),
-    plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
-    floorPoint = new THREE.Vector3();
-  let pointerStart: { x: number; y: number; button: number } | null = null;
-  const hover = { x: 0, y: 0, pending: false };
-  function aim(clientX: number, clientY: number) {
-    const rect = canvas.getBoundingClientRect();
-    mouse.set(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      (-(clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    rays.setFromCamera(mouse, camera);
-  }
-  function floorUnderRay() {
-    if (!nav) return null;
-    if (!rays.ray.intersectPlane(plane, floorPoint)) return null;
-    return {
-      point: floorPoint,
-      spot: nav.nearestFree({ x: floorPoint.x, z: floorPoint.z }, 2.5),
-    };
-  }
-  function pointerDown(e: PointerEvent) {
-    pointerStart = { x: e.clientX, y: e.clientY, button: e.button };
-  }
-  function pointerUp(e: PointerEvent) {
-    if (!player || !destination || !blocked) return;
-    const start = pointerStart;
-    pointerStart = null;
-    if (
-      !loaded ||
-      inputActive() ||
-      !start ||
-      start.button !== 0 ||
-      Math.hypot(e.clientX - start.x, e.clientY - start.y) > 8
-    )
-      return;
-    aim(e.clientX, e.clientY);
-    const target = pickTarget(rays, { actors, labels });
-    if (target?.kind === "agent") {
-      openAgent(target.id, "world");
-      return;
-    }
-    if (target?.kind === "tool") {
-      openTool(target.tool);
-      return;
-    }
-    const floor = floorUnderRay();
-    if (!floor) return;
-    if (floor.spot) {
+  const pointer = createPointer({
+    canvas: () => canvas,
+    world: () => ({ camera, nav, actors, labels }),
+    canClick: () => loaded && !inputActive(),
+    onAgent: (id) => openAgent(id, "world"),
+    onTool: openTool,
+    onFloor: (spot) => {
       sound.play("move");
-      move(player, floor.spot);
-      destination.position.set(floor.spot.x, 0.025, floor.spot.z);
-      destination.visible = true;
+      move(player, spot);
+      destination!.position.set(spot.x, 0.025, spot.z);
+      destination!.visible = true;
       canvas.focus();
-    } else {
+    },
+    onSea: (point) => {
       // Nothing walkable nearby (the sea): a short coral pulse where the click landed.
-      blocked.position.set(floor.point.x, 0.03, floor.point.z);
-      blocked.userData.life = 0.7;
-      blocked.visible = true;
-    }
-  }
-  function pointerMove(e: PointerEvent) {
-    if (e.pointerType !== "mouse" || e.buttons) return;
-    hover.x = e.clientX;
-    hover.y = e.clientY;
-    hover.pending = true;
-  }
-  function updateCursor() {
-    if (!hover.pending) return;
-    hover.pending = false;
-    aim(hover.x, hover.y);
-    const target = pickTarget(rays, { actors, labels });
-    let cursor;
-    if (target) cursor = cursorFor(target);
-    else {
-      const floor = floorUnderRay();
-      cursor = cursorFor(
-        floor ? { kind: "floor", reachable: !!floor.spot } : null,
-      );
-    }
-    if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
-  }
+      blocked!.position.set(point.x, 0.03, point.z);
+      blocked!.userData.life = 0.7;
+      blocked!.visible = true;
+    },
+  });
+  const pointerDown = (e: PointerEvent) => pointer.down(e);
+  const pointerUp = (e: PointerEvent) =>
+    pointer.up(e, !!(player && destination && blocked));
+  const pointerMove = (e: PointerEvent) => pointer.move(e);
   function contextLostHandler(e: Event) {
     e.preventDefault();
     contextLost = true;
@@ -986,76 +749,6 @@ export function montar(
   function hideStatus() {
     q(".room-loading").hidden = true;
   }
-  function stepActor(actor: Actor, dt: number) {
-    let walking = false;
-    while (actor.route.length) {
-      const p = actor.route[0],
-        position = actor.raiz.position,
-        dx = p.x - position.x,
-        dz = p.z - position.z,
-        d = Math.hypot(dx, dz);
-      if (d < 0.07) {
-        actor.route.shift();
-        continue;
-      }
-      const v = Math.min(d, dt * actor.speed);
-      position.x += (dx / d) * v;
-      position.z += (dz / d) * v;
-      actor.angle = Math.atan2(dx, dz);
-      walking = true;
-      break;
-    }
-    return walking;
-  }
-  function leisureProps(actor: Actor) {
-    const props: Record<string, THREE.Object3D> = {};
-    const material = (color: string) =>
-      new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
-    const cup = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.09, 0.07, 0.17, 12),
-      material("#f1f7ff"),
-    );
-    cup.position.set(0.24, 1.12, 0.3);
-    actor.raiz.add(cup);
-    props.cafe = cup;
-    const book = new THREE.Group();
-    book.position.set(0, 1.03, 0.3);
-    book.rotation.x = -0.5;
-    const pages = new THREE.Mesh(
-      new THREE.BoxGeometry(0.4, 0.07, 0.28),
-      material("#f1f7ff"),
-    );
-    book.add(pages);
-    for (const y of [-0.045, 0.045]) {
-      const cover = new THREE.Mesh(
-        new THREE.BoxGeometry(0.43, 0.02, 0.31),
-        material("#2f66e6"),
-      );
-      cover.position.y = y;
-      book.add(cover);
-    }
-    actor.raiz.add(book);
-    props.library = book;
-    const can = new THREE.Group();
-    can.position.set(0.27, 0.88, 0.34);
-    can.add(
-      new THREE.Mesh(
-        new THREE.CylinderGeometry(0.12, 0.12, 0.2, 10),
-        material("#43c9dc"),
-      ),
-    );
-    const spout = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.025, 0.04, 0.26, 8),
-      material("#43c9dc"),
-    );
-    spout.rotation.z = -0.8;
-    spout.position.set(0.17, 0.06, 0);
-    can.add(spout);
-    actor.raiz.add(can);
-    props.garden = can;
-    Object.values(props).forEach((prop) => (prop.visible = false));
-    return props;
-  }
   const meter = createFrameMeter(90);
   let adaptCooldown = 0;
   function applyQuality() {
@@ -1092,28 +785,25 @@ export function montar(
     pixelRatio = next;
     renderer?.setPixelRatio(next);
   }
-  function disposeMap(object: THREE.Object3D | null) {
-    const geometries = new Set<THREE.BufferGeometry>(),
-      materials = new Set<THREE.Material>();
-    object?.traverse((o) => {
-      if (o instanceof THREE.Mesh) {
-        geometries.add(o.geometry);
-        for (const m of Array.isArray(o.material) ? o.material : [o.material])
-          materials.add(m);
-      }
-    });
-    geometries.forEach((g) => g.dispose());
-    materials.forEach((m) => m.dispose());
+  // Name tag over the head and the leisure props in her hands.
+  function dressAgent(actor: Actor, spec: Spec) {
+    const tag = label(spec.nombre, spec.color);
+    tag.position.y = 2;
+    actor.raiz.add(tag);
+    actor.nombreTag = tag;
+    actor.props = leisureProps(actor.raiz);
+  }
+  function releaseActor(actor: Actor) {
+    Object.values(actor.props).forEach(disposeObject);
+    disposeSprite(actor.nombreTag);
+    dropCue(actor);
+    dropOk(actor);
+    actor.liberar();
   }
   function retirarActor(actor: Actor) {
     root.querySelector(`[data-map-agent="${actor.spec.id}"]`)?.remove();
     scene.remove(actor.raiz);
-    Object.values(actor.props).forEach(disposeMap);
-    actor.nombreTag?.material.map?.dispose();
-    actor.nombreTag?.material.dispose();
-    dropCue(actor);
-    dropOk(actor);
-    actor.liberar();
+    releaseActor(actor);
     actors = actors.filter((a) => a !== actor);
   }
   function conciliarActores() {
@@ -1161,11 +851,7 @@ export function montar(
             actor.liberar();
             return;
           }
-          const tag = label(spec.nombre, spec.color);
-          tag.position.y = 2;
-          actor.raiz.add(tag);
-          actor.nombreTag = tag;
-          actor.props = leisureProps(actor);
+          dressAgent(actor, spec);
           actors.push(actor);
           const dot = document.createElement("i");
           dot.className = "map-agent";
@@ -1196,26 +882,18 @@ export function montar(
     actors.forEach((a) => {
       if (a.spec.id.includes("#"))
         root.querySelector(`[data-map-agent="${a.spec.id}"]`)?.remove();
-      Object.values(a.props).forEach(disposeMap);
-      a.nombreTag?.material?.map?.dispose();
-      a.nombreTag?.material?.dispose();
-      dropCue(a);
-      dropOk(a);
-      a.liberar();
+      releaseActor(a);
     });
     actors = [];
     hilos?.liberar();
     hilos = null;
-    labels.forEach((l) => {
-      l.material.map?.dispose();
-      l.material.dispose();
-    });
+    labels.forEach(disposeSprite);
     labels.length = 0;
     worldBoards?.dispose();
     worldBoards = null;
     world?.liberar();
     world = null;
-    disposeMap(mapObject);
+    disposeObject(mapObject);
     mapObject = null;
     for (const mesh of [destination, blocked]) {
       mesh?.geometry.dispose();
@@ -1242,79 +920,22 @@ export function montar(
   }
   async function start() {
     const attempt = ++startAttempt;
-    const progress = createLoadProgress([
-      "mapa",
-      "plano",
-      "datos",
-      "fuentes",
-      ...MODEL_NAMES,
-    ]);
     let settled = false;
     // Parallel downloads keep reporting after one fails; never paint over the error.
-    const report = () => {
+    const assets = createRefugeLoad((percent) => {
       if (settled || attempt !== startAttempt || !alive) return;
-      showStatus("Preparando el refugio…", { progress: progress.percent() });
-    };
-    const step =
-      (name: string) =>
-      <T>(value: T): T => {
-        progress.done(name);
-        report();
-        return value;
-      };
-    report();
+      showStatus("Preparando el refugio…", { progress: percent });
+    });
+    assets.report();
     try {
-      renderer = new THREE.WebGLRenderer({
-        canvas,
+      ({ renderer, scene, sun } = createStage(canvas, {
         antialias: QUALITY[quality].antialias,
-        powerPreference: "high-performance",
-      });
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      // The map is static: shadows are redrawn only when something moves.
-      renderer.shadowMap.autoUpdate = false;
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.toneMapping = THREE.NoToneMapping;
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(FONDO);
-      scene.add(new THREE.HemisphereLight("#c9d8ff", "#3d52c4", 2));
-      sun = new THREE.DirectionalLight("#fff3df", 1.35);
-      sun.position.set(13, 26, 19);
-      sun.shadow.mapSize.set(2048, 2048);
-      Object.assign(sun.shadow.camera, {
-        left: -24,
-        right: 24,
-        top: 22,
-        bottom: -22,
-        near: 1,
-        far: 80,
-      });
-      sun.shadow.bias = -0.0006;
-      sun.shadow.normalBias = 0.05;
-      scene.add(sun);
+      }));
       applyQuality();
       camera = createThirdPersonCamera(
         canvas.clientWidth / canvas.clientHeight,
       );
-      controls = new OrbitControls(camera, canvas);
-      resetCamera(camera, controls.target, new THREE.Vector3(1, 0, 3));
-      controls.enableDamping = !reducedMotion;
-      controls.dampingFactor = 0.08;
-      controls.enablePan = false;
-      controls.minDistance = 3;
-      controls.maxDistance = 14;
-      controls.minPolarAngle = 0.35;
-      controls.maxPolarAngle = 1.45;
-      controls.mouseButtons = {
-        LEFT: null,
-        MIDDLE: null,
-        RIGHT: THREE.MOUSE.ROTATE,
-      };
-      controls.touches = {
-        ONE: THREE.TOUCH.ROTATE,
-        TWO: THREE.TOUCH.DOLLY_ROTATE,
-      };
-      controls.update();
+      controls = createOrbit(camera, canvas, reducedMotion);
       const size = () => {
         const w = canvas.clientWidth,
           h = canvas.clientHeight;
@@ -1326,43 +947,9 @@ export function montar(
       observer = new ResizeObserver(size);
       observer.observe(canvas);
       size();
-      // Every request runs in parallel and reports real bytes when it can.
-      const [gltf, manifest] = await Promise.all([
-        new GLTFLoader()
-          .setMeshoptDecoder(MeshoptDecoder)
-          .loadAsync(
-            `${import.meta.env.BASE_URL}models/sala/refugio.glb`,
-            (e) => {
-              progress.update(
-                "mapa",
-                e.loaded,
-                e.lengthComputable ? e.total : 0,
-              );
-              report();
-            },
-          )
-          .then(step("mapa")),
-        fetch(`${import.meta.env.BASE_URL}models/sala/refugio-nav.json`)
-          .then((r) => {
-            if (!r.ok) throw new Error("Mapa no disponible");
-            return r.json();
-          })
-          .then(step("plano")),
-        loadRoomData().then(step("datos")),
-        cargarTodos((nombre: string, done: number, total: number) => {
-          progress.update(nombre, done, total);
-          report();
-        }).then((models) => {
-          MODEL_NAMES.forEach((n) => progress.done(n));
-          report();
-          return models;
-        }),
-        Promise.resolve(document.fonts?.load('46px "Dela Gothic One"'))
-          .catch(() => null)
-          .then(step("fuentes")),
-      ]);
+      const [gltf, manifest] = await assets.load(loadRoomData);
       if (!alive || attempt !== startAttempt) {
-        disposeMap(gltf.scene);
+        disposeObject(gltf.scene);
         return;
       }
       mapObject = gltf.scene;
@@ -1379,23 +966,7 @@ export function montar(
         manifest.depth,
         manifest.obstacles,
       );
-      for (const zone of ZONES) {
-        const tag = label(zone.name, undefined, true);
-        tag.visible = false;
-        tag.position.set(zone.x, 3.1, zone.z - 1.8);
-        tag.userData.tool = zone.tool;
-        scene.add(tag);
-        labels.push(tag);
-      }
-      for (const [task, spot] of Object.entries(PUESTOS)) {
-        const tag = label(task[0].toUpperCase() + task.slice(1), "#78bdf8");
-        tag.visible = false;
-        tag.userData.phase = task;
-        tag.position.set(spot.x, 1.6, spot.z + 0.25);
-        tag.scale.set(2.3, 0.575, 1);
-        scene.add(tag);
-        labels.push(tag);
-      }
+      labels.push(...placeLabels(scene, ZONES, PUESTOS));
       const make = async (
         spec: Spec,
         x: number,
@@ -1429,31 +1000,12 @@ export function montar(
         const activity = activityFor(spec.id, orders[spec.id], 0);
         const actor = await make(spec, activity.x, activity.z);
         if (!actor) return;
-        const tag = label(spec.nombre, spec.color);
-        tag.position.y = 2;
-        actor.raiz.add(tag);
-        actor.nombreTag = tag;
-        actor.props = leisureProps(actor);
+        dressAgent(actor, spec);
         actors.push(actor);
         assignActor(spec.id);
       }
-      const ring = (color: string, opacity: number) => {
-        const mesh = new THREE.Mesh(
-          new THREE.RingGeometry(0.25, 0.34, 28),
-          new THREE.MeshBasicMaterial({
-            color,
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity,
-          }),
-        );
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.visible = false;
-        scene.add(mesh);
-        return mesh;
-      };
-      destination = ring("#fff2c4", 0.8);
-      blocked = ring(CORAL, 0.9);
+      destination = floorRing(scene, "#fff2c4", 0.8);
+      blocked = floorRing(scene, CORAL, 0.9);
       await renderer.compileAsync(scene, camera).catch(() => null);
       if (!alive || attempt !== startAttempt) return;
       loaded = true;
@@ -1502,14 +1054,7 @@ export function montar(
         const dt = Math.min(0.05, elapsed / 1000);
         let moving = false;
         if (!inputActive()) {
-          const f =
-              -stick.y +
-              (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) -
-              (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0),
-            l =
-              stick.x +
-              (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) -
-              (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
+          const { forward: f, left: l } = walkInput.axes();
           if (f || l) {
             camera.getWorldDirection(forward);
             forward.y = 0;
@@ -1528,8 +1073,7 @@ export function montar(
             player.walking = true;
           } else player.walking = stepActor(player, dt);
         } else {
-          keys.clear();
-          resetStick();
+          walkInput.release();
           player.walking = false;
         }
         moving ||= player.walking;
@@ -1539,11 +1083,7 @@ export function montar(
           completionUntil = 0;
         }
         player.animar(dt, player.walking ? "camina" : "quieta");
-        player.raiz.rotation.y +=
-          Math.atan2(
-            Math.sin(player.angle - player.raiz.rotation.y),
-            Math.cos(player.angle - player.raiz.rotation.y),
-          ) * Math.min(1, dt * 10);
+        turnToward(player, dt, 10);
         if (destination.visible && !player.route.length)
           destination.visible = false;
         if (blocked.visible) {
@@ -1554,104 +1094,33 @@ export function montar(
           if (life <= 0) blocked.visible = false;
         }
         for (const actor of actors) {
-          const walking = stepActor(actor, dt);
-          moving ||= walking;
-          let action = walking ? "camina" : "quieta";
-          if (!walking && actor.phase === "going") {
-            actor.phase = actor.leisureMode ? "rest" : "working";
-            setActivity(actor.spec.id, actor.activity.label);
-            actor.remaining =
-              actor.phase === "working"
-                ? 7
-                : 12 + AGENT_SPECS.findIndex((a) => a.id === actor.spec.id) * 3;
-          }
-          if (!walking && actor.phase === "working")
-            actor.angle = actor.activity.angle ?? Math.PI;
-          if (!walking) {
-            actor.remaining -= dt;
-            if (actor.phase === "working") {
-              action = liveAgent(actor.spec.id)?.ocupada ? "teclea" : "quieta";
-            } else if (
-              (actor.phase === "rest" || actor.phase === "done") &&
-              actor.remaining <= 0 &&
-              !reducedMotion
-            ) {
-              cycles.set(actor.spec.id, (cycles.get(actor.spec.id) || 0) + 1);
-              assignActor(actor.spec.id);
-            }
-          }
-          if (
-            !walking &&
-            actor.phase === "rest" &&
-            actor.activity.zone === "library"
-          )
-            action = "teclea";
-          if (!walking && actor.celebrateUntil > now && !reducedMotion)
-            action = "festeja";
-          for (const [zone, prop] of Object.entries(actor.props)) {
-            prop.visible =
-              !walking &&
-              (actor.phase === "rest" ||
-                (actor.phase === "working" && zone === "library")) &&
-              actor.activity.zone === zone;
-          }
-          actor.props.cafe.position.y =
-            1.12 +
-            (reducedMotion ? 0 : Math.max(0, Math.sin(now / 1000)) * 0.18);
-          actor.props.garden.rotation.z = reducedMotion
-            ? 0
-            : Math.sin(now / 1800) * 0.18;
-          actor.animar(dt, action);
-          actor.raiz.rotation.y +=
-            Math.atan2(
-              Math.sin(actor.angle - actor.raiz.rotation.y),
-              Math.cos(actor.angle - actor.raiz.rotation.y),
-            ) * Math.min(1, dt * 8);
+          const id = actor.spec.id;
+          // Every agent animates each frame; do not short-circuit the call.
+          const walked = animateAgent(actor, dt, now, {
+            reducedMotion,
+            restSeconds: 12 + AGENT_SPECS.findIndex((a) => a.id === id) * 3,
+            isBusy: () => !!liveAgent(id)?.ocupada,
+            onArrive: () => setActivity(id, actor.activity.label),
+            onRestOver: () => {
+              cycles.set(id, (cycles.get(id) || 0) + 1);
+              assignActor(id);
+            },
+          });
+          moving ||= walked;
         }
         if (now - hud > 200) {
           hud = now;
-          const pos = player.raiz.position;
-          const zone = [...ZONES].sort(
-            (a, b) =>
-              Math.hypot(a.x - pos.x, a.z - pos.z) -
-              Math.hypot(b.x - pos.x, b.z - pos.z),
-          )[0];
-          if (q("#room-zone").textContent !== zone.name) {
-            q("#room-zone").textContent = zone.name;
-            q("#room-zone").classList.remove("swap");
-            void q("#room-zone").offsetWidth;
-            q("#room-zone").classList.add("swap");
-          }
-          root.querySelectorAll<HTMLElement>("[data-zone]").forEach((node) => {
-            node.setAttribute(
-              "aria-current",
-              String(node.dataset.zone === zone.id),
-            );
+          nearby = paintHud(root, {
+            player: player.raiz.position,
+            actors,
+            camera,
+            controls,
+            destination,
+            statusText,
           });
-          // Keep the minimap oriented like the camera, so "up" matches the screen.
-          const view = camera.position.clone().sub(controls.target);
-          q(".map-stage").style.setProperty(
-            "--map-turn",
-            `${Math.atan2(view.x, view.z)}rad`,
-          );
-          q(".map-player").style.left = `${((pos.x + 16) / 32) * 100}%`;
-          q(".map-player").style.top = `${((pos.z + 12) / 24) * 100}%`;
-          for (const actor of actors) {
-            const dot = q(`[data-map-agent="${actor.spec.id}"]`);
-            dot.style.left = `${((actor.raiz.position.x + 16) / 32) * 100}%`;
-            dot.style.top = `${((actor.raiz.position.z + 12) / 24) * 100}%`;
-            dot.title = `${actor.spec.nombre} · ${statusText(actor.spec.id)}`;
-          }
-          const target = q(".map-destination");
-          target.hidden = !destination.visible;
-          target.style.left = `${((destination.position.x + 16) / 32) * 100}%`;
-          target.style.top = `${((destination.position.z + 12) / 24) * 100}%`;
-          nearby =
-            actors.find((a) => a.raiz.position.distanceTo(pos) < 2) ||
-            ZONES.find((z) => Math.hypot(z.x - pos.x, z.z - 1.8 - pos.z) < 2);
           paintPrompt();
         }
-        updateCursor();
+        pointer.updateCursor();
         followPlayer(
           camera,
           controls.target,
@@ -1780,63 +1249,16 @@ export function montar(
       });
     relevosIniciados = snapshot.sessions !== null;
     leerAprobaciones();
-    const relayEvents = snapshot.events
-      .filter((e) => e.id && e.de && e.para)
-      .map((e) => ({
-        id: e.id!,
-        tipo: e.tipo || "",
-        de: e.de!,
-        para: e.para!,
-        texto: e.texto || "",
-      }));
-    syncAgents(
-      {
-        conectado: observadas ? true : snapshot.connected,
-        agentes: observadas
-          ? [
-              ...observadas.base,
-              ...observadas.copias.map((c) => ({
-                id: c.id,
-                ocupada: true,
-                ultimo: {
-                  jobId: c.sesionId,
-                  estado: "trabajando",
-                  fase: c.fase,
-                  actividad: {
-                    zona: PUESTOS[c.fase || ""]?.zone || "terrace",
-                    etiqueta: c.etiqueta,
-                  },
-                },
-              })),
-            ]
-          : snapshot.agents.map((a) => ({ ...a, ocupada: !!a.ocupada })),
-      },
-      {
-        flujos: observadas ? [] : snapshot.flows,
-        eventos: observadas ? [] : relayEvents,
-      },
-    );
+    const shown = sceneFromSnapshot(snapshot, observadas);
+    syncAgents(shown.agents, shown.team);
     conciliarActores();
-    const unread = new Set<string>();
     let read: string[] = [];
     try {
       read = JSON.parse(localStorage.getItem("sb-sala-leidos-v1") || "[]");
     } catch {
       /* No stored reads. */
     }
-    for (const a of snapshot.agents)
-      for (const job of a.historial || (a.ultimo?.fin ? [a.ultimo] : []))
-        if (job.jobId && !read.includes(job.jobId)) unread.add(job.jobId);
-    for (const f of snapshot.flows)
-      for (const job of f.pasos)
-        if (
-          job.jobId &&
-          ["listo", "error", "cancelado", "interrumpido"].includes(
-            job.estado,
-          ) &&
-          !read.includes(job.jobId)
-        )
-          unread.add(job.jobId);
+    const unread = unreadJobs(snapshot, read);
     q(".team-toggle span").textContent = unread.size
       ? `${unread.size} nuevos`
       : "4";
@@ -1879,62 +1301,26 @@ export function montar(
   const okClock = setInterval(refrescarOk, 1000);
   const unsubscribeTeam = team.subscribe(syncTeam);
   addEventListener("sb-room-orders", loadRoomData);
-  let replayTimer: ReturnType<typeof setTimeout>;
-  const replay = (event: Event) => {
-    clearTimeout(replayTimer);
-    irAEspacio("/");
-    const events = (event as CustomEvent<{ events: TeamEvent[] }>).detail
-      .events;
-    let index = 0;
-    q(".equipo-replay").hidden = false;
-    const next = () => {
-      if (!alive) return;
-      if (index >= events.length) {
-        q("#team-replay-status").textContent = "Repetición terminada";
-        return;
-      }
-      const e = events[index++];
-      playRelay(
-        {
-          id: e.id || "replay",
-          tipo: "relevo",
-          de: e.de || "",
-          para: e.para || "",
-          texto: e.texto || "",
-        },
-        true,
-      );
-      q("#team-replay-status").textContent =
-        `Reproduciendo ${index}/${events.length}: ${e.texto}`;
-      replayTimer = setTimeout(next, 4500);
-    };
-    q("#team-replay-stop").onclick = () => {
-      clearTimeout(replayTimer);
-      q(".equipo-replay").hidden = true;
+  const stopReplay = createRelayReplay(root, {
+    isAlive: () => alive,
+    playRelay,
+    onStart: () => irAEspacio("/"),
+    onStop: () => {
       world?.detenerRelevo();
       showTeam({ tab: "vivo" });
-    };
-    next();
-    q("#team-replay-stop").focus();
-  };
-  addEventListener("sb-team-replay", replay);
+    },
+  });
   syncTeam();
   void start();
   return () => {
     alive = false;
     sound.dispose();
-    resetStick();
-    joystick.removeEventListener("pointerdown", stickDown);
-    joystick.removeEventListener("pointermove", stickMove);
-    joystick.removeEventListener("pointerup", stickEnd);
-    joystick.removeEventListener("pointercancel", stickEnd);
-    joystick.removeEventListener("lostpointercapture", stickEnd);
+    walkInput.dispose();
     document.removeEventListener("visibilitychange", visibility);
     unsubscribeTeam();
-    clearTimeout(replayTimer);
+    stopReplay();
     removeEventListener("sb-room-orders", loadRoomData);
-    removeEventListener("sb-team-replay", replay);
-    clearInterval(clock);
+    stopClock();
     clearInterval(okClock);
     compactQuery.removeEventListener("change", compactChange);
     removeEventListener("keydown", keydown);
