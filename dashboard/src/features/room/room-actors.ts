@@ -72,7 +72,7 @@ export function animateAgent(
     reducedMotion: boolean;
     /** Rest length after arriving, staggered per agent. */
     restSeconds: number;
-    /** Whether her live session is working right now. */
+    /** Whether her thread is working right now. */
     isBusy: () => boolean;
     onArrive: () => void;
     onRestOver: () => void;

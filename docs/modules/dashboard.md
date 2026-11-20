@@ -78,10 +78,9 @@ runs its scripts.
 ## Browser suites
 
 `npm run verify:browser` runs the Playwright scripts in `ops/` (refuge,
-approvals, project dashboards, tools, conversations, workspaces) with
-synthetic data and fake CLIs. They use `BROWSER_EXECUTABLE` when set, then an
-installed Chrome or Edge, then Playwright's Chromium. A headless run does not
-measure a physical GPU or phone.
+approvals, project dashboards, tools and threads) with synthetic data. They
+use `BROWSER_EXECUTABLE` when set, then an installed Chrome or Edge, then
+Playwright's Chromium.
 
 ## Threads (ADR 0010)
 
@@ -92,7 +91,10 @@ measure a physical GPU or phone.
   ("Trabajó 42 s") apart from its messages.
 - `thread-stream.ts`: snapshot, then SSE (`/threads/flujo`, resumes with
   `Last-Event-ID`); `snapshot-required` reloads; repeated failures fall back
-  to polling. The list follows `/threads/feed` from `globalSeq`.
+  to polling.
+- `thread-projection.ts` shares the thread list between the refuge, projects,
+  settings and Threads. It follows `/threads/feed` from `globalSeq` with a
+  polling fallback. Finance approvals remain available in Finance.
 - `Timeline`, `items.tsx` (one renderer per item kind), `RequestCard`
   (questions, approvals and forms inline), `Composer` (send, steer, queue,
   stop; agent and model per message), `DiffView`, `dialogs.tsx` (new thread,

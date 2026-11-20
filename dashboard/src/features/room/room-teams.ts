@@ -1,19 +1,12 @@
 // Pure team logic for the refuge: who sits together, which threads join them,
 // which handoffs really happened and who is waiting for the owner's OK.
 import { PUESTOS } from "./room-life";
-import { sessionFigure, type ObservedSession } from "./room-sessions";
+import type { Thread } from "../threads/thread-types";
 
 export interface TeamGroup {
   equipoId: string;
   /** Figure ids, leader first. */
   miembros: string[];
-}
-export interface Thread {
-  equipoId: string;
-  /** Leader figure (or the parent figure) and child figure. */
-  de: string;
-  a: string;
-  hijaSesionId: string;
 }
 export interface TeamSeat {
   x: number;
@@ -21,62 +14,46 @@ export interface TeamSeat {
   angle: number;
   mesa: string;
 }
-export interface RelevoReal {
-  id: string;
-  tipo: string;
-  de: string;
-  para: string;
-}
 export interface ObservedApproval {
   actor: string;
   estado: string;
   vence: number;
 }
 
-const ACTIVE = new Set(["pendiente", "trabajando"]);
 // Worktables used by teams, in order; far from the spawn point and the Terrace.
 const MESAS = ["revisar", "investigar", "programar", "planificar"];
 const RADIO = 2;
 
-const active = (sessions: ObservedSession[]) =>
-  sessions.filter((s) => ACTIVE.has(s.estado) && sessionFigure(s));
-
-/** Teams with at least two live figures, and one thread per live child. */
-export function sceneTeams(sessions: ObservedSession[]): {
-  grupos: TeamGroup[];
-  hilos: Thread[];
-} {
-  const vivas = active(sessions).filter((s) => s.equipoId);
-  const byTeam = new Map<string, ObservedSession[]>();
-  for (const s of vivas) {
-    const list = byTeam.get(s.equipoId!) || [];
-    list.push(s);
-    byTeam.set(s.equipoId!, list);
+/** Seat connected live parent/child threads together. */
+export function sceneTeams(
+  threads: Thread[],
+  figures: ReadonlyMap<string, string>,
+) {
+  const parents = new Map(
+    threads.map((thread) => [thread.id, thread.parentId]),
+  );
+  const groups = new Map<string, Set<string>>();
+  const lines: { de: string; a: string }[] = [];
+  for (const thread of threads) {
+    const child = figures.get(thread.id);
+    const parent = thread.parentId ? figures.get(thread.parentId) : undefined;
+    if (!child || !parent || !thread.parentId) continue;
+    let root = thread.parentId;
+    while (parents.get(root) && figures.has(parents.get(root)!))
+      root = parents.get(root)!;
+    const group = groups.get(root) ?? new Set([figures.get(root)!]);
+    group.add(parent);
+    group.add(child);
+    groups.set(root, group);
+    lines.push({ de: parent, a: child });
   }
-  const groups: TeamGroup[] = [];
-  const hilos: Thread[] = [];
-  for (const [teamId, members] of byTeam) {
-    if (members.length < 2) continue;
-    const orden = [
-      ...members.filter((s) => !s.padreId),
-      ...members.filter((s) => s.padreId),
-    ];
-    groups.push({
-      equipoId: teamId,
-      miembros: orden.map((s) => sessionFigure(s)!),
-    });
-    for (const hija of members) {
-      const parent = members.find((s) => s.id === hija.padreId);
-      if (parent)
-        hilos.push({
-          equipoId: teamId,
-          de: sessionFigure(parent)!,
-          a: sessionFigure(hija)!,
-          hijaSesionId: hija.id,
-        });
-    }
-  }
-  return { grupos: groups, hilos };
+  return {
+    grupos: [...groups].map(([equipoId, members]) => ({
+      equipoId,
+      miembros: [...members],
+    })),
+    hilos: lines,
+  };
 }
 
 const redondear = (n: number) => Math.round(n * 1000) / 1000;
@@ -101,35 +78,6 @@ export function teamSeats(groups: TeamGroup[]) {
     });
   });
   return puestos;
-}
-
-/**
- * Handoffs recorded by the launcher that the room has not played yet. Both
- * ends must be live figures; every id seen is returned so it is never replayed.
- */
-export function newHandoffs(
-  sessions: ObservedSession[],
-  vistos: ReadonlySet<string>,
-): { nuevos: RelevoReal[]; ids: string[] } {
-  const vivas = active(sessions);
-  const ids: string[] = [];
-  const created: RelevoReal[] = [];
-  for (const s of sessions) {
-    const r = s.relevo;
-    if (!r?.id) continue;
-    ids.push(r.id);
-    if (vistos.has(r.id)) continue;
-    const de = vivas.find((x) => x.id === s.id);
-    const para = vivas.find((x) => x.id === r.para);
-    if (de && para && de !== para)
-      created.push({
-        id: r.id,
-        tipo: r.tipo,
-        de: sessionFigure(de)!,
-        para: sessionFigure(para)!,
-      });
-  }
-  return { nuevos: created, ids };
 }
 
 /** Base figures whose agent has an approval still pending (not expired). */

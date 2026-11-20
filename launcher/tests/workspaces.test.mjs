@@ -19,6 +19,7 @@ test("vincula proyectos sin confundir su identidad con el repositorio y detecta 
   assert.equal(free.repositorio, null);
   assert.ok(free.cwd.startsWith(options.workspaces + path.sep));
   const initial = spaces.leer();
+  assert.deepEqual(initial.repositoryPaths, { repo: dir });
   await spaces.vincular({
     id: "p1",
     repositorio: "repo",

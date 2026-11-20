@@ -10,7 +10,7 @@ import {
 } from "../../core/labels";
 import { useUI } from "../../components/ui";
 import { WaterBar } from "../../components/QuickView";
-import { ProjectAgents, StatusTag } from "../team/TeamPrimitives";
+import { ProjectAgents, StatusTag } from "../agents/TeamPrimitives";
 import { dashboardForProject } from "./dashboards";
 
 /** A project in one line: what it is, what comes next, how far it has gone. */

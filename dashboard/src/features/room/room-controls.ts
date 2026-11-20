@@ -1,9 +1,3 @@
-export interface ObservedFlow {
-  estado: string;
-  indice: number;
-  pasos: { agente?: string }[];
-}
-
 export interface ObservedTeamState {
   conectado?: boolean;
   agentes: {
@@ -21,15 +15,6 @@ export function thumbAxis(dx: number, dy: number, radius: number) {
 }
 export const advanceTour = (step: number, event: string) =>
   ["walk", "zone", "open"][step] === event ? step + 1 : step;
-export const waitingFlow = <T extends ObservedFlow>(
-  flows: T[],
-  agentId: string,
-) =>
-  flows.find(
-    (flow) =>
-      ["esperando", "en-cola"].includes(flow.estado) &&
-      flow.pasos[flow.indice]?.agente === agentId,
-  );
 export function observedCompletions(
   previous: ObservedTeamState | null | undefined,
   next: ObservedTeamState | null | undefined,

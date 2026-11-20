@@ -1,53 +1,53 @@
-// Synthetic harness stream for the browser checks. Playwright cannot hold a
-// real SSE response open and push to it, so the page gets an EventSource double
-// for /agentes/terminal/stream; everything else keeps using the real one.
-
-/** Call before the page loads: `await installFakeStream(context)`. */
+// EventSource double for the thread feed and individual thread streams.
 export async function installFakeStream(context) {
   await context.addInitScript(() => {
-    const Real = window.EventSource;
-    window.__streams = [];
+    const RealEventSource = window.EventSource;
+    window.__threadStreams = [];
     window.EventSource = class {
-      constructor(url) {
-        if (
-          !String(url).includes("/agentes/terminal/stream") &&
-          !String(url).includes("/agentes/conversacion/stream")
-        )
-          return new Real(url);
+      constructor(url, options) {
         this.url = String(url);
+        const path = new URL(this.url, location.origin).pathname;
+        if (!["/api/v1/threads/feed", "/api/v1/threads/flujo"].includes(path))
+          return new RealEventSource(url, options);
         this.closed = false;
-        this.onerror = null;
-        this.handlers = {};
-        window.__streams.push(this);
+        window.__threadStreams.push(this);
+        setTimeout(() => {
+          if (!this.closed) this.onopen?.(new Event("open"));
+        }, 0);
       }
-      addEventListener(name, fn) {
-        (this.handlers[name] ??= []).push(fn);
-      }
+
       close() {
         this.closed = true;
       }
     };
-    // Delivers an event to every open stream, as the service would.
-    window.__emit = (name, data) => {
-      for (const stream of window.__streams)
-        if (!stream.closed)
-          for (const fn of stream.handlers[name] ?? [])
-            fn({ data: JSON.stringify(data) });
-    };
   });
 }
 
-export const openStreams = (page) =>
-  page.evaluate(() => window.__streams.filter((s) => !s.closed).length);
+export const streamUrl = (page, path) =>
+  page.evaluate(
+    (match) =>
+      window.__threadStreams.find(
+        (stream) =>
+          !stream.closed &&
+          new URL(stream.url, location.origin).pathname.endsWith(match),
+      )?.url,
+    path,
+  );
 
-export const emit = (page, name, data) =>
-  page.evaluate(([n, d]) => window.__emit(n, d), [name, data]);
-
-/** Waits for the page to open its stream, then plays a first state into it. */
-export async function connectStream(page, { snapshot, items = [], estado }) {
-  await page.waitForFunction(() => window.__streams?.some((s) => !s.closed));
-  await emit(page, "snapshot", { activa: true, generacion: "g", ...snapshot });
-  await emit(page, "items", { reemplazar: true, items });
-  if (estado)
-    await emit(page, "estado", { activa: true, ultimaAccion: null, ...estado });
-}
+export const emit = (page, path, ...messages) =>
+  page.evaluate(
+    ([match, frames]) => {
+      for (const stream of window.__threadStreams) {
+        if (
+          stream.closed ||
+          !new URL(stream.url, location.origin).pathname.endsWith(match)
+        )
+          continue;
+        for (const frame of frames)
+          stream.onmessage?.(
+            new MessageEvent("message", { data: JSON.stringify(frame) }),
+          );
+      }
+    },
+    [path, messages],
+  );

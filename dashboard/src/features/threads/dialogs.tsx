@@ -1,6 +1,12 @@
+import "./threads.css";
 import { useEffect, useState } from "react";
+import { character } from "../agents/characters";
+import { preference } from "../settings/preferences";
+import { agentApi } from "../agents/agent-api";
+import type { ProjectLinks } from "../projects/ProjectRepository";
+import { isDemo } from "../../core/store";
 import { Modal } from "../../components/ui";
-import { loadChoice, type ModelChoice } from "../team/ModelEffortPicker";
+import { loadChoice, type ModelChoice } from "../agents/ModelEffortPicker";
 import { AgentPicker, agentRef, useModels } from "./Composer";
 import { threadsApi } from "./thread-api";
 import type { Engine, Thread } from "./thread-types";
@@ -27,28 +33,67 @@ export function NewThreadDialog({
   onClose,
   onCreated,
   initialPrompt = "",
-  initialProject = "",
+  initialEngine,
+  projectId,
 }: {
   onClose: () => void;
   onCreated: (thread: Thread) => void;
   initialPrompt?: string;
-  initialProject?: string;
+  initialEngine?: Engine;
+  projectId?: string;
 }) {
   const models = useModels();
   const [projects, setProjects] = useState<string[]>([]);
-  const [prompt, setPrompt] = useState(initialPrompt);
-  const [project, setProject] = useState(initialProject);
+  const [engine, setEngine] = useState<Engine>(
+    () =>
+      initialEngine ??
+      character(preference("defaultAgent"))?.engine ??
+      "claude",
+  );
+  const [draftKey] = useState(
+    () => "sb-chat-draft:" + (projectId || "general") + ":" + engine,
+  );
+  const [savedDraft] = useState(() => {
+    if (isDemo) return "";
+    try {
+      return localStorage.getItem(draftKey)?.trim() ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [prompt, setPrompt] = useState(() => {
+    if (!savedDraft) return initialPrompt;
+    if (!initialPrompt || savedDraft.includes(initialPrompt.trim()))
+      return savedDraft;
+    return savedDraft + "\n\n" + initialPrompt.trim();
+  });
+  const [project, setProject] = useState("");
+  const [loadingProjects, setLoadingProjects] = useState(!isDemo);
   const [autonomy, setAutonomy] = useState<Thread["autonomy"]>("auto-worktree");
-  const [engine, setEngine] = useState<Engine>("claude");
-  const [choice, setChoice] = useState<ModelChoice>(() => loadChoice("claude"));
+  const [choice, setChoice] = useState<ModelChoice>(() => loadChoice(engine));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
-    threadsApi
-      .projects()
-      .then(setProjects)
-      .catch(() => setProjects([]));
-  }, []);
+    if (isDemo) return;
+    let active = true;
+    void Promise.all([
+      threadsApi.projects().catch((): string[] => []),
+      projectId
+        ? agentApi("/agentes/espacios")
+            .then((result) => result as ProjectLinks)
+            .catch(() => null)
+        : null,
+    ]).then(([list, links]) => {
+      if (!active) return;
+      const linked = projectId ? links?.vinculos[projectId] : null;
+      setProjects(list);
+      setProject(linked && list.includes(linked) ? linked : "");
+      setLoadingProjects(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
   const create = async () => {
     setBusy(true);
     setError("");
@@ -60,6 +105,12 @@ export function NewThreadDialog({
         agent: agentRef(engine, models, choice),
         autonomy,
       });
+      try {
+        if (savedDraft && localStorage.getItem(draftKey)?.trim() === savedDraft)
+          localStorage.removeItem(draftKey);
+      } catch {
+        // Storage can be unavailable in private browsing.
+      }
       onCreated(thread);
     } catch (e) {
       setError((e as Error).message);
@@ -67,12 +118,19 @@ export function NewThreadDialog({
     }
   };
   return (
-    <Modal title="Nuevo thread" onClose={onClose} wide>
+    <Modal
+      title="Nuevo thread"
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      wide
+    >
       <form
         className="thread-dialog"
         onSubmit={(e) => {
           e.preventDefault();
-          if (prompt.trim()) void create();
+          if (prompt.trim() && !busy && !loadingProjects && !isDemo)
+            void create();
         }}
       >
         <label>
@@ -88,7 +146,12 @@ export function NewThreadDialog({
         </label>
         <label>
           Proyecto
-          <select value={project} onChange={(e) => setProject(e.target.value)}>
+          <select
+            aria-label="Proyecto"
+            value={project}
+            disabled={loadingProjects || busy}
+            onChange={(e) => setProject(e.target.value)}
+          >
             <option value="">Sin repositorio (carpeta temporal)</option>
             {projects.map((p) => (
               <option key={p} value={p}>
@@ -126,13 +189,18 @@ export function NewThreadDialog({
         </fieldset>
         {error && <p className="inline-error">{error}</p>}
         <div className="modal-actions">
-          <button type="button" className="button" onClick={onClose}>
+          <button
+            type="button"
+            className="button"
+            disabled={busy}
+            onClick={onClose}
+          >
             Cancelar
           </button>
           <button
             type="submit"
             className="button primary"
-            disabled={busy || !prompt.trim()}
+            disabled={busy || loadingProjects || isDemo || !prompt.trim()}
           >
             {busy ? "Creando…" : "Crear thread"}
           </button>

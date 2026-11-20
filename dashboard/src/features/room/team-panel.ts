@@ -10,7 +10,7 @@ const STATES: Record<string, string> = {
   interrumpido: "Interrumpido",
   pendiente: "Pendiente",
 };
-const NECESITA_ATENCION = new Set(["error", "interrumpido"]);
+const NECESITA_ATENCION = new Set(["error", "interrumpido", "failed"]);
 
 export interface RosterAgent {
   ocupada?: boolean;
@@ -34,6 +34,19 @@ export interface CharacterState {
 }
 
 export function characterState(a: RosterAgent): CharacterState {
+  if (
+    ["waiting-user", "ready-for-review", "needs-decision"].includes(
+      a.ultimo?.estado ?? "",
+    )
+  )
+    return {
+      trabajando: false,
+      atencion: false,
+      esperando: true,
+      zona: a.ultimo?.actividad?.zona,
+      etiqueta: a.ultimo?.actividad?.etiqueta || "Espera tu respuesta",
+      jobId: a.ultimo?.jobId,
+    };
   if (a.ocupada)
     return {
       trabajando: true,

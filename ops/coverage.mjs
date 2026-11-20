@@ -39,7 +39,7 @@ const floors = {
   service: 90,
   mcp: 90,
   launcher: 83,
-  dashboard: 42,
+  dashboard: 44,
 };
 /** @type {string[]} */
 const failures = [];

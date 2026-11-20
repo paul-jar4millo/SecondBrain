@@ -52,38 +52,7 @@ try {
         ],
       }),
     );
-    await page.route("**/api/v1/agentes/proyectos-lanzador", (route) =>
-      route.fulfill({ json: ["proyecto-sintetico"] }),
-    );
-    let encargos = 0;
-    await page.route("**/api/v1/agentes/espacios", (route) =>
-      route.fulfill({
-        json: {
-          revision: 0,
-          repositorios: ["proyecto-sintetico"],
-          vinculos: { general: "proyecto-sintetico" },
-        },
-      }),
-    );
-    await page.route("**/api/v1/agentes/sesiones*", (route) => {
-      if (route.request().method() === "POST") {
-        encargos++;
-        return route.fulfill({ status: 202, json: { id: "nueva" } });
-      }
-      return route.fulfill({
-        json: [
-          {
-            id: "existente",
-            motor: "codex",
-            estado: "trabajando",
-            copia: 0,
-            proyecto: "proyecto-sintetico",
-            ultimaAccion: "Revisando",
-          },
-        ],
-      });
-    });
-    await page.goto(url + "/team", { waitUntil: "domcontentloaded" });
+    await page.goto(url + "/finance", { waitUntil: "domcontentloaded" });
     await page
       .getByRole("heading", { name: "Solicitudes de aprobación" })
       .waitFor({ timeout: 30000 });
@@ -109,28 +78,6 @@ try {
       false,
     );
     await page.screenshot({ path: path.join(dir, `aprobacion-${width}.png`) });
-    assert.equal(encargos, 0);
-    await page
-      .locator(".conversation-agents button")
-      .filter({ hasText: "Menta" })
-      .click();
-    await page
-      .getByRole("button", { name: "Nueva conversación", exact: true })
-      .click();
-    await page
-      .getByLabel("Mensaje para Menta", { exact: true })
-      .fill("Revisa los datos sintéticos");
-    await page.screenshot({ path: path.join(dir, `sesiones-${width}.png`) });
-    const respuesta = page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/v1/agentes/sesiones") &&
-        response.request().method() === "POST",
-    );
-    await page
-      .getByRole("button", { name: "Abrir conversación", exact: true })
-      .click();
-    await respuesta;
-    assert.equal(encargos, 1);
     assert.deepEqual(errors, []);
     await page.close();
   }

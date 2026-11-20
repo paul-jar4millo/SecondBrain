@@ -38,17 +38,11 @@ import { HeadingSlots } from "../components/PageHeading";
 import { HudGlyph, HudMoon, type GlyphName } from "../components/HudGlyph";
 import { AgentHandoff } from "../features/assist/AgentHandoff";
 import { PromptBar } from "../features/assist/PromptBar";
-import { taskPrompt } from "../core/agent-prompt";
-import { prepareAgentDraft } from "../features/team/agent-draft";
-import { subscribeChanges } from "../core/events";
-import { teamController } from "../features/team/team-store";
-import type { AgentTarget, TeamTarget } from "../features/team/team-controller";
-import { character } from "../features/team/characters";
-import { collectJobs } from "../features/team/team-controller";
 import { preference } from "../features/settings/preferences";
-const AgentProfile = lazy(() =>
-  import("../features/team/AgentProfile").then((m) => ({
-    default: m.AgentProfile,
+import type { ThreadTarget } from "../features/threads/thread-target";
+const NewThreadDialog = lazy(() =>
+  import("../features/threads/dialogs").then((m) => ({
+    default: m.NewThreadDialog,
   })),
 );
 const ToolRoutes = lazy(() => import("./ToolRoutes"));
@@ -71,49 +65,12 @@ export function Workspace() {
   const [backup, setBackup] = useState<BackupAlert | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const [agentTarget, setAgentTarget] = useState<AgentTarget | null>(null);
-  const opener = useRef<HTMLElement | null>(null);
-  const closeAgent = useCallback(() => {
-    setAgentTarget(null);
-    requestAnimationFrame(() => {
-      if (opener.current?.isConnected && opener.current.closest("dialog[open]"))
-        opener.current.focus({ preventScroll: true });
-      else document.querySelector<HTMLElement>(".tool-tabs a.active")?.focus();
-    });
-  }, []);
-  const openAgent = useCallback(
-    (target: AgentTarget) => {
-      opener.current = document.activeElement as HTMLElement;
-      setAgentTarget(null);
-      if (target.taskId) {
-        const task = state.items.find((i) => i.id === target.taskId);
-        if (task && target.agentId) {
-          const prompt = taskPrompt(task, state.items);
-          navigate(
-            prepareAgentDraft(
-              target.projectId || task.projectId || "general",
-              target.agentId,
-              prompt,
-            ),
-          );
-          return;
-        }
-      }
-      const query = new URLSearchParams({ agent: target.agentId });
-      if (target.projectId) query.set("project", target.projectId);
-      if (target.chatId) query.set("chat", target.chatId);
-      navigate("/team?" + query);
-    },
-    [navigate, state.items],
-  );
-  const openTeam = useCallback(
-    (target: TeamTarget = {}) => {
-      setAgentTarget(null);
-      const query = new URLSearchParams();
-      if (target.tab) query.set("tab", target.tab);
-      if (target.projectId) query.set("project", target.projectId);
-      if (target.jobId) query.set("chat", target.jobId);
-      navigate("/team" + (query.size ? "?" + query : ""));
+  const [threadDraft, setThreadDraft] = useState<ThreadTarget | null>(null);
+  const openThread = useCallback(
+    (target?: ThreadTarget) => {
+      if (!target || target.id)
+        navigate(target?.id ? "/threads/" + target.id : "/threads");
+      else setThreadDraft(target);
     },
     [navigate],
   );
@@ -153,38 +110,6 @@ export function Workspace() {
       document.removeEventListener("visibilitychange", check);
     };
   }, []);
-  useEffect(() => {
-    // Agents at work announce changes every second or two; the timer only
-    // covers a lost event stream.
-    const refresh = throttled(() => {
-      if (!document.hidden) void teamController.refresh();
-    }, 5000);
-    const unsubscribe = subscribeChanges(refresh);
-    const tick = setInterval(refresh, 20000);
-    document.addEventListener("visibilitychange", refresh);
-    refresh();
-    let initialized = false;
-    const known = new Set<string>();
-    const stop = teamController.subscribe(() => {
-      const snapshot = teamController.getSnapshot();
-      if (!snapshot.connected) return;
-      for (const job of collectJobs(snapshot.agents, snapshot.flows)) {
-        if (job.jobId && initialized && !known.has(job.jobId))
-          notify(
-            `${character(job.agente)?.name || "Una agente"}: entrega disponible en Equipo.`,
-          );
-        if (job.jobId) known.add(job.jobId);
-      }
-      initialized = true;
-    });
-    return () => {
-      unsubscribe();
-      stop();
-      clearInterval(tick);
-      refresh.cancel();
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [notify]);
   const edit = useCallback((item: Item | Kind) => setEditing(item), []);
   useEffect(() => {
     void init().catch((e) => notify(e.message));
@@ -254,15 +179,13 @@ export function Workspace() {
       notify,
       trash,
       ask: setHandoff,
-      openAgent,
-      openTeam,
+      openThread,
     }),
-    [state.items, edit, notify, trash, openAgent, openTeam],
+    [state.items, edit, notify, trash, openThread],
   );
   const tools: { path: string; label: string; glyph: GlyphName }[] = [
     { path: "/projects", label: t("tools.projects"), glyph: "proyectos" },
     { path: "/threads", label: t("tools.threads"), glyph: "equipo" },
-    { path: "/team", label: t("tools.team"), glyph: "equipo" },
     { path: "/tasks", label: t("tools.tasks"), glyph: "tareas" },
     { path: "/finance", label: t("tools.finance"), glyph: "finanzas" },
     { path: "/files", label: t("tools.files"), glyph: "maletin" },
@@ -287,7 +210,8 @@ export function Workspace() {
     !notifications &&
     !composing &&
     handoff === null &&
-    !search;
+    !search &&
+    !threadDraft;
   return (
     <UI.Provider value={context}>
       <HeadingSlots.Provider value={slots}>
@@ -367,7 +291,7 @@ export function Workspace() {
             <Link
               to="/"
               className={inRoom ? "selected" : ""}
-              style={{ "--slot": -3.5 } as CSSProperties}
+              style={{ "--slot": -3 } as CSSProperties}
             >
               <HudGlyph name="sala" />
               <span>{t("tools.room")}</span>
@@ -376,7 +300,7 @@ export function Workspace() {
               <NavLink
                 key={path}
                 to={path}
-                style={{ "--slot": index - 2.5 } as CSSProperties}
+                style={{ "--slot": index - 2 } as CSSProperties}
               >
                 <HudGlyph name={glyph} />
                 <span>{label}</span>
@@ -388,22 +312,14 @@ export function Workspace() {
           <Modal
             title={t("tools.title")}
             wide
-            className={`tool-workspace ${location.pathname === "/team" ? "conversation-workspace" : ""} ${agentTarget ? "has-inspector" : ""}`}
-            onEscape={agentTarget ? closeAgent : undefined}
-            onClose={() => {
-              setAgentTarget(null);
-              navigate("/");
-            }}
+            className="tool-workspace"
+            onClose={() => navigate("/")}
           >
             <div className="workspace-body">
               <div className="tool-base">
                 <nav className="tool-tabs" aria-label={t("tools.switch")}>
                   {tools.map(({ path, label }) => (
-                    <NavLink
-                      key={path}
-                      to={path}
-                      onClick={() => setAgentTarget(null)}
-                    >
+                    <NavLink key={path} to={path}>
                       {label}
                     </NavLink>
                   ))}
@@ -419,17 +335,6 @@ export function Workspace() {
                 </div>
               </div>
               <div className="tool-fab-slot" ref={setFabSlot} />
-              {agentTarget && (
-                <Suspense
-                  fallback={<p role="status">{t("loading.profile")}</p>}
-                >
-                  <AgentProfile
-                    key={`${agentTarget.agentId}:${agentTarget.projectId || "general"}:${agentTarget.taskId || ""}`}
-                    target={agentTarget}
-                    onClose={closeAgent}
-                  />
-                </Suspense>
-              )}
               {toastInToolModal && toastNode}
             </div>
           </Modal>
@@ -472,6 +377,20 @@ export function Workspace() {
             prompt={handoff}
             onClose={() => setHandoff(null)}
           />
+        )}
+        {threadDraft && (
+          <Suspense fallback={null}>
+            <NewThreadDialog
+              initialEngine={threadDraft.engine}
+              initialPrompt={threadDraft.prompt}
+              projectId={threadDraft.projectId}
+              onClose={() => setThreadDraft(null)}
+              onCreated={(thread) => {
+                setThreadDraft(null);
+                openThread({ id: thread.id });
+              }}
+            />
+          </Suspense>
         )}
         {search && <SearchDialog onClose={() => setSearch(false)} />}
         {!toastInToolModal && toastNode}

@@ -6,6 +6,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
+import { emit, installFakeStream, streamUrl } from "./fake-stream.mjs";
 import { browserExecutable } from "./browser-executable.mjs";
 
 const AT = "2026-11-20T10:00:00.000Z";
@@ -14,6 +15,7 @@ const until = async (check) => {
     await new Promise((r) => setTimeout(r, 50));
   assert.ok(check(), "timed out");
 };
+const CREATED = "thr_verify0000000002";
 const THREAD = "thr_verify0000000001";
 const thread = {
   id: THREAD,
@@ -111,27 +113,12 @@ try {
       viewport: { width, height: 860 },
       ...(width < 700 ? { isMobile: true, hasTouch: true } : {}),
     });
-    // EventSource double: records the URL and lets the test push messages.
-    await context.addInitScript(() => {
-      localStorage.setItem("sb-room-tour-v1", "done");
-      window.__sources = [];
-      window.EventSource = class {
-        constructor(url) {
-          this.url = String(url);
-          this.closed = false;
-          window.__sources.push(this);
-          setTimeout(() => this.onopen?.({}), 0);
-        }
-        close() {
-          this.closed = true;
-        }
-      };
-      window.__push = (match, data) => {
-        for (const s of window.__sources)
-          if (!s.closed && s.url.includes(match))
-            s.onmessage?.({ data: JSON.stringify(data) });
-      };
-    });
+    await context.addInitScript(() =>
+      localStorage.setItem("sb-room-tour-v1", "done"),
+    );
+    await installFakeStream(context);
+    const created = [];
+    const records = new Map([[THREAD, structuredClone(snapshot)]]);
     const sent = [],
       answers = [],
       closes = [],
@@ -147,11 +134,41 @@ try {
         });
       switch (url.pathname) {
         case "/api/v1/threads":
-          return json({ threads: [thread], globalSeq: 3 });
+          if (request.method() === "GET")
+            return json({
+              threads: [...records.values()].map((entry) => entry.thread),
+              globalSeq: 3,
+            });
+          created.push(request.postDataJSON());
+          const newThread = {
+            ...thread,
+            id: CREATED,
+            status: "idle",
+            title: "Revisa la API",
+          };
+          records.set(CREATED, {
+            thread: newThread,
+            lastSeq: 3,
+            items: [],
+            requests: [],
+          });
+          return json({ thread: newThread }, 201);
         case "/api/v1/bandeja":
-          return json({ entries: [] });
+          return json({
+            entries: answers.length
+              ? []
+              : [
+                  {
+                    threadId: THREAD,
+                    threadTitle: thread.title,
+                    reason: "question",
+                    requestId: "req_ask000001",
+                    summary: "Revisa la pregunta del agente",
+                  },
+                ],
+          });
         case "/api/v1/threads/detalle":
-          return json(snapshot);
+          return json(records.get(url.searchParams.get("id")));
         case "/api/v1/threads/diff":
           return json(diff);
         case "/api/v1/threads/mensajes":
@@ -162,7 +179,11 @@ try {
           return json({ request: {} });
         case "/api/v1/threads/cerrar":
           closes.push(request.postDataJSON());
-          return json({ thread: { ...thread, status: "done" } });
+          const record = records.get(closes.at(-1).id);
+          record.thread = { ...record.thread, status: "done" };
+          return json({ thread: record.thread });
+        case "/api/v1/agentes/uso":
+          return json({});
         case "/api/v1/agentes/modelos-lanzador":
           return json({ codex: [{ id: "gpt-6.2", nombre: "GPT 6.2" }] });
         case "/api/v1/agentes/proyectos-lanzador":
@@ -172,9 +193,16 @@ try {
     });
     const page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.goto(`${origin}/threads/${THREAD}`, {
+    await page.goto(origin + "/threads", {
       waitUntil: "networkidle",
     });
+    await page
+      .locator('[data-status="menta"]', { hasText: "Trabajando" })
+      .waitFor({ state: "attached" });
+    await page
+      .getByRole("region", { name: "Bandeja" })
+      .getByRole("link", { name: /Revisa la pregunta del agente/ })
+      .click();
     await page
       .getByRole("heading", { name: thread.title })
       .waitFor()
@@ -186,25 +214,19 @@ try {
         throw e;
       });
     await page.waitForFunction(() =>
-      window.__sources.some((s) => s.url.includes("/threads/flujo")),
+      window.__threadStreams.some((stream) =>
+        stream.url.includes("/threads/flujo"),
+      ),
     );
-    const streamUrl = await page.evaluate(
-      () => window.__sources.find((s) => s.url.includes("/threads/flujo")).url,
-    );
-    assert.match(streamUrl, /after=3$/);
-    // A delta streams into the open message.
-    await page.evaluate(
-      (id) =>
-        window.__push("/threads/flujo", {
-          type: "item.delta",
-          threadId: id,
-          itemId: "itm_m1",
-          field: "text",
-          delta: " el cursor.",
-          afterSeq: 3,
-        }),
-      THREAD,
-    );
+    assert.match(await streamUrl(page, "/threads/flujo"), /after=3$/);
+    await emit(page, "/threads/flujo", {
+      type: "item.delta",
+      threadId: THREAD,
+      itemId: "itm_m1",
+      field: "text",
+      delta: " el cursor.",
+      afterSeq: 3,
+    });
     await page.getByText("Estoy añadiendo el cursor.").waitFor();
     // A running turn offers steer and queue; Ctrl+Enter steers.
     await page.getByRole("textbox", { name: "Mensaje" }).fill("Usa base64");
@@ -216,53 +238,38 @@ try {
       mode: "steer",
     });
     // The turn ends and the agent asks.
-    await page.evaluate((id) => {
-      const ev = (seq, data) => ({
-        type: "event",
-        event: {
-          threadId: id,
-          seq,
-          globalSeq: seq,
-          at: "2026-11-20T10:01:00.000Z",
-          ...data,
-        },
-      });
-      window.__push(
-        "/threads/flujo",
-        ev(4, {
-          type: "turn.completed",
-          turnId: "trn_t1",
-          outcome: "completed",
-        }),
-      );
-      window.__push(
-        "/threads/flujo",
-        ev(5, { type: "thread.updated", patch: { status: "waiting-user" } }),
-      );
-      window.__push(
-        "/threads/flujo",
-        ev(6, {
-          type: "request.opened",
-          request: {
-            id: "req_ask000001",
-            threadId: id,
-            turnId: null,
-            kind: "question",
-            title: "¿Tamaño de página por defecto?",
-            body: "",
-            options: [
-              { id: "o1", label: "20" },
-              { id: "o2", label: "50" },
-            ],
-            status: "open",
-            answer: null,
-            origin: null,
-            createdAt: "2026-11-20T10:01:00.000Z",
-            answeredAt: null,
-          },
-        }),
-      );
-    }, THREAD);
+    const event = (seq, data) => ({
+      type: "event",
+      event: { threadId: THREAD, seq, globalSeq: seq, at: AT, ...data },
+    });
+    const question = {
+      id: "req_ask000001",
+      threadId: THREAD,
+      turnId: null,
+      kind: "question",
+      title: "¿Tamaño de página por defecto?",
+      body: "",
+      options: [
+        { id: "o1", label: "20" },
+        { id: "o2", label: "50" },
+      ],
+      status: "open",
+      answer: null,
+      origin: null,
+      createdAt: AT,
+      answeredAt: null,
+    };
+    await emit(
+      page,
+      "/threads/flujo",
+      event(4, {
+        type: "turn.completed",
+        turnId: "trn_t1",
+        outcome: "completed",
+      }),
+      event(5, { type: "thread.updated", patch: { status: "waiting-user" } }),
+      event(6, { type: "request.opened", request: question }),
+    );
     await page.getByText("¿Tamaño de página por defecto?").waitFor();
     await page.getByText("Espera tu respuesta").first().waitFor();
     const work = page.getByRole("button", { name: /Trabajó 42 s/ });
@@ -313,16 +320,35 @@ try {
       ),
       "no horizontal scroll",
     );
-    // The list on the phone: one column, back to it from the thread.
-    if (width < 700) {
+    if (width < 700)
       await page.getByRole("link", { name: "Volver a la lista" }).click();
-      await page.getByRole("button", { name: "Nuevo thread" }).click();
-      await page.getByRole("dialog", { name: "Nuevo thread" }).waitFor();
-      if (shots)
-        await page.screenshot({
-          path: path.join(shots, `threads-new-${width}.png`),
-        });
-    }
+    await page.getByRole("button", { name: "Nuevo thread" }).click();
+    const draft = page.getByRole("dialog", { name: "Nuevo thread" });
+    await draft.getByRole("textbox", { name: "Tarea" }).fill("Revisa la API");
+    await draft.getByLabel("Agente", { exact: true }).selectOption("codex");
+    await draft.getByLabel("Proyecto", { exact: true }).selectOption("demo");
+    if (shots)
+      await page.screenshot({
+        path: path.join(shots, "threads-new-" + width + ".png"),
+      });
+    assert.equal(created.length, 0);
+    await draft.getByRole("button", { name: "Crear thread" }).click();
+    await page.getByRole("heading", { name: "Revisa la API" }).waitFor();
+    assert.deepEqual(created, [
+      {
+        prompt: "Revisa la API",
+        kind: "repo",
+        repoPath: "demo",
+        agent: { engine: "codex", model: "gpt-6.2" },
+        autonomy: "auto-worktree",
+      },
+    ]);
+    await page.getByRole("button", { name: "Cerrar thread" }).click();
+    await page.getByRole("radio", { name: /Integrar en local/ }).check();
+    await page.getByRole("button", { name: "Integrar", exact: true }).click();
+    await until(() => closes.length === 2);
+    assert.deepEqual(closes[1], { id: CREATED, mode: "merge" });
+    await page.getByText("Este thread está cerrado.").waitFor();
     assert.deepEqual(errors, []);
     console.log(
       `${width}: stream, steer, pregunta, diff, cierre y objetivos táctiles correctos`,

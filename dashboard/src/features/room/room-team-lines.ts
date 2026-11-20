@@ -5,7 +5,7 @@ const ALTURA = 1.5;
  * Light threads from a team leader to each live child. One two-vertex line per
  * thread, a single shared material; vertices are rewritten in place per frame.
  */
-export function createThreads(scene: THREE.Scene, quieto = false) {
+export function createTeamLines(scene: THREE.Scene, quieto = false) {
   const material = new THREE.LineBasicMaterial({
     color: "#9fe8ff",
     transparent: true,

@@ -399,7 +399,6 @@ for (const [key, body] of /** @type {Array<[string, z.ZodType]>} */ ([
     "POST /oauth/clientes/revocar",
     z.object({ id: z.string().regex(/^[a-f0-9]{32}$/) }).strict(),
   ],
-  ["GET /agentes/sesiones", object],
   ["GET /agentes/espacios", object],
   [
     "POST /agentes/espacios",

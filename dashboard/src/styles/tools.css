@@ -1789,12 +1789,12 @@
   display: grid;
   gap: 12px;
 }
-.conversation-model {
+.model-effort-picker {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
 }
-.conversation-model > label {
+.model-effort-picker > label {
   flex: 1;
   min-width: 160px;
 }

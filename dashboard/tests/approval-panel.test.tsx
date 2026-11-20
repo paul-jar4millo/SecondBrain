@@ -2,12 +2,12 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { ApprovalPanel } from "../src/features/team/ApprovalPanel";
+import { ApprovalPanel } from "../src/features/finance/ApprovalPanel";
 
 const fixture = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock("../src/core/store", () => ({ isDemo: false }));
 vi.mock("../src/core/events", () => ({ subscribeChanges: () => () => {} }));
-vi.mock("../src/features/team/team-store", () => ({ teamApi: fixture.api }));
+vi.mock("../src/features/agents/agent-api", () => ({ agentApi: fixture.api }));
 afterEach(() => {
   cleanup();
   fixture.api.mockReset();

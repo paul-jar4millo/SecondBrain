@@ -13,8 +13,8 @@ import { plainTitle } from "../../core/labels";
 import { splash } from "../../components/Alive";
 import { save, create, isDemo } from "../../core/store";
 import { taskPrompt } from "../../core/agent-prompt";
-import { characters } from "../team/characters";
-import { AgentPortrait } from "../team/TeamPrimitives";
+import { characters } from "../agents/characters";
+import { AgentPortrait } from "../agents/TeamPrimitives";
 export function TaskRow({
   task,
   showProject = true,
@@ -22,7 +22,7 @@ export function TaskRow({
   task: Item;
   showProject?: boolean;
 }) {
-  const { items, edit, notify, ask, openAgent } = useUI();
+  const { items, edit, notify, ask, openThread } = useUI();
   const [choosingAgent, setChoosingAgent] = useState(false);
   const choicesId = useId();
   const done = task.status === "done";
@@ -143,10 +143,10 @@ export function TaskRow({
                 key={a.id}
                 aria-label={`Consultar a ${a.name} para esta tarea`}
                 onClick={() =>
-                  openAgent({
-                    agentId: a.id,
+                  openThread({
+                    engine: a.engine,
                     projectId: task.projectId,
-                    taskId: task.id,
+                    prompt: taskPrompt(task, items),
                   })
                 }
               >

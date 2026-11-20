@@ -24,22 +24,20 @@ import { createWorldBoards } from "./room-boards";
 import {
   sceneSessions,
   conciliarCopias,
-  type CopiaObservada,
+  type ObservedCopy,
 } from "./room-sessions";
 import {
   sceneTeams,
   figurasEsperandoOk,
   teamSeats,
-  newHandoffs,
   type ObservedApproval,
   type TeamSeat,
 } from "./room-teams";
-import { createThreads } from "./room-threads";
+import { createTeamLines } from "./room-team-lines";
 import {
   advanceTour,
   observedCompletions,
   createRoomSound,
-  waitingFlow,
 } from "./room-controls";
 import {
   QUALITY,
@@ -55,8 +53,6 @@ import { paintHud, startClock, type Nearby } from "./room-hud";
 import { createRefugeLoad } from "./room-assets";
 import { createWalkInput } from "./room-input";
 import { createPointer } from "./room-pointer";
-import { createRelayReplay } from "./room-replay";
-import { sceneFromSnapshot, unreadJobs } from "./room-snapshot";
 import { CANVAS_LABEL, ICONS, esc, roomMarkup, toPlace } from "./room-markup";
 import {
   CORAL,
@@ -69,21 +65,11 @@ import {
 } from "./room-props";
 import { createOrbit, createStage, nudgeCamera } from "./room-stage";
 
-import type {
-  AgentsState,
-  AgentState,
-  TeamState,
-  Relay,
-  SceneState,
-  RoomStats,
-  ZoneId,
-} from "./room-types";
+import type { AgentsState, RoomStats, ZoneId } from "./room-types";
 import type { Point } from "./room-life";
-import type {
-  TeamController,
-  AgentTarget,
-  TeamTarget,
-} from "../team/team-controller";
+import type { threadProjection } from "../threads/thread-projection";
+import type { ThreadTarget } from "../threads/thread-target";
+import { character } from "../agents/characters";
 import type { RoomSummary } from "./room-summary";
 type Spec = SceneSpec;
 type SavedOrder = ReturnType<typeof normalizeOrder>;
@@ -93,9 +79,8 @@ interface RoomData {
 interface RoomOptions {
   api: (path: string, body?: unknown) => Promise<unknown>;
   toast: (message: string) => void;
-  team: TeamController;
-  openAgent: (target: AgentTarget) => void;
-  openTeam: (target?: TeamTarget) => void;
+  threads: typeof threadProjection;
+  openThread: (target?: ThreadTarget) => void;
   irAEspacio?: (path: string) => void;
   datos?: () => RoomSummary;
   /** Pending approvals of the service; the same list the approval panel reads. */
@@ -118,9 +103,8 @@ export function mount(
   {
     api,
     toast,
-    team,
-    openAgent: showAgent,
-    openTeam: showTeam,
+    threads,
+    openThread,
     irAEspacio = () => {},
     datos,
     aprobaciones: approve,
@@ -229,7 +213,7 @@ export function mount(
     pixelRatio = 1,
     stats: RoomStats | null = null;
   let realState: AgentsState | null = null;
-  let copiasDeseadas: CopiaObservada[] = [];
+  let copiasDeseadas: ObservedCopy[] = [];
   let createActor:
     ((spec: Spec, x: number, z: number) => Promise<Actor | null>) | null = null;
   const copiesInProgress = new Set<string>();
@@ -239,11 +223,8 @@ export function mount(
   let liveApprovals: ObservedApproval[] = [];
   let readingApprovals = false,
     lastApprovalsRead = 0;
-  const seenRelays = new Set<string>();
-  let relevosIniciados = false;
-  let hilos: ReturnType<typeof createThreads> | null = null;
+  let hilos: ReturnType<typeof createTeamLines> | null = null;
   let hilosDeseados: { de: string; a: string }[] = [];
-  let teamState: TeamState = { flujos: [], eventos: [] };
   const labels: THREE.Sprite[] = [];
   const overlays = createOverlayStack({
     onChange: (list) => {
@@ -252,31 +233,16 @@ export function mount(
     },
   });
 
-  function sceneState(a: AgentState): SceneState {
-    const state = characterState(a);
-    const flow = waitingFlow(teamState.flujos, a.id);
-    if (!a.ocupada && flow) {
-      const s = flow.pasos[flow.indice];
-      return {
-        ...state,
-        atencion: false,
-        esperando: true,
-        zona: s.zona,
-        fase: s.nombre,
-        etiqueta: `Lista para ${s.nombre.toLocaleLowerCase("es")} · ${flow.estado === "esperando" ? "tu clic" : "en cola"}`,
-        jobId: flow.id,
-      };
-    }
-    return state;
-  }
   const liveAgent = (id: string) => realState?.agentes.find((a) => a.id === id);
   // Roster text: real work, waits and failures win; otherwise what the scene shows.
   const statusText = (id: string) => {
     if (esperandoOk.has(id)) return "Esperando tu OK";
     const live = liveAgent(id);
     return (
-      rosterLabel(live ? sceneState(live) : null, activities.get(id) || "") ||
-      "En descanso"
+      rosterLabel(
+        live ? characterState(live) : null,
+        activities.get(id) || "",
+      ) || "En descanso"
     );
   };
   const paintStatus = (id: string) => {
@@ -289,20 +255,6 @@ export function mount(
     paintStatus(id);
   };
 
-  let relayInitialized = false;
-  const observedRelays = new Set();
-  function playRelay(e: Relay | null, replay = false) {
-    if (!e) {
-      world?.detenerRelevo();
-      return;
-    }
-    const from = actors.find((a) => a.spec.id === e.de);
-    const to = actors.find((a) => a.spec.id === e.para);
-    if (from && to) world?.relevo(from.raiz, to.raiz);
-    q("#team-handoff").hidden = false;
-    q("#team-handoff").textContent =
-      `${replay ? "Repetición del relevo" : "Relevo programado"}: ${e.texto}`;
-  }
   function dropCue(actor: Actor) {
     if (!actor.cueTag) return;
     actor.raiz.remove(actor.cueTag);
@@ -329,7 +281,7 @@ export function mount(
     }
     AGENT_SPECS.forEach((a) => paintStatus(a.id));
   }
-  function syncAgents(d: AgentsState, e = teamState) {
+  function syncAgents(d: AgentsState) {
     if (!alive) return;
     const finished = observedCompletions(realState, d);
     for (const id of finished) {
@@ -342,20 +294,10 @@ export function mount(
       completionUntil = performance.now() + 5000;
       sound.play("complete");
     }
-    teamState = e;
     realState = d.conectado ? d : null;
-    const relay = e.eventos.filter((x) => x.tipo === "relevo").at(-1);
-    q("#team-handoff").hidden = !relay;
-    if (relay)
-      q("#team-handoff").textContent = `Relevo programado: ${relay.texto}`;
-    for (const event of e.eventos.filter((x) => x.tipo === "relevo")) {
-      if (relayInitialized && !observedRelays.has(event.id)) playRelay(event);
-      observedRelays.add(event.id);
-    }
-    relayInitialized = true;
     for (const actor of actors) {
       const a = liveAgent(actor.spec.id);
-      const state = a && sceneState(a);
+      const state = a && characterState(a);
       const seat = puestosEq.get(actor.spec.id);
       const key = JSON.stringify([state, seat?.x, seat?.z]);
       if (key !== actor.liveKey) {
@@ -381,7 +323,7 @@ export function mount(
     for (const tag of labels) {
       if (!tag.userData.phase) continue;
       tag.visible = !!realState?.agentes.some((a) => {
-        const state = sceneState(a);
+        const state = characterState(a);
         return (
           (state.trabajando || state.esperando || state.atencion) &&
           state.fase?.toLocaleLowerCase("es") === tag.userData.phase
@@ -408,11 +350,14 @@ export function mount(
   function openAgent(id: string, _from = "world") {
     const base = id.split("#")[0];
     const live = liveAgent(id) || liveAgent(base);
-    showAgent({
-      agentId: base,
-      projectId: orders[base]?.project || live?.ultimo?.project,
-      chatId: live?.ultimo?.jobId,
-    });
+    const threadId =
+      live?.ultimo?.estado === "listo" ? undefined : live?.ultimo?.jobId;
+    if (threadId) openThread({ id: threadId });
+    else
+      openThread({
+        engine: character(base)?.engine,
+        projectId: orders[base]?.project,
+      });
   }
   function toggleHelp() {
     if (overlays.has("help")) {
@@ -459,7 +404,7 @@ export function mount(
     if (!actor) return;
     const live = liveAgent(id);
     const leisure = !live?.ocupada;
-    const state = live ? sceneState(live) : null;
+    const state = live ? characterState(live) : null;
     // Work, a pending click and a failure keep her at her desk instead of leisure.
     const cue =
       state?.trabajando || state?.esperando || state?.atencion ? state : null;
@@ -526,7 +471,7 @@ export function mount(
     );
     if (agent) openAgent(agent.dataset.agent!, "roster");
     if ((e.target as HTMLElement).closest<HTMLButtonElement>(".team-toggle"))
-      showTeam({ tab: "vivo" });
+      openThread();
     if ((e.target as HTMLElement).closest<HTMLButtonElement>(".team-collapse"))
       setTeam(q(".room-team").classList.contains("collapsed"));
     if ((e.target as HTMLElement).closest<HTMLButtonElement>("#map-toggle"))
@@ -824,12 +769,12 @@ export function mount(
       const variar = (color: string) =>
         "#" +
         new THREE.Color(color)
-          .offsetHSL((copy.copia * 0.19) % 1, 0, 0)
+          .offsetHSL((copy.copy * 0.19) % 1, 0, 0)
           .getHexString();
       const spec = {
         ...original,
         id,
-        nombre: `${original.nombre} · ${copy.copia + 1}`,
+        nombre: `${original.nombre} · ${copy.copy + 1}`,
         color: variar(original.color),
         colores: Object.fromEntries(
           Object.entries(original.colores as Record<string, string>).map(
@@ -840,7 +785,7 @@ export function mount(
       const origin = activityFor(original.id);
       copiesInProgress.add(id);
       const fabrica = createActor;
-      void fabrica(spec, origin.x + copy.copia * 0.7, origin.z)
+      void fabrica(spec, origin.x + copy.copy * 0.7, origin.z)
         .then((actor) => {
           if (createActor === fabrica) copiesInProgress.delete(id);
           if (!actor) return;
@@ -957,7 +902,7 @@ export function mount(
       });
       worldBoards = createWorldBoards(scene);
       worldBoards.update(summary);
-      hilos = createThreads(scene, reducedMotion);
+      hilos = createTeamLines(scene, reducedMotion);
       hilos.sincronizar(hilosDeseados);
       nav = createNavigation(
         manifest.width,
@@ -1220,45 +1165,27 @@ export function mount(
         hilos: hilos?.claves() || [],
         hilosVisibles: hilos?.visibles() || 0,
         esperandoOk: actors.filter((a) => a.okTag).map((a) => a.spec.id),
-        relevos: [...seenRelays],
       }),
     };
   const syncTeam = () => {
-    const snapshot = team.getSnapshot();
-    const observadas =
-      snapshot.sessions === null ? null : sceneSessions(snapshot.sessions);
-    copiasDeseadas = observadas?.copias || [];
-    const teams = sceneTeams(snapshot.sessions || []);
+    const snapshot = threads.getSnapshot();
+    const observed = sceneSessions(snapshot.threads);
+    copiasDeseadas = observed.copies;
+    const teams = sceneTeams(snapshot.threads, observed.figures);
     puestosEq = teamSeats(teams.grupos);
     hilosDeseados = teams.hilos;
     hilos?.sincronizar(hilosDeseados);
-    // Handoffs come from what the launcher recorded; nothing is invented or fetched.
-    const reales = newHandoffs(snapshot.sessions || [], seenRelays);
-    for (const id of reales.ids) seenRelays.add(id);
-    const last = reales.nuevos.at(-1);
-    if (last && relevosIniciados)
-      playRelay({
-        ...last,
-        tipo: "relevo",
-        texto:
-          last.tipo === "entregable"
-            ? "entregable del equipo"
-            : "mensaje del equipo",
-      });
-    relevosIniciados = snapshot.sessions !== null;
     readApprovals();
-    const shown = sceneFromSnapshot(snapshot, observadas);
-    syncAgents(shown.agents, shown.team);
+    syncAgents({
+      conectado: snapshot.loaded && !snapshot.error,
+      agentes: observed.agents,
+    });
     reconcileActors();
-    let read: string[] = [];
-    try {
-      read = JSON.parse(localStorage.getItem("sb-sala-leidos-v1") || "[]");
-    } catch {
-      /* No stored reads. */
-    }
-    const unread = unreadJobs(snapshot, read);
-    q(".team-toggle span").textContent = unread.size
-      ? `${unread.size} nuevos`
+    const waiting = snapshot.threads.filter(
+      (thread) => thread.status === "waiting-user",
+    ).length;
+    q(".team-toggle span").textContent = waiting
+      ? waiting + " pendientes"
       : "4";
   };
   // The service already lists approvals for the panel; the scene only reads them.
@@ -1292,17 +1219,8 @@ export function mount(
   }
   // Expiry is local: the bubble leaves when the deadline passes, without a request.
   const okClock = setInterval(refrescarOk, 1000);
-  const unsubscribeTeam = team.subscribe(syncTeam);
+  const unsubscribeTeam = threads.subscribe(syncTeam);
   addEventListener("sb-room-orders", loadRoomData);
-  const stopReplay = createRelayReplay(root, {
-    isAlive: () => alive,
-    playRelay,
-    onStart: () => irAEspacio("/"),
-    onStop: () => {
-      world?.detenerRelevo();
-      showTeam({ tab: "vivo" });
-    },
-  });
   syncTeam();
   void start();
   return () => {
@@ -1311,7 +1229,6 @@ export function mount(
     walkInput.dispose();
     document.removeEventListener("visibilitychange", visibility);
     unsubscribeTeam();
-    stopReplay();
     removeEventListener("sb-room-orders", loadRoomData);
     stopClock();
     clearInterval(okClock);

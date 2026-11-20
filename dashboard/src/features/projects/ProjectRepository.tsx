@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { teamApi } from "./team-store";
+import { agentApi } from "../agents/agent-api";
 import { isDemo } from "../../core/store";
 export interface ProjectLinks {
   revision: number;
   repositorios: string[];
+  repositoryPaths?: Record<string, string>;
   vinculos: Record<string, string | null>;
 }
 export function ProjectRepository({
@@ -19,10 +20,11 @@ export function ProjectRepository({
   useEffect(() => {
     let live = true;
     if (!isDemo)
-      void teamApi("/agentes/espacios")
+      void agentApi("/agentes/espacios")
         .then((result) => {
           if (live) {
             setLinks(result as ProjectLinks);
+            onChange?.(result as ProjectLinks);
             setError("");
           }
         })
@@ -32,7 +34,7 @@ export function ProjectRepository({
     return () => {
       live = false;
     };
-  }, [projectId]);
+  }, [projectId, onChange]);
   return (
     <div className="project-repository">
       <label>
@@ -45,7 +47,7 @@ export function ProjectRepository({
             setBusy(true);
             setError("");
             try {
-              const next = (await teamApi("/agentes/espacios", {
+              const next = (await agentApi("/agentes/espacios", {
                 id: projectId,
                 repositorio: repository,
                 revision: links!.revision,
@@ -54,8 +56,13 @@ export function ProjectRepository({
               onChange?.(next);
             } catch (e) {
               setError((e as Error).message);
-              const next = await teamApi("/agentes/espacios").catch(() => null);
-              if (next) setLinks(next as ProjectLinks);
+              const next = await agentApi("/agentes/espacios").catch(
+                () => null,
+              );
+              if (next) {
+                setLinks(next as ProjectLinks);
+                onChange?.(next as ProjectLinks);
+              }
             } finally {
               setBusy(false);
             }
@@ -70,8 +77,8 @@ export function ProjectRepository({
         </select>
       </label>
       <small>
-        Carpetas descargadas en el servidor. El vínculo se aplica a las
-        conversaciones nuevas.
+        Carpetas descargadas en el servidor. El vínculo se aplica a las threads
+        nuevos.
       </small>
       {error && (
         <p role="alert" className="inline-error">
