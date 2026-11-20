@@ -8,8 +8,58 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256Hex } from "../../lib/hash.mjs";
 
+/** @typedef {{ command?: unknown, args?: unknown, env?: unknown }} ProviderMcpServer */
+/** @typedef {Record<string, ProviderMcpServer>} ProviderMcpServers */
+/** @typedef {{ env?: NodeJS.ProcessEnv, mcpServers?: ProviderMcpServers | null }} McpContext */
+/** @typedef {{ toolProfile?: { allowedOperations?: readonly string[] } }} ProfileContext */
+/** @typedef {Pick<import("node:child_process").ChildProcess, "once" | "exitCode" | "kill">} TrackedChild */
+/** @typedef {{ category?: unknown, id?: unknown, currentValue?: unknown }} AcpConfigOption */
+/**
+ * @typedef {object} ProviderAttachment
+ * @property {string} type
+ * @property {string} [text]
+ * @property {string} [url]
+ * @property {string} [path]
+ * @property {string} [uri]
+ * @property {string} [ref]
+ * @property {string} [mimeType]
+ */
+/**
+ * @typedef {object} WorkspaceArtifact
+ * @property {string} fileRef
+ * @property {string} fileName
+ * @property {string} sha256
+ * @property {Buffer} contentBuffer
+ * @property {number} byteLength
+ * @property {string} mimeType
+ * @property {string} summary
+ * @property {string} comment
+ * @property {string[]} evidenceRefs
+ */
+/**
+ * @typedef {object} WorkspaceArtifactOptions
+ * @property {{ artifact?: (artifact: WorkspaceArtifact) => unknown }} ctx
+ * @property {string} cwd
+ * @property {unknown} rawPath
+ * @property {string[]} [evidenceRefs]
+ * @property {string} [comment]
+ * @property {Set<string> | null} [publishedKeys]
+ */
+/**
+ * @typedef {McpContext & {
+ *   operatorEnv?: NodeJS.ProcessEnv,
+ *   geminiDir?: string,
+ *   session?: { id?: string },
+ *   acpLogFile?: string
+ * }} AcpLaunchContext
+ */
+
 export const execFileAsync = promisify(execFile);
 
+/**
+ * @param {ProfileContext} ctx
+ * @param {string} category
+ */
 export function profileDisallowsAction(ctx, category) {
   const ops = ctx?.toolProfile?.allowedOperations;
   if (!Array.isArray(ops)) return false;
@@ -20,16 +70,24 @@ export function profileDisallowsAction(ctx, category) {
   return false;
 }
 
+/** @param {unknown} value */
 export const text = (value) =>
   typeof value === "string" ? value : JSON.stringify(value ?? "");
 
+/** @type {WeakSet<TrackedChild>} */
 export const exitedChildren = new WeakSet();
+/**
+ * @template {TrackedChild} Child
+ * @param {Child} child
+ * @returns {Child}
+ */
 export function trackChildExit(child) {
   if (!child || typeof child.once !== "function") return child;
   child.once("exit", () => exitedChildren.add(child));
   return child;
 }
 
+/** @param {NodeJS.ProcessEnv} [env] */
 export function brainServer(env = {}) {
   if (!env.SB_BRAIN_TOKEN_FILE) return {};
   return {
@@ -45,6 +103,10 @@ export function brainServer(env = {}) {
   };
 }
 
+/**
+ * @param {McpContext} ctx
+ * @returns {ProviderMcpServers}
+ */
 export function resolveMcpServers(ctx) {
   if (ctx.mcpServers === null) return {};
   if (
@@ -57,6 +119,10 @@ export function resolveMcpServers(ctx) {
   return brainServer(ctx.env);
 }
 
+/**
+ * @param {string} prompt
+ * @param {readonly ProviderAttachment[]} [attachments]
+ */
 export function formatCodexInput(prompt, attachments = []) {
   /** @type {Array<Record<string, unknown>>} */
   const blocks = [{ type: "text", text: prompt }];
@@ -70,6 +136,10 @@ export function formatCodexInput(prompt, attachments = []) {
   return blocks;
 }
 
+/**
+ * @param {string} prompt
+ * @param {readonly ProviderAttachment[]} [attachments]
+ */
 export function formatAcpInput(prompt, attachments = []) {
   /** @type {Array<Record<string, unknown>>} */
   const blocks = [{ type: "text", text: prompt }];
@@ -94,16 +164,21 @@ export function formatAcpInput(prompt, attachments = []) {
   return blocks;
 }
 
+/**
+ * @param {unknown} configOptions
+ * @param {string} requestedModel
+ */
 export function verifyAcpConfigModel(
   configOptions,
   requestedModel,
   { throwOnMismatch = true } = {},
 ) {
   if (!Array.isArray(configOptions) || !requestedModel) return null;
-  const modelOpt = configOptions.find(
+  const options = /** @type {AcpConfigOption[]} */ (configOptions);
+  const modelOpt = options.find(
     (o) => o?.category === "model" || o?.id === "model",
   );
-  const thoughtOpt = configOptions.find(
+  const thoughtOpt = options.find(
     (o) => o?.category === "thought_level" || o?.id === "thought_level",
   );
   const family =
@@ -132,6 +207,7 @@ const SENSITIVE_ARTIFACT_SEGMENTS = new Set([
   ".gemini",
 ]);
 
+/** @param {string} relNormalized */
 function isUnsafeArtifactPath(relNormalized) {
   const parts = relNormalized.split("/").filter(Boolean);
   if (parts.length === 0) return true;
@@ -154,6 +230,7 @@ function isUnsafeArtifactPath(relNormalized) {
   return false;
 }
 
+/** @param {string} fileRef */
 function inferArtifactMimeType(fileRef) {
   const ext = path.extname(fileRef).toLowerCase();
   if (ext === ".md") return "text/markdown; charset=utf-8";
@@ -163,6 +240,7 @@ function inferArtifactMimeType(fileRef) {
   return "application/octet-stream";
 }
 
+/** @param {WorkspaceArtifactOptions} options */
 export async function publishVerifiedWorkspaceArtifact({
   ctx,
   cwd,
@@ -181,7 +259,7 @@ export async function publishVerifiedWorkspaceArtifact({
   }
   if (rawPath.includes("\0")) return null;
   const trimmed = rawPath.trim();
-  const realCwd = await realpath(cwd).catch(() => null);
+  const realCwd = await realpath(cwd).catch(/** @returns {null} */ () => null);
   if (!realCwd) return null;
 
   const candidate = path.isAbsolute(trimmed)
@@ -198,19 +276,23 @@ export async function publishVerifiedWorkspaceArtifact({
   let probe = path.resolve(cwd);
   for (const segment of relNormalized.split("/")) {
     probe = path.join(probe, segment);
-    const segStat = await lstat(probe).catch(() => null);
+    const segStat = await lstat(probe).catch(/** @returns {null} */ () => null);
     if (!segStat || segStat.isSymbolicLink()) {
       return null;
     }
   }
 
-  const realTarget = await realpath(candidate).catch(() => null);
+  const realTarget = await realpath(candidate).catch(
+    /** @returns {null} */ () => null,
+  );
   if (!realTarget) return null;
   const relReal = path.relative(realCwd, realTarget);
   if (!relReal || relReal.startsWith("..") || path.isAbsolute(relReal)) {
     return null;
   }
-  const finalStat = await lstat(realTarget).catch(() => null);
+  const finalStat = await lstat(realTarget).catch(
+    /** @returns {null} */ () => null,
+  );
   if (
     !finalStat ||
     !finalStat.isFile() ||
@@ -240,6 +322,10 @@ export async function publishVerifiedWorkspaceArtifact({
   return { fileRef: relNormalized, sha256, byteLength: buf.length };
 }
 
+/**
+ * @param {TrackedChild | null} child
+ * @returns {Promise<void>}
+ */
 export function waitChildExit(child, timeoutMs = 1500) {
   if (
     !child ||
@@ -263,6 +349,7 @@ export function waitChildExit(child, timeoutMs = 1500) {
   });
 }
 
+/** @param {AcpLaunchContext} ctx */
 export async function prepareAcpLaunchSpec(ctx) {
   const bin = ctx.operatorEnv?.SB_AGY_ACP_BIN || "agy";
   const mcpServers = resolveMcpServers(ctx);
@@ -275,6 +362,7 @@ export async function prepareAcpLaunchSpec(ctx) {
     })),
   }));
   const spawnEnv = { ...(ctx.env || {}) };
+  /** @type {string[]} */
   let args;
   let isolatedDir = null;
   let cleanupDir = null;

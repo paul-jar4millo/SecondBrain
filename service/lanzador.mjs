@@ -1,12 +1,18 @@
 import { readFile } from "node:fs/promises";
 
+/** @import { LauncherSessionSummary } from "./types.d.ts" */
+
+/**
+ * @param {typeof import("./vault.mjs").Failure} Failure
+ * @param {{ url?: string, tokenFile?: string, token?: string }} [options]
+ */
 export function createLanzador(
   Failure,
   {
     url = process.env.LANZADOR_URL,
     tokenFile = process.env.LANZADOR_TOKEN_FILE,
     token,
-  } = /** @type {any} */ ({}),
+  } = {},
 ) {
   if (url) {
     const parsed = new URL(url);
@@ -25,11 +31,16 @@ export function createLanzador(
   async function secreto() {
     return token ?? (await readFile(tokenFile, "utf8")).trim();
   }
-  /** Follows the launcher's SSE stream; every event only asks the app to re-read. */
+  /**
+   * Follows the launcher's SSE stream; every event only asks the app to re-read.
+   * @param {() => void} listener
+   */
   function suscribir(listener) {
-    let stopped = false,
-      controller,
-      timer;
+    let stopped = false;
+    /** @type {AbortController | undefined} */
+    let controller;
+    /** @type {NodeJS.Timeout | undefined} */
+    let timer;
     const connect = async () => {
       controller = new AbortController();
       try {
@@ -62,6 +73,10 @@ export function createLanzador(
       controller?.abort();
     };
   }
+  /**
+   * @param {string} ruta
+   * @param {unknown} [data]
+   */
   async function pedir(ruta, data, timeout = 10000) {
     if (!base) throw new Failure("El lanzador no está instalado.", 503);
     let respuesta;
@@ -111,21 +126,27 @@ export function createLanzador(
       );
     return contenido;
   }
+  /** @param {unknown} id */
   const sesion = (id) => {
     if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id))
       throw new Failure("Sesión inválida.", 400);
     return id;
   };
   return {
+    /** @param {() => void} listener */
     subscribe: (listener) => (base ? suscribir(listener) : () => {}),
+    /** @returns {Promise<LauncherSessionSummary[] | { sesiones: LauncherSessionSummary[] }>} */
     leer: () => pedir("/estado"),
     proyectos: () => pedir("/proyectos"),
     modelos: () => pedir("/modelos", undefined, 30000),
     uso: () => pedir("/uso"),
+    /** @param {unknown} datos */
     espacios: (datos) => pedir("/espacios", datos),
     /**
      * Opens the launcher's SSE stream of one harness and returns the raw
      * response; the caller pipes its body without buffering and aborts it.
+     * @param {unknown} id
+     * @param {AbortSignal} signal
      */
     flujo: async (id, signal, structured = false) => {
       if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id))
@@ -159,10 +180,19 @@ export function createLanzador(
       }
       return respuesta;
     },
+    /** @param {{ id: string } & Record<string, unknown>} input */
     entrada: ({ id, ...datos }) => pedir(`/sesiones/${id}/terminal`, datos),
+    /** @param {{ id: string } & Record<string, unknown>} input */
     responder: ({ id, ...datos }) =>
       pedir(`/sesiones/${sesion(id)}/conversation/answer`, datos),
+    /** @param {unknown} datos */
     encargar: (datos) => pedir("/sesiones", datos, 45000),
+    /**
+     * @param {string} accion
+     * @param {string} sesion
+     * @param {string | undefined} actor
+     * @param {object} datos
+     */
     equipo: (accion, sesion, actor, datos) =>
       pedir(
         "/equipo/" + accion,
@@ -177,17 +207,26 @@ export function createLanzador(
       }
       return pedir(`/herramientas/catalogo${q.size ? "?" + q : ""}`);
     },
+    /** @param {unknown} datos */
     actualizarPerfilHerramientas: (datos) =>
       pedir("/herramientas/perfiles", datos),
+    /** @param {unknown} datos */
     resolverSkills: (datos) => pedir("/herramientas/skills/resolver", datos),
+    /** @param {{ id: string } & Record<string, unknown>} input */
     enviarMensajeConversacion: ({ id, ...datos }) =>
       pedir(`/sesiones/${sesion(id)}/conversation/messages`, datos),
+    /** @param {unknown} id */
     colaConversacion: (id) =>
       pedir(`/sesiones/${sesion(id)}/conversation/queue`),
+    /** @param {{ id: string, clientMessageId: string }} input */
     cancelarColaConversacion: ({ id, clientMessageId }) =>
       pedir(`/sesiones/${sesion(id)}/conversation/queue/cancel`, {
         clientMessageId,
       }),
+    /**
+     * @param {unknown} id
+     * @param {unknown} artifactId
+     */
     descargarArtefacto: async (id, artifactId) => {
       if (
         typeof artifactId !== "string" ||
@@ -219,6 +258,7 @@ export function createLanzador(
       }
       return respuesta;
     },
+    /** @param {{ id: string, desde?: string, hasta?: string }} input */
     diff: ({ id, desde, hasta }) => {
       const consulta = new URLSearchParams();
       if (desde !== undefined) consulta.set("desde", desde);
@@ -229,19 +269,25 @@ export function createLanzador(
         60000,
       );
     },
+    /** @param {unknown} id */
     propuestaPr: (id) =>
       pedir(`/sesiones/${sesion(id)}/pr/propuesta`, undefined, 60000),
+    /** @param {{ id: string, n?: number }} input */
     revertir: ({ id, n }) =>
       pedir(`/sesiones/${sesion(id)}/revertir`, { n }, 120000),
+    /** @param {{ id: string } & Record<string, unknown>} input */
     pr: ({ id, ...datos }) =>
       pedir(`/sesiones/${sesion(id)}/pr`, datos, 300000),
+    /** @param {unknown} id */
     redactarPr: (id) =>
       pedir(`/sesiones/${sesion(id)}/pr/redactar`, {}, 150000),
+    /** @param {unknown} id */
     cancelar: async (id) => {
       if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id))
         throw new Failure("Sesión inválida.", 400);
       return pedir(`/sesiones/${id}/cancelar`, {});
     },
+    /** @param {unknown} id */
     eliminar: async (id) => {
       if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id))
         throw new Failure("Sesión inválida.", 400);

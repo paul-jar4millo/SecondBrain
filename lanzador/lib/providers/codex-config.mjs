@@ -6,10 +6,32 @@ import { execFileAsync } from "./shared.mjs";
 import { INHERITED_DESKTOP_CONNECTORS } from "../../catalogo-herramientas.mjs";
 import { parseCodexMcpServerEntries } from "./toml.mjs";
 
+/**
+ * @typedef {object} CodexConfigContext
+ * @property {string | null} [systemCodexConfigDir]
+ * @property {string} [cwd]
+ * @property {NodeJS.ProcessEnv} [env]
+ * @property {NodeJS.ProcessEnv} [operatorEnv]
+ * @property {string} [codexHome]
+ * @property {string} [codexProfile]
+ * @property {boolean} [useCodexMcpList]
+ */
+/** @typedef {{ disableInheritedMcp?: boolean, session?: { esfuerzo?: string } }} CodexArgsContext */
+/** @typedef {{ enabled: boolean, dottedUnoverridable?: boolean }} CodexMcpEntry */
+/** @typedef {Map<string, CodexMcpEntry> | Set<string>} DiscoveredEntries */
+/** @typedef {import("./shared.mjs").ProviderMcpServer} ProviderMcpServer */
+/** @typedef {import("./shared.mjs").ProviderMcpServers} ProviderMcpServers */
+
+/** @param {string} key */
 function formatTomlKey(key) {
   return /^[A-Za-z0-9_-]+$/.test(key) ? key : JSON.stringify(String(key));
 }
 
+/**
+ * @param {string} filePath
+ * @param {string | null} [allowedRoot]
+ * @returns {Promise<Map<string, CodexMcpEntry>>}
+ */
 async function inspectCodexConfigFile(filePath, allowedRoot = null) {
   let st;
   try {
@@ -37,6 +59,7 @@ async function inspectCodexConfigFile(filePath, allowedRoot = null) {
   return parseCodexMcpServerEntries(raw);
 }
 
+/** @param {CodexConfigContext} ctx */
 function systemCodexDirs(ctx) {
   if (ctx.systemCodexConfigDir === null) return [];
   if (
@@ -57,6 +80,7 @@ function systemCodexDirs(ctx) {
   return ["/etc/codex"];
 }
 
+/** @param {string} startDir */
 function ancestorDirectoriesUpToRoot(startDir) {
   const dirs = [];
   let cur = path.resolve(startDir);
@@ -69,11 +93,16 @@ function ancestorDirectoriesUpToRoot(startDir) {
   return dirs;
 }
 
+/** @param {string} bin */
 function isOfficialCodexBinary(bin) {
   const base = path.basename(String(bin || "")).toLowerCase();
   return base === "codex" || base === "codex.exe";
 }
 
+/**
+ * @param {string} bin
+ * @param {CodexConfigContext} ctx
+ */
 async function queryOfficialCodexMcpList(bin, ctx) {
   const { stdout } = await execFileAsync(bin, ["mcp", "list", "--json"], {
     cwd: ctx.cwd || process.cwd(),
@@ -85,6 +114,7 @@ async function queryOfficialCodexMcpList(bin, ctx) {
   if (!Array.isArray(list)) {
     throw new Error("Salida inesperada de `codex mcp list --json`");
   }
+  /** @type {Map<string, CodexMcpEntry>} */
   const map = new Map();
   for (const item of list) {
     if (!item?.name) continue;
@@ -93,8 +123,11 @@ async function queryOfficialCodexMcpList(bin, ctx) {
   return map;
 }
 
+/** @param {CodexConfigContext} ctx */
 export async function inspectCodexConfiguredMcps(ctx, bin = "codex") {
+  /** @type {Map<string, CodexMcpEntry>} */
   const fileEntries = new Map();
+  /** @param {Map<string, CodexMcpEntry>} srcMap */
   const mergeEntries = (srcMap) => {
     for (const [k, v] of srcMap.entries()) {
       fileEntries.set(k, v);
@@ -191,6 +224,11 @@ export async function inspectCodexConfiguredMcps(ctx, bin = "codex") {
   return fileEntries;
 }
 
+/**
+ * @param {CodexArgsContext} ctx
+ * @param {ProviderMcpServers} mcpServers
+ * @param {DiscoveredEntries} [discoveredEntries]
+ */
 export function buildCodexArgs(ctx, mcpServers, discoveredEntries = new Map()) {
   const disableInherited = ctx.disableInheritedMcp !== false;
   if (!disableInherited) {
@@ -258,11 +296,17 @@ export function buildCodexArgs(ctx, mcpServers, discoveredEntries = new Map()) {
   return args;
 }
 
+/**
+ * @param {ProviderMcpServers} mcpServers
+ * @param {boolean} [disableInheritedMcp]
+ * @param {DiscoveredEntries} [discoveredEntries]
+ */
 export function buildCodexThreadMcpConfig(
   mcpServers,
   disableInheritedMcp = true,
   discoveredEntries = new Map(),
 ) {
+  /** @type {Record<`mcp_servers.${string}`, ProviderMcpServer & { enabled: boolean }>} */
   const entries = {};
   const mapEntries =
     discoveredEntries instanceof Map

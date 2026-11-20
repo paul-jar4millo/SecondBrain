@@ -67,6 +67,14 @@ export interface ApplicationOptions {
   logger?: (record: HttpLogRecord) => void;
 }
 
+export interface LauncherSessionSummary {
+  id: string;
+  motor: string;
+  workOrderId?: string | null;
+  mensajes?: unknown;
+  resultado?: unknown;
+}
+
 export interface Credentials {
   username?: unknown;
   password?: unknown;

@@ -1,18 +1,41 @@
 import { readFile, mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+/** @import { ServerResponse } from "node:http" */
+
+/** @typedef {{ id: string, imagen: string }} ReferencePin */
+/** @typedef {{ consultas: string[], pines: ReferencePin[] }} ReferenceBank */
+/** @typedef {{ tablero: string[] }} SalaSpace */
+/** @typedef {"work" | "rest"} SalaOrderMode */
+/** @typedef {{ id: string, mode: SalaOrderMode, instruction: string, project: string }} SalaOrder */
+/**
+ * @typedef {object} SalaState
+ * @property {Record<string, SalaSpace>} [espacios]
+ * @property {string[]} [tablero]
+ * @property {{ id: string }[]} [agentes]
+ * @property {Record<string, SalaOrder>} [encargos]
+ */
+
 const GENERAL = "general";
 const BASE_IDS = ["ambar", "menta", "lira", "marina"];
 
-/** Banco de referencias, espacios por proyecto, agentes propias y proxy de imágenes. */
+/**
+ * Banco de referencias, espacios por proyecto, agentes propias y proxy de imágenes.
+ * @param {string} dataDirectory
+ * @param {new (message: string, status?: number) => Error} Failure
+ */
 export async function createSala(dataDirectory, Failure) {
   // Optional reference bank (links only, no image copies). Without one the
   // board starts empty; see docs/modules/service.md for its format.
   const bancoFile = process.env.SB_REFERENCE_BANK;
+  /** @type {ReferenceBank} */
   const banco = bancoFile
     ? JSON.parse(await readFile(bancoFile, "utf8"))
     : { consultas: [], pines: [] };
   const estadoFile = path.join(dataDirectory, "sala.json");
-  const leido = await readFile(estadoFile, "utf8").catch(() => null);
+  const leido = await readFile(estadoFile, "utf8").catch(
+    /** @returns {null} */ () => null,
+  );
+  /** @type {SalaState} */
   const previo = leido ? JSON.parse(leido) : {};
   // Map, no objeto: el id del espacio viene del cliente.
   const espacios = new Map(Object.entries(previo.espacios || {}));
@@ -22,13 +45,17 @@ export async function createSala(dataDirectory, Failure) {
   // Keep legacy custom figures on disk, but the world only has four base agents.
   let agentes = previo.agentes || [];
   const encargos = new Map(Object.entries(previo.encargos || {}));
+  /** @type {Map<string, Buffer>} */
   const imagenes = new Map();
+  /** @param {string | null} id */
   const pin = (id) => banco.pines.find((p) => p.id === id);
+  /** @param {unknown} [id] */
   const idEspacio = (id = GENERAL) => {
     if (typeof id !== "string" || !/^[\w-]{1,80}$/.test(id))
       throw new Failure("Espacio no válido.", 400);
     return id;
   };
+  /** @param {string} espacio */
   const tableroDe = (espacio) => espacios.get(espacio)?.tablero || [];
   let writes = Promise.resolve();
   function guardarEstado() {
@@ -51,7 +78,9 @@ export async function createSala(dataDirectory, Failure) {
     return writing;
   }
   function resumen() {
+    /** @type {Map<string, { agentes: number, tablero: number }>} */
     const cuenta = new Map();
+    /** @param {string} id */
     const de = (id) =>
       cuenta.get(id) || cuenta.set(id, { agentes: 0, tablero: 0 }).get(id);
     for (const [id, e] of espacios) de(id).tablero = e.tablero.length;
@@ -59,16 +88,18 @@ export async function createSala(dataDirectory, Failure) {
     return Object.fromEntries(cuenta);
   }
   return {
+    /** @param {unknown} [espacio] */
     leer: (espacio) => {
       const id = idEspacio(espacio ?? GENERAL);
       return {
         ...banco,
         tablero: tableroDe(id),
-        agentes: [],
+        agentes: /** @type {never[]} */ ([]),
         encargos: Object.fromEntries(encargos),
         resumen: resumen(),
       };
     },
+    /** @param {{ id?: unknown, guardar?: unknown, espacio?: unknown }} input */
     async guardar({ id, guardar, espacio }) {
       const donde = idEspacio(espacio);
       if (typeof id !== "string" || !pin(id))
@@ -88,6 +119,7 @@ export async function createSala(dataDirectory, Failure) {
         410,
       );
     },
+    /** @param {{ id: string, mode: SalaOrderMode, instruction?: unknown, project?: unknown }} input */
     async encargar({ id, mode, instruction, project }) {
       if (!BASE_IDS.includes(id)) throw new Failure("Agente no válida.", 400);
       if (!["work", "rest"].includes(mode))
@@ -105,6 +137,7 @@ export async function createSala(dataDirectory, Failure) {
       await guardarEstado();
       return order;
     },
+    /** @param {{ id: string }} input */
     async borrarAgente({ id }) {
       if (!agentes.some((a) => a.id === id))
         throw new Failure("Agente no encontrada.", 404);
@@ -112,7 +145,11 @@ export async function createSala(dataDirectory, Failure) {
       await guardarEstado();
       return { id };
     },
-    // Pinterest no permite CORS; solo se piden imágenes de pines del banco.
+    /**
+     * Pinterest no permite CORS; solo se piden imágenes de pines del banco.
+     * @param {string | null} id
+     * @param {ServerResponse} response
+     */
     async imagen(id, response) {
       const referencia = pin(id);
       if (!referencia || !referencia.imagen.startsWith("https://i.pinimg.com/"))

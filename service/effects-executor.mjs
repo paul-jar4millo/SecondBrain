@@ -12,6 +12,8 @@ import {
   replayAndRepairJournal,
 } from "./user-requests.mjs";
 
+/** @import { Effect, EffectExecutionReceipt, EffectExecutorOptions, EffectInput, EffectJournalRecord } from "./effect-types.d.ts" */
+
 export const EFFECTS_PAYLOAD_VERSION = 1;
 export const MAX_EFFECT_CONTENT_LENGTH = 16000;
 
@@ -33,6 +35,7 @@ export const EFFECT_STATUSES = new Set([
   "fallida",
 ]);
 
+/** @type {Partial<Record<string, Set<string>>>} */
 const PROFILE_ALLOWED_CATEGORIES = {
   investigacion: new Set(),
   ejecucion: new Set(["destructive_change"]),
@@ -52,12 +55,17 @@ const UUID_RE = /^[a-f0-9-]{36}$/i;
 
 export class EffectExecutorError extends DomainError {}
 
+/** @param {unknown} value */
 function sha256Text(value) {
   return createHash("sha256")
     .update(String(value ?? ""), "utf8")
     .digest("hex");
 }
 
+/**
+ * @param {unknown} content
+ * @param {unknown} changes
+ */
 function serializeEffectContentForHash(content, changes) {
   if (content !== null && content !== undefined) {
     return String(content);
@@ -71,6 +79,10 @@ function serializeEffectContentForHash(content, changes) {
   return "";
 }
 
+/**
+ * @param {string} dir
+ * @param {EffectExecutorOptions} options
+ */
 export async function createEffectsExecutor(
   dir,
   {
@@ -91,9 +103,13 @@ export async function createEffectsExecutor(
   const journalFile = path.join(dir, "efectos-journal.jsonl");
   const snapshotFile = path.join(dir, "efectos-snapshots.json");
 
+  /** @type {Map<string, Effect>} */
   const effects = new Map();
+  /** @type {Map<string, EffectExecutionReceipt>} */
   const receiptsByRequestId = new Map();
+  /** @type {Map<string, string>} */
   const effectsByRequestId = new Map();
+  /** @type {Map<string, string>} */
   const effectsByApprovalId = new Map();
   let closed = false;
 
@@ -102,6 +118,7 @@ export async function createEffectsExecutor(
     throw e;
   });
   if (snapRaw.trim()) {
+    /** @type {{ effects?: Record<string, Effect> }} */
     const parsed = JSON.parse(snapRaw);
     for (const [id, eff] of Object.entries(parsed.effects ?? {})) {
       effects.set(id, eff);
@@ -110,6 +127,7 @@ export async function createEffectsExecutor(
 
   const { hadRecords, repaired } = await replayAndRepairJournal(
     journalFile,
+    /** @param {EffectJournalRecord} rec */
     (rec) => {
       if (rec.op === "effect.put" && rec.effect?.id) {
         effects.set(rec.effect.id, rec.effect);
@@ -144,8 +162,10 @@ export async function createEffectsExecutor(
 
   const serial = createSerialQueue();
 
+  /** @param {EffectJournalRecord} record */
   const appendJournal = (record) => appendJsonLine(journalFile, record);
 
+  /** @param {Effect} effect */
   async function saveEffect(effect) {
     effects.set(effect.id, effect);
     if (effect.executionReceipt?.requestId) {
@@ -194,6 +214,10 @@ export async function createEffectsExecutor(
     }
   }
 
+  /**
+   * @param {EffectInput} input
+   * @param {number} numericCost
+   */
   function hasVerifiedBillingAuthorization(input, numericCost) {
     if (
       operatorBillingPolicy?.allowBilledApi === true &&
@@ -230,6 +254,7 @@ export async function createEffectsExecutor(
     );
   }
 
+  /** @param {Effect} eff */
   function toPublicEffect(eff, { includeSensitive = true } = {}) {
     const linkedApproval = eff.approvalId
       ? userRequests.get(eff.approvalId)
@@ -282,11 +307,13 @@ export async function createEffectsExecutor(
       return items;
     },
 
+    /** @param {string} id */
     get(id, { includeSensitive = true } = {}) {
       const eff = effects.get(id);
       return eff ? toPublicEffect(eff, { includeSensitive }) : null;
     },
 
+    /** @param {EffectInput} input */
     prepareEffect(input) {
       return serial(async () => {
         if (closed) throw new EffectExecutorError("Ejecutor cerrado.", 503);
@@ -447,6 +474,7 @@ export async function createEffectsExecutor(
 
         const nowIso = new Date(clock()).toISOString();
         const effectId = input.id || randomUUID();
+        /** @type {Effect} */
         const baseEffect = {
           payloadVersion: EFFECTS_PAYLOAD_VERSION,
           id: effectId,

@@ -34,7 +34,8 @@ import { createWorkOrderStore } from "./work-orders.mjs";
 import { createUserRequestStore } from "./user-requests.mjs";
 import { createEffectsExecutor } from "./effects-executor.mjs";
 
-/** @import { ApplicationOptions, HttpLogRecord, HttpRequest, ScopedRecord, ToolProfile } from "./types.d.ts" */
+/** @import { ApplicationOptions, HttpLogRecord, HttpRequest, LauncherSessionSummary, ScopedRecord, ToolProfile } from "./types.d.ts" */
+/** @import { WorkOrderManifest } from "./work-order-types.d.ts" */
 /** @import { ServerResponse } from "node:http" */
 
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -153,9 +154,15 @@ export async function createApplication(options = {}) {
       onChange: change,
     },
   );
-  // The launcher lists sessions as an array; older fixtures wrap it.
+  /**
+   * The launcher lists sessions as an array; older fixtures wrap it.
+   * @returns {Promise<LauncherSessionSummary[]>}
+   */
   const sesionesLanzador = async () => {
-    const estado = await lanzador.leer().catch(() => null);
+    const estado = await lanzador.leer().catch(
+      /** @returns {null} */
+      () => null,
+    );
     if (Array.isArray(estado)) return estado;
     return Array.isArray(estado?.sesiones) ? estado.sesiones : [];
   };
@@ -587,8 +594,9 @@ export async function createApplication(options = {}) {
               ) {
                 const req = ev.payload || {};
                 const qOpts = Array.isArray(req.questions?.[0]?.options)
-                  ? req.questions[0].options.map((o) =>
-                      typeof o === "string" ? o : o.label || String(o),
+                  ? req.questions[0].options.map(
+                      /** @param {string | { label?: string }} o */
+                      (o) => (typeof o === "string" ? o : o.label || String(o)),
                     )
                   : req.choices || [];
                 await userRequests
@@ -937,9 +945,11 @@ export async function createApplication(options = {}) {
             }
             // The card the manifest approved fixes the child's profile; the
             // agent can only narrow it further.
+            /** @type {WorkOrderManifest | undefined} */
+            const manifest = forwarded.manifest;
             const manifestCard =
-              datos.memberId && forwarded.manifest?.team
-                ? forwarded.manifest.team.find((c) => c.id === datos.memberId)
+              datos.memberId && manifest?.team
+                ? manifest.team.find((c) => c.id === datos.memberId)
                 : null;
             const childProfile = await resolveServerProfile(
               datos.toolProfileId ||
@@ -1065,6 +1075,7 @@ export async function createApplication(options = {}) {
                   conflictos: resultado.conflictos || [],
                   // Local paths stay in the lanzador; events carry hashes.
                   integrados: (resultado.integrados || []).map(
+                    /** @param {Record<string, unknown>} entry */
                     ({ destino: _destino, ...item }) => item,
                   ),
                 },
@@ -1937,12 +1948,7 @@ export async function createApplication(options = {}) {
               (s) => s.id === data.sesion,
             );
             if (!sesionObj) throw new Failure("Sesión no activa.", 403);
-            const actor = {
-              claude: "ambar",
-              codex: "menta",
-              agy: "lira",
-              deepseek: "marina",
-            }[sesionObj.motor];
+            const actor = MOTOR_ACTOR[sesionObj.motor];
             const resultado = await lanzador.equipo(
               "integrar",
               data.sesion,
@@ -1973,6 +1979,7 @@ export async function createApplication(options = {}) {
                     conflictos: resultado.conflictos || [],
                     // Local paths stay in the lanzador; events carry hashes.
                     integrados: (resultado.integrados || []).map(
+                      /** @param {Record<string, unknown>} entry */
                       ({ destino: _destino, ...item }) => item,
                     ),
                   },
@@ -2282,6 +2289,12 @@ export async function createApplication(options = {}) {
             return;
           },
           "GET /files/chunk": async () => {
+            /**
+             * @param {string} name
+             * @param {number} fallback
+             * @param {number} min
+             * @param {number} max
+             */
             const integer = (name, fallback, min, max) => {
               const raw = consulta.get(name);
               if (raw === null || raw === "") return fallback;
@@ -2538,6 +2551,9 @@ function summarizeIssues(issues) {
     .map((i) => `${i.path.join(".") || "(raíz)"} (${i.message})`);
   return shown.join("; ") + (issues.length > 5 ? "; …" : ".");
 }
+/**
+ * @param {{ id: string, kind: string, title: string, status: string, deleted?: boolean, startsAt?: string, dueDate?: string, date?: string, updatedAt: string }[]} items
+ */
 function reminders(items) {
   const now = Date.now();
   return items

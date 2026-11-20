@@ -2,8 +2,26 @@ import { createReadStream } from "node:fs";
 import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+/** @import { ServerResponse } from "node:http" */
+
+/** @typedef {{ formato: number, generado: string, videos: { id: string, poster?: string | null }[], agents: { id: string }[] }} MundoPackage */
+/** @typedef {{ enabled: boolean, notes: string }} MundoAgentConfig */
+/** @typedef {{ id: string, title: string, brief: string, slug: string, createdAt: string, status: "draft" }} MundoBrief */
+/** @typedef {"queued" | "completed" | "cancelled"} MundoTaskStatus */
+/**
+ * @typedef {object} MundoTask
+ * @property {string} id
+ * @property {string} agentId
+ * @property {string | null} videoId
+ * @property {string} instruction
+ * @property {MundoTaskStatus} status
+ * @property {string} createdAt
+ * @property {"manual"} [completionSource]
+ */
+/** @typedef {{ agents: Record<string, MundoAgentConfig>, tasks: MundoTask[], briefs: MundoBrief[] }} MundoState */
 
 const FORMATO = 1;
+/** @type {Record<string, string>} */
 const IMAGENES = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -15,24 +33,30 @@ const DOCUMENTOS = [".md", ".json", ".csv"];
  * Proyecto Mundo Hipotético. Solo lee el paquete que publica el repositorio del
  * canal (ver docs/modules/dashboard.md); no conoce sus rutas ni ejecuta nada.
  * Briefs, encargos y notas de agentes son de Second Brain y viven en DATA_DIR.
+ * @param {string} dataDirectory
+ * @param {new (message: string, status?: number) => Error} Failure
+ * @param {string} [paqueteDirectory]
  */
 export function createMundo(dataDirectory, Failure, paqueteDirectory) {
   const directorio = paqueteDirectory || path.join(dataDirectory, "mundo");
   const estadoFile = path.join(dataDirectory, "mundo-estado.json");
+  /** @type {MundoState | null} */
   let estado = null;
 
   async function leerEstado() {
     if (estado) return estado;
-    const texto = await readFile(estadoFile, "utf8").catch((e) => {
-      if (e.code === "ENOENT") return null;
-      throw e;
-    });
+    const texto = await readFile(estadoFile, "utf8").catch(
+      /** @returns {null} */ (e) => {
+        if (e.code === "ENOENT") return null;
+        throw e;
+      },
+    );
     // Un estado dañado se conserva: falla el proyecto, nunca se sustituye por uno vacío.
     estado = {
       agents: {},
       tasks: [],
       briefs: [],
-      ...(texto ? JSON.parse(texto) : {}),
+      ...(texto ? /** @type {Partial<MundoState>} */ (JSON.parse(texto)) : {}),
     };
     return estado;
   }
@@ -51,13 +75,13 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
     const texto = await readFile(
       path.join(directorio, "paquete.json"),
       "utf8",
-    ).catch(() => null);
+    ).catch(/** @returns {null} */ () => null);
     if (!texto)
       throw new Failure(
         "Aún no hay datos del canal. Publícalos con npm run publicar:panel en Mundo Hipotético.",
         503,
       );
-    const datos = JSON.parse(texto);
+    const datos = /** @type {MundoPackage} */ (JSON.parse(texto));
     if (datos.formato !== FORMATO)
       throw new Failure(
         "El paquete del canal tiene otro formato. Actualiza Second Brain o vuelve a publicarlo.",
@@ -65,6 +89,7 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
       );
     return datos;
   }
+  /** @param {unknown} ruta @param {string[]} extensiones */
   async function archivo(ruta, extensiones) {
     if (typeof ruta !== "string" || !ruta || ruta.includes("\0"))
       throw new Failure("Ruta inválida.", 400);
@@ -81,6 +106,7 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
       throw new Failure("Formato no permitido.", 403);
     return real;
   }
+  /** @param {unknown} valor */
   const texto = (valor, maximo = 2000) => {
     if (typeof valor !== "string" || !valor.trim() || valor.length > maximo)
       throw new Failure(
@@ -111,6 +137,7 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
         })),
       };
     },
+    /** @param {string | null} ruta */
     async documento(ruta) {
       const real = await archivo(ruta, DOCUMENTOS);
       return {
@@ -118,6 +145,7 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
         text: (await readFile(real, "utf8")).slice(0, 150000),
       };
     },
+    /** @param {string | null} ruta @param {ServerResponse} response */
     async imagen(ruta, response) {
       const real = await archivo(ruta, Object.keys(IMAGENES));
       response.writeHead(200, {
@@ -130,6 +158,7 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
       response.on("close", () => flujo.destroy());
       flujo.pipe(response);
     },
+    /** @param {{ title?: unknown, brief?: unknown, slug?: unknown }} b */
     async crearBrief(b) {
       const state = await leerEstado();
       const title = texto(b.title, 180),
@@ -140,6 +169,7 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
           "Usa minúsculas sin acentos y guiones para el tema.",
           400,
         );
+      /** @type {MundoBrief} */
       const entrada = {
         id: randomUUID(),
         title,
@@ -152,6 +182,7 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
       await guardarEstado();
       return entrada;
     },
+    /** @param {{ id: string, enabled?: unknown, notes?: unknown }} b */
     async configurarAgente(b) {
       const state = await leerEstado();
       if (!(await paquete()).agents.some((a) => a.id === b.id))
@@ -166,6 +197,7 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
       await guardarEstado();
       return { ok: true };
     },
+    /** @param {{ agentId: string, videoId?: string | null, instruction?: unknown }} b */
     async crearEncargo(b) {
       const state = await leerEstado();
       const datos = await paquete();
@@ -175,6 +207,7 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
         throw new Failure("Activa el agente antes de asignarle trabajo.", 409);
       if (b.videoId && !datos.videos.some((v) => v.id === b.videoId))
         throw new Failure("No se encontró el video. Actualiza el panel.", 404);
+      /** @type {MundoTask} */
       const encargo = {
         id: randomUUID(),
         agentId: b.agentId,
@@ -187,6 +220,7 @@ export function createMundo(dataDirectory, Failure, paqueteDirectory) {
       await guardarEstado();
       return encargo;
     },
+    /** @param {{ id: string, status: MundoTaskStatus }} b */
     async cambiarEncargo(b) {
       const state = await leerEstado();
       const encargo = state.tasks.find((t) => t.id === b.id);

@@ -3,7 +3,9 @@
 // whether to write the result.
 import { Failure } from "./vault.mjs";
 import { emptyFinance, toMinor, isDay, addDays } from "./finance.mjs";
+/** @import { FinanceTransaction, FinanceTransactionType } from "./finance-types.d.ts" */
 
+/** @type {Record<string, number | undefined>} */
 const MONTHS = {
   ene: 1,
   feb: 2,
@@ -18,24 +20,29 @@ const MONTHS = {
   nov: 11,
   dic: 12,
 };
+/** @param {unknown} s */
 const norm = (s) =>
   String(s ?? "")
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
     .trim();
+/** @param {string} s */
 const slug = (s) =>
   norm(s)
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
+/** @param {string} markdown @param {RegExp} headingPattern */
 function tableAfter(markdown, headingPattern) {
   const lines = markdown.split(/\r?\n/);
   const start = lines.findIndex(
     (l) => /^#{2,4}\s/.test(l) && headingPattern.test(l),
   );
   if (start < 0) return { heading: "", rows: [] };
+  /** @type {Record<string, string>[]} */
   const rows = [];
+  /** @type {string[] | undefined} */
   let header;
   for (let i = start + 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -55,6 +62,7 @@ function tableAfter(markdown, headingPattern) {
   }
   return { heading: lines[start], rows };
 }
+/** @param {string} cell */
 const money = (cell) =>
   toMinor(
     String(cell)
@@ -64,6 +72,7 @@ const money = (cell) =>
     "importe",
   );
 
+/** @param {string} day @param {string} month @param {number} asOfYear @param {number | undefined} endMonth */
 function cycleDate(day, month, asOfYear, endMonth) {
   const m = MONTHS[month];
   let year = asOfYear;
@@ -71,6 +80,7 @@ function cycleDate(day, month, asOfYear, endMonth) {
   return `${year}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+/** @param {string} markdown @param {string} today */
 export function parseRegistro(markdown, today) {
   const asOf = markdown.match(/exportado\s+(\d{4}-\d{2}-\d{2})/)?.[1];
   if (!isDay(asOf))
@@ -120,21 +130,24 @@ export function parseRegistro(markdown, today) {
       asOf,
     });
   }
+  /** @param {string} name */
   const cardOf = (name) =>
     data.cards.find((c) => norm(c.name) === norm(name))?.id;
 
   let n = 0;
   for (const r of tableAfter(markdown, /Movimientos/).rows) {
     if (!r.id || !r.fecha) continue;
-    const type = {
-      cargo: "charge",
-      pago: "payment",
-      cashback: "cashback",
-      reversa: "reversal",
-    }[norm(r.tipo)];
+    const type =
+      /** @type {Record<string, FinanceTransactionType | undefined>} */ ({
+        cargo: "charge",
+        pago: "payment",
+        cashback: "cashback",
+        reversa: "reversal",
+      })[norm(r.tipo)];
     const card = cardOf(r.tarjeta);
     if (!type || !card)
       throw new Failure(`Movimiento ${r.id}: tipo o tarjeta desconocidos.`);
+    /** @type {FinanceTransaction} */
     const tx = {
       id: r.id,
       date: r.fecha,

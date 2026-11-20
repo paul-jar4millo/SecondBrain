@@ -5,12 +5,18 @@ import { TOOL_PROFILES_BASE } from "./catalogo-herramientas.mjs";
 import { ErrorLanzador } from "./errores.mjs";
 import { sha256Hex as hashBytes } from "./lib/hash.mjs";
 
+/** @import { ApprovedCandidate, DeliveryInput, IntegratedFile, IntegrationCandidate, IntegrationConflict, IntegrationOptions, IntegrationRecord, IntegrationResolution, IntegrationResult, ManifestCard, ManifestInput, MemberUpdate, Team, TeamManifest, TeamMember, TeamMetadata, TextDeliverySummary } from "./team-types.d.ts" */
+
 const MOTORES = new Set(["claude", "codex", "agy", "deepseek"]);
 
-/** Content hash of a string, or of the JSON form of any other value. */
+/**
+ * Content hash of a string, or of the JSON form of any other value.
+ * @param {unknown} value
+ */
 const sha256Hex = (value) =>
   hashBytes(typeof value === "string" ? value : JSON.stringify(value));
 
+/** @param {unknown} raw */
 function normalizarRutaRelativa(raw) {
   if (typeof raw !== "string")
     throw new ErrorLanzador("Ruta de entregable inválida", 400);
@@ -31,6 +37,10 @@ function normalizarRutaRelativa(raw) {
   return parts.join("/");
 }
 
+/**
+ * @param {ManifestInput} manifest
+ * @returns {TeamManifest | null}
+ */
 function normalizarManifiesto(manifest) {
   if (!manifest || typeof manifest !== "object") return null;
   if (!Array.isArray(manifest.team) || manifest.team.length === 0)
@@ -66,10 +76,20 @@ function normalizarManifiesto(manifest) {
   };
 }
 
+/**
+ * @param {string} solicitadoId
+ * @param {string} limiteId
+ */
 function esPerfilMasAmplio(solicitadoId, limiteId) {
   if (!solicitadoId || !limiteId || solicitadoId === limiteId) return false;
-  const solicitado = TOOL_PROFILES_BASE[solicitadoId];
-  const limite = TOOL_PROFILES_BASE[limiteId];
+  const solicitado =
+    TOOL_PROFILES_BASE[
+      /** @type {keyof typeof TOOL_PROFILES_BASE} */ (solicitadoId)
+    ];
+  const limite =
+    TOOL_PROFILES_BASE[
+      /** @type {keyof typeof TOOL_PROFILES_BASE} */ (limiteId)
+    ];
   if (!solicitado || !limite) return false;
   const mcpLim = new Set(limite.allowedMcps || []);
   const opLim = new Set(limite.allowedOperations || []);
@@ -83,15 +103,16 @@ function esPerfilMasAmplio(solicitadoId, limiteId) {
   return false;
 }
 
+/**
+ * @param {string} dir
+ * @param {{ maxMiembros?: number, activo?: (sessionId: string) => boolean, onChange?: () => void }} [options]
+ */
 export async function abrirEquipos(
   dir,
-  {
-    maxMiembros = 4,
-    activo = /** @type {(sessionId: string) => boolean} */ (() => true),
-    onChange = /** @type {() => void} */ (() => {}),
-  } = {},
+  { maxMiembros = 4, activo = () => true, onChange = () => {} } = {},
 ) {
   const archivo = path.join(dir, "equipos.json");
+  /** @type {Team[]} */
   let equipos;
   try {
     equipos = JSON.parse(await readFile(archivo, "utf8"));
@@ -103,15 +124,25 @@ export async function abrirEquipos(
   }
   /** @type {Promise<unknown>} */
   let cola = Promise.resolve();
+  /** @param {string} sesion */
   const buscar = (sesion) =>
     equipos.find((equipo) => equipo.miembros.some((m) => m.id === sesion));
+  /** @param {string} sesion */
   const requerir = (sesion) => {
     const equipo = buscar(sesion);
     if (!equipo) throw new Error("Sesión sin equipo");
     return equipo;
   };
+  /**
+   * @param {unknown} valor
+   * @param {number} max
+   */
   const textoValido = (valor, max) =>
     typeof valor === "string" && valor.trim() && valor.length <= max;
+  /**
+   * @param {Team} equipo
+   * @param {string} ruta
+   */
   const latestIntegratedHash = (equipo, ruta) => {
     for (let i = (equipo.integraciones?.length || 0) - 1; i >= 0; i--) {
       const integ = equipo.integraciones[i];
@@ -120,6 +151,12 @@ export async function abrirEquipos(
     }
     return null;
   };
+  /**
+   * @param {Team} equipo
+   * @param {string} padre
+   * @param {string} motor
+   * @param {TeamMetadata} [meta]
+   */
   function comprobar(equipo, padre, motor, meta = {}) {
     const p = equipo.miembros.find((m) => m.id === padre);
     if (!p) throw new Error("Miembro inválido");
@@ -141,6 +178,7 @@ export async function abrirEquipos(
       );
     }
 
+    /** @type {ManifestCard | null} */
     let card = null;
     if (mf) {
       const assignedCards = mf.team.filter((c) => c.assigned !== false);
@@ -283,6 +321,10 @@ export async function abrirEquipos(
       },
     };
   }
+  /**
+   * @template Result
+   * @param {() => Result} fn
+   */
   function transaccion(fn) {
     const siguiente = cola.then(async () => {
       const previo = structuredClone(equipos);
@@ -307,6 +349,10 @@ export async function abrirEquipos(
     return siguiente;
   }
   return {
+    /**
+     * @param {string} lider
+     * @param {TeamMetadata} [meta]
+     */
     crear(lider, meta = {}) {
       return transaccion(() => {
         if (!textoValido(lider, 100) || buscar(lider))
@@ -365,6 +411,7 @@ export async function abrirEquipos(
             );
           }
         }
+        /** @type {TeamMember} */
         const memberMeta = {
           id: lider,
           padreId: null,
@@ -395,6 +442,7 @@ export async function abrirEquipos(
           ...(meta.workspacePath ? { workspacePath: meta.workspacePath } : {}),
           ...(meta.workspaceKind ? { workspaceKind: meta.workspaceKind } : {}),
         };
+        /** @type {Team} */
         const equipo = {
           id: randomUUID(),
           lider,
@@ -418,6 +466,13 @@ export async function abrirEquipos(
         return equipo;
       });
     },
+    /**
+     * @param {string} id
+     * @param {string} padre
+     * @param {string} hijo
+     * @param {string} motor
+     * @param {TeamMetadata} [meta]
+     */
     agregar(id, padre, hijo, motor, meta = {}) {
       return transaccion(() => {
         const equipo = requerir(padre);
@@ -474,13 +529,17 @@ export async function abrirEquipos(
         return miembro;
       });
     },
+    /**
+     * @param {string} sesionId
+     * @param {MemberUpdate} [cambios]
+     */
     actualizarMiembro(sesionId, cambios = {}) {
       return transaccion(() => {
         const equipo = buscar(sesionId);
         if (!equipo) return null;
         const miembro = equipo.miembros.find((m) => m.id === sesionId);
         if (!miembro) return null;
-        for (const campo of [
+        for (const campo of /** @type {const} */ ([
           "workspacePath",
           "workspaceKind",
           "modelo",
@@ -489,12 +548,16 @@ export async function abrirEquipos(
           "role",
           "responsibility",
           "estado",
-        ]) {
+        ])) {
           if (cambios[campo] !== undefined) miembro[campo] = cambios[campo];
         }
         return miembro;
       });
     },
+    /**
+     * @param {string} padre
+     * @param {unknown} requestId
+     */
     buscarPorRequestId(padre, requestId) {
       if (!requestId || typeof requestId !== "string") return null;
       const equipo = buscar(padre);
@@ -504,9 +567,19 @@ export async function abrirEquipos(
       );
       return hit ? structuredClone(hit) : null;
     },
+    /**
+     * @param {string} padre
+     * @param {string} motor
+     * @param {TeamMetadata} [meta]
+     */
     comprobar(padre, motor, meta = {}) {
       return comprobar(requerir(padre), padre, motor, meta);
     },
+    /**
+     * @param {string} de
+     * @param {string} para
+     * @param {string} texto
+     */
     mensaje(de, para, texto) {
       return transaccion(() => {
         const equipo = requerir(de);
@@ -526,13 +599,22 @@ export async function abrirEquipos(
         return mensaje;
       });
     },
+    /**
+     * @param {string} de
+     * @param {string | DeliveryInput} tituloOInput
+     * @param {string} [contenidoLegacy]
+     */
     entregar(de, tituloOInput, contenidoLegacy) {
       return transaccion(() => {
         const equipo = requerir(de);
+        /** @type {DeliveryInput} */
         const payload =
           tituloOInput && typeof tituloOInput === "object"
             ? tituloOInput
-            : { titulo: tituloOInput, contenido: contenidoLegacy };
+            : {
+                titulo: /** @type {string} */ (tituloOInput),
+                contenido: contenidoLegacy,
+              };
         const titulo = payload.titulo;
         const contenido = payload.contenido;
         const ruta = payload.ruta ? normalizarRutaRelativa(payload.ruta) : null;
@@ -609,10 +691,16 @@ export async function abrirEquipos(
         return entrega;
       });
     },
+    /**
+     * @param {string} sesionLider
+     * @param {IntegrationOptions} [options]
+     * @returns {Promise<IntegrationResult>}
+     */
     integrar(
       sesionLider,
       { entregableIds = null, targetDir = null, resoluciones = [] } = {},
     ) {
+      /** @type {Promise<IntegrationResult>} */
       const siguiente = cola.then(async () => {
         const previo = structuredClone(equipos);
         try {
@@ -640,7 +728,9 @@ export async function abrirEquipos(
             );
           }
 
+          /** @type {Map<string, IntegrationCandidate[]>} */
           const itemsPorRuta = new Map();
+          /** @type {TextDeliverySummary[]} */
           const entregablesSoloTexto = [];
           for (const e of seleccionados) {
             if (e.archivos?.length) {
@@ -699,6 +789,7 @@ export async function abrirEquipos(
             }
           }
 
+          /** @type {Map<string, IntegrationResolution>} */
           const resMap = new Map();
           for (const res of Array.isArray(resoluciones) ? resoluciones : []) {
             if (res && typeof res.ruta === "string") {
@@ -706,11 +797,14 @@ export async function abrirEquipos(
             }
           }
 
+          /** @type {IntegrationConflict[]} */
           const conflictos = [];
+          /** @type {ApprovedCandidate[]} */
           const aprobados = [];
           const destinoBase = targetDir || equipo.directorioIntegracion || null;
           // Reads the file currently in the integration workspace, so edits
           // made outside the team are never overwritten silently.
+          /** @param {string} ruta */
           const hashEnDisco = async (ruta) => {
             if (!destinoBase) return null;
             try {
@@ -725,6 +819,7 @@ export async function abrirEquipos(
 
           // The last conflict recorded for a path, so a resolution can only
           // settle a conflict that was shown, over the destination it saw.
+          /** @param {string} ruta */
           const conflictoRegistrado = (ruta) => {
             for (const registro of [...(equipo.conflictos || [])].reverse()) {
               const hit = (registro.conflictos || []).find(
@@ -896,9 +991,11 @@ export async function abrirEquipos(
             });
           }
 
+          /** @type {IntegratedFile[]} */
           const integrados = [];
           if (destinoBase && aprobados.length > 0) {
             const rootResolved = path.resolve(destinoBase);
+            /** @type {Map<ApprovedCandidate, string>} */
             const destinos = new Map();
             for (const item of aprobados) {
               const dst = path.resolve(rootResolved, item.ruta);
@@ -956,6 +1053,7 @@ export async function abrirEquipos(
             }
           }
 
+          /** @type {IntegrationRecord} */
           const integracion = {
             id: randomUUID(),
             fecha,
@@ -994,11 +1092,13 @@ export async function abrirEquipos(
       cola = siguiente.catch(() => {});
       return siguiente;
     },
+    /** @param {string} id */
     bandeja(id) {
       return structuredClone(
         requerir(id).mensajes.filter((m) => m.para === id),
       );
     },
+    /** @param {string} id */
     estado(id) {
       return structuredClone(requerir(id));
     },
