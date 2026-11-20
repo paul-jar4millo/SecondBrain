@@ -33,6 +33,7 @@ import {
   validateNotePath,
 } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
+import { worldRoutes } from "./http/routes/world.mjs";
 
 /** @import { ApplicationOptions, HttpRequest, ToolProfile } from "./types.d.ts" */
 /** @import { WorkOrderManifest } from "./work-order-types.d.ts" */
@@ -54,7 +55,6 @@ export async function createApplication(options = {}) {
     finance,
     auth,
     sala,
-    mundo,
     lanzador,
     clients,
     watchers,
@@ -375,8 +375,11 @@ export async function createApplication(options = {}) {
         /** A query value the route's schema requires, so already validated. */
         const required = (/** @type {string} */ name) =>
           /** @type {string} */ (consulta.get(name));
+        /** @type {import("./http/route-types.d.ts").RouteRequest} */
+        const req = { request, response, consulta, required, callerCap };
         /** @type {Partial<Record<string, () => Promise<unknown>>>} */
         const routes = {
+          ...worldRoutes(context, req),
           "GET /health": async () => {
             const ready = await stat(path.join(root, "Home.md"))
               .then((s) => s.isFile())
@@ -419,47 +422,6 @@ export async function createApplication(options = {}) {
               response,
               200,
               await auth.login(await body(request), request, response),
-            );
-          },
-          "GET /mundo/overview": async () => {
-            return send(response, 200, await mundo.leer());
-          },
-          "GET /mundo/document": async () => {
-            return send(
-              response,
-              200,
-              await mundo.documento(consulta.get("path")),
-            );
-          },
-          "GET /mundo/media": async () => {
-            return await mundo.imagen(consulta.get("path"), response);
-          },
-          "POST /mundo/briefs": async () => {
-            return send(
-              response,
-              201,
-              await mundo.crearBrief(await body(request)),
-            );
-          },
-          "POST /mundo/agents": async () => {
-            return send(
-              response,
-              200,
-              await mundo.configurarAgente(await body(request)),
-            );
-          },
-          "POST /mundo/tasks": async () => {
-            return send(
-              response,
-              201,
-              await mundo.crearEncargo(await body(request)),
-            );
-          },
-          "POST /mundo/tasks/status": async () => {
-            return send(
-              response,
-              200,
-              await mundo.cambiarEncargo(await body(request)),
             );
           },
           "GET /agentes/sesiones": async () => {
