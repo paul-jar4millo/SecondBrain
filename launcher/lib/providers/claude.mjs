@@ -14,6 +14,7 @@ import {
   trackChildExit,
   waitChildExit,
 } from "./shared.mjs";
+import { claudeRateLimit, stepStatus } from "./provider-events.mjs";
 
 /** @typedef {import("@anthropic-ai/claude-agent-sdk").SDKUserMessage} ClaudeUserMessage */
 /** @typedef {import("@anthropic-ai/claude-agent-sdk").SDKMessage & { is_interrupt?: boolean }} ClaudeMessage */
@@ -37,6 +38,11 @@ import {
 /**
  * @typedef {import("./controller-types.mjs").ProviderTurnState<ClaudeContext> & {
  *   toolCalls: Map<string, { id: string, name: string, input: unknown }>,
+ *   absorbed: Set<string>,
+ *   pendingSteers: number,
+ *   consumedSteers: number,
+ *   heldResult: { method: "resolve" | "reject", payload: unknown } | null,
+ *   steerTimer: NodeJS.Timeout | null,
  *   killTimer: NodeJS.Timeout | null,
  *   aborted: boolean,
  *   resolve: (result: ClaudeTurnResult) => void,
@@ -48,6 +54,9 @@ import {
  * Claude Code receives `content: null` on cancel/decline, as it always has;
  * the SDK's ElicitationResult type only lists an object or undefined.
  */
+/** Wait for a steer's own answer after a text-only result. */
+const STEER_FOLLOW_UP_MS = 4000;
+
 const NO_CONTENT = /** @type {undefined} */ (/** @type {unknown} */ (null));
 
 function createInputQueue() {
@@ -135,6 +144,81 @@ export function createClaudeController(queryOverride = null) {
     turn[method](/** @type {ClaudeTurnResult} */ (payload));
   };
 
+  /**
+   * Rich events for tool calls the thread engine renders as their own items.
+   * Returns true when the tool must not be reported as a generic tool call.
+   * @param {ClaudeTurn} turn
+   * @param {{ id: string, name: string, input: unknown }} block
+   */
+  const emitSpecialTool = (turn, block) => {
+    const emit = turn.ctx.emit;
+    const input = /** @type {Record<string, any>} */ (block.input || {});
+    if (block.name === "TodoWrite" && Array.isArray(input.todos)) {
+      emit?.({
+        type: "todo_list",
+        id: "todo",
+        todos: input.todos.map((/** @type {any} */ todo) => ({
+          text: String(todo?.content ?? todo?.activeForm ?? ""),
+          status: stepStatus(todo?.status),
+        })),
+      });
+      return true;
+    }
+    if (block.name === "ExitPlanMode") {
+      emit?.({
+        type: "plan",
+        id: block.id,
+        explanation: String(input.plan ?? ""),
+        steps: [],
+      });
+      return true;
+    }
+    if (block.name === "Task" || block.name === "Agent") {
+      emit?.({
+        type: "subagent",
+        id: block.id,
+        name: String(input.subagent_type || block.name),
+        ...(input.description
+          ? { description: String(input.description) }
+          : {}),
+        ...(input.prompt ? { prompt: String(input.prompt) } : {}),
+        status: "in-progress",
+      });
+      return true;
+    }
+    return false;
+  };
+
+  /**
+   * Settles a turn unless a steer is still waiting to be answered: Claude
+   * takes queued input at the next tool boundary; after a text-only answer
+   * it answers the steer with a second result, which belongs to this turn.
+   * @param {ClaudeTurn} turn
+   * @param {ClaudeTurnResult} payload
+   */
+  const finishOrAwaitSteer = (turn, payload) => {
+    if (turn.pendingSteers > turn.consumedSteers) {
+      turn.heldResult = { method: "resolve", payload };
+      clearTimeout(turn.steerTimer ?? undefined);
+      turn.steerTimer = setTimeout(() => {
+        turn.consumedSteers = turn.pendingSteers;
+        const held = turn.heldResult;
+        turn.heldResult = null;
+        if (held)
+          settleActiveTurn(
+            turn,
+            "resolve",
+            /** @type {ClaudeTurnResult} */ (held.payload),
+          );
+      }, STEER_FOLLOW_UP_MS);
+      turn.steerTimer.unref?.();
+      return;
+    }
+    clearTimeout(turn.steerTimer ?? undefined);
+    turn.heldResult = null;
+    settleActiveTurn(turn, "resolve", payload);
+  };
+
   function ensurePumpStarted() {
     if (pumpStarted || !stream) return;
     pumpStarted = true;
@@ -151,10 +235,59 @@ export function createClaudeController(queryOverride = null) {
             else if (event.session_id !== observedSessionId) continue;
             await turn.ctx.nativeId(event.session_id);
           }
-          if (event.type === "assistant") {
+          if (turn.heldResult && event.type !== "result") {
+            // The steer is being answered: wait for its own result.
+            clearTimeout(turn.steerTimer ?? undefined);
+            turn.heldResult = null;
+            turn.consumedSteers = turn.pendingSteers;
+          }
+          if (event.type === "rate_limit_event") {
+            const window = claudeRateLimit(
+              /** @type {any} */ (event).rate_limit_info,
+            );
+            if (window)
+              turn.ctx.emit?.({ type: "rate_limits", windows: [window] });
+          }
+          const parentToolUseId =
+            "parent_tool_use_id" in event
+              ? /** @type {string | null} */ (event.parent_tool_use_id)
+              : null;
+          if (event.type === "assistant" && parentToolUseId) {
+            // Subagent output belongs to its Task item, not to the thread.
+            for (const block of event.message?.content || []) {
+              if (block.type === "tool_use") {
+                turn.toolCalls.set(block.id, {
+                  id: block.id,
+                  name: block.name,
+                  input: block.input,
+                });
+                turn.absorbed.add(block.id);
+              }
+              const parent = turn.toolCalls.get(parentToolUseId);
+              if (block.type === "text" && block.text)
+                turn.ctx.emit?.({
+                  type: "subagent",
+                  id: parentToolUseId,
+                  name: String(
+                    /** @type {any} */ (parent?.input)?.subagent_type ||
+                      parent?.name ||
+                      "Task",
+                  ),
+                  activity: block.text,
+                  status: "in-progress",
+                });
+            }
+          } else if (event.type === "assistant") {
             for (const [index, block] of (
               event.message?.content || []
             ).entries()) {
+              if (block.type === "thinking" && block.thinking) {
+                turn.ctx.emit?.({
+                  type: "reasoning",
+                  id: `${event.uuid}:thinking:${index}`,
+                  text: block.thinking,
+                });
+              }
               if (block.type === "text") {
                 turn.ctx.message(`${event.uuid}:text:${index}`, block.text);
               }
@@ -164,6 +297,10 @@ export function createClaudeController(queryOverride = null) {
                   name: block.name,
                   input: block.input,
                 });
+                if (emitSpecialTool(turn, block)) {
+                  turn.absorbed.add(block.id);
+                  continue;
+                }
                 turn.ctx.tool(block.id, {
                   nombre: block.name,
                   resumen: text(block.input),
@@ -175,10 +312,30 @@ export function createClaudeController(queryOverride = null) {
           if (event.type === "user") {
             for (const block of event.message?.content || []) {
               if (typeof block !== "string" && block.type === "tool_result") {
-                turn.ctx.tool(block.tool_use_id, {
-                  resultado: text(block.content),
-                  estado: block.is_error ? "error" : "ok",
-                });
+                if (!parentToolUseId) turn.consumedSteers = turn.pendingSteers;
+                const absorbedCall = turn.toolCalls.get(block.tool_use_id);
+                if (turn.absorbed.has(block.tool_use_id)) {
+                  if (
+                    absorbedCall &&
+                    (absorbedCall.name === "Task" ||
+                      absorbedCall.name === "Agent")
+                  )
+                    turn.ctx.emit?.({
+                      type: "subagent",
+                      id: block.tool_use_id,
+                      name: String(
+                        /** @type {any} */ (absorbedCall.input)
+                          ?.subagent_type || absorbedCall.name,
+                      ),
+                      result: text(block.content),
+                      status: block.is_error ? "failed" : "completed",
+                    });
+                } else {
+                  turn.ctx.tool(block.tool_use_id, {
+                    resultado: text(block.content),
+                    estado: block.is_error ? "error" : "ok",
+                  });
+                }
                 if (!block.is_error) {
                   const used = turn.toolCalls.get(block.tool_use_id);
                   const shortName = String(used?.name || "")
@@ -221,6 +378,20 @@ export function createClaudeController(queryOverride = null) {
           }
           if (
             event.type === "stream_event" &&
+            !parentToolUseId &&
+            event.event?.type === "content_block_delta" &&
+            event.event.delta?.type === "thinking_delta"
+          ) {
+            turn.ctx.emit?.({
+              type: "reasoning",
+              id: `stream:main:${event.event.index}:thinking`,
+              text: event.event.delta.thinking,
+              delta: true,
+            });
+          }
+          if (
+            event.type === "stream_event" &&
+            !parentToolUseId &&
             event.event?.type === "content_block_delta" &&
             event.event.delta?.type === "text_delta"
           ) {
@@ -231,6 +402,21 @@ export function createClaudeController(queryOverride = null) {
             );
           }
           if (event.type === "result") {
+            const usage = /** @type {Record<string, number | undefined>} */ (
+              /** @type {any} */ (event).usage || {}
+            );
+            const cost = /** @type {any} */ (event).total_cost_usd;
+            turn.ctx.emit?.({
+              type: "usage",
+              tokens: {
+                inputTokens: usage.input_tokens ?? 0,
+                outputTokens: usage.output_tokens ?? 0,
+                ...(typeof usage.cache_read_input_tokens === "number"
+                  ? { cachedInputTokens: usage.cache_read_input_tokens }
+                  : {}),
+                ...(typeof cost === "number" ? { costUsd: cost } : {}),
+              },
+            });
             await Promise.allSettled(turn.pendingWork);
             if (activeTurn !== turn || turn.settled) continue;
             if (turn.aborted || event.is_interrupt) {
@@ -246,7 +432,7 @@ export function createClaudeController(queryOverride = null) {
                 new Error("El proveedor no completó el turno"),
               );
             } else {
-              settleActiveTurn(turn, "resolve", {
+              finishOrAwaitSteer(turn, {
                 status: "completed",
                 pid: childProc?.pid ?? null,
                 persistent: isAlive(),
@@ -652,6 +838,11 @@ export function createClaudeController(queryOverride = null) {
       ctx,
       connectionId,
       toolCalls: new Map(),
+      absorbed: new Set(),
+      pendingSteers: 0,
+      consumedSteers: 0,
+      heldResult: null,
+      steerTimer: null,
       pendingWork: [],
       publishedArtifactKeys: new Set(),
       aborted: false,
@@ -679,9 +870,23 @@ export function createClaudeController(queryOverride = null) {
     });
 
     ctx.onControl?.({
-      supportsSteer: false,
+      supportsSteer: true,
       connectionId,
       pid: childProc?.pid ?? null,
+      // Taken at the next tool boundary, or answered after the current reply.
+      steer: async (steerText, steerAttachments = []) => {
+        if (activeTurn !== turn || turn.settled || !inputQueue)
+          throw new Error("No hay un turno de Claude activo para redirigir.");
+        if (steerAttachments.length)
+          throw new Error("Claude no admite adjuntos al redirigir un turno.");
+        turn.pendingSteers += 1;
+        inputQueue.push({
+          type: "user",
+          message: { role: "user", content: String(steerText) },
+          parent_tool_use_id: null,
+        });
+        return { queued: true };
+      },
     });
 
     if (!inputQueue) throw new Error("Claude no está conectado.");
@@ -734,7 +939,7 @@ export function createClaudeController(queryOverride = null) {
     isAlive,
     capabilities: () => ({
       persistentProcess: true,
-      supportsSteer: false,
+      supportsSteer: true,
       supportsInterrupt: true,
       supportsResume: true,
       supportsElicitationForm: true,
