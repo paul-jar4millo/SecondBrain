@@ -34,6 +34,7 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
   await put("service/http/context.mjs", "export const context = true;");
   await put("service/http/routes/vault.mjs", "export const routes = true;");
   await put("service/http/route-types.d.ts", "export {};");
+  await put("lanzador/execution/state.mjs", "export const state = true;");
   await put("dashboard/dist/index.html", "<main>synthetic</main>");
   await put("assets/reference-bank/references.json", "{}");
   await put("assets/reference-bank/auth.json", "secret");
@@ -72,6 +73,7 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
     "package.json",
   ]);
   assert.deepEqual((await readdir(path.join(target, "lanzador"))).sort(), [
+    "execution",
     "index.mjs",
     "package-lock.json",
     "package.json",

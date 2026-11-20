@@ -39,7 +39,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
         );
     }
     // Internal folders of a package, recursively: only .mjs sources.
-    for (const folder of ["lib", "http"]) {
+    for (const folder of ["lib", "http", "execution"]) {
       const lib = path.join(root, module, folder);
       const libEntries = await readdir(lib, {
         withFileTypes: true,

@@ -7,14 +7,12 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { StringDecoder } from "node:string_decoder";
 import {
-  comandoMotor,
   entornoDe,
   leerClaude,
   leerGemini,
   nuevoClaude,
   actividadEvento,
   entornoEsfuerzo,
-  saldoDeepSeek,
   validarAdjuntosMotor,
 } from "./motores.mjs";
 import {
@@ -26,98 +24,67 @@ import { prepararAgy, prepararClaude } from "./claude-config.mjs";
 import { inferirFase } from "./fases.mjs";
 import { fileURLToPath } from "node:url";
 import { comandoRemoto } from "./remote.mjs";
-import { comandoHarness, crearTerminal, tamanoPermitido } from "./harness.mjs";
+import { crearTerminal, tamanoPermitido } from "./harness.mjs";
 import { ocultarDiagnostico } from "./diagnostico.mjs";
 import { sessionCommand, stopSessionScope } from "./limits.mjs";
 import { ErrorLanzador } from "./errores.mjs";
+import { resolveExecutorOptions } from "./execution/options.mjs";
+import { createExecutionState } from "./execution/state.mjs";
 
-/** @import { ChildProcess, ChildProcessWithoutNullStreams } from "node:child_process" */
+/** @import { ChildProcess } from "node:child_process" */
 /** @import { LauncherSession } from "./session-types.d.ts" */
 /** @import { ToolProfile } from "./tool-catalog-types.d.ts" */
-/** @import { ActiveJob, ExecutionRequest, ExecutorOptions, LiveTerminal, MonitoredChild, QueuedJob, ResourceQueueEntry, TerminalEvent, TerminalInput, TurnOptions } from "./types.d.ts" */
+/** @import { ActiveJob, ExecutionRequest, ExecutorOptions, LiveTerminal, MonitoredChild, TerminalEvent, TerminalInput, TurnOptions } from "./types.d.ts" */
 
 // Bound the terminal replay kept in each session's detail file.
 const PERSISTIDO = 500;
 const runFile = promisify(execFile);
 
-const SESION_MAX_MIN = 240;
 /** @type {Partial<Record<string, string>>} */
 const PROVIDER_BY_ENGINE = { codex: "chatgpt", agy: "gemini" };
 
-/**
- * @param {unknown} valor
- * @param {number} predeterminado
- */
-function minutosConfigurados(valor, predeterminado) {
-  const minutos = Number(valor);
-  return (
-    (Number.isFinite(minutos) && minutos > 0 ? minutos : predeterminado) * 60000
-  );
-}
-
 /** @param {ExecutorOptions} options */
-export function crearEjecutor({
-  registro,
-  equipos,
-  proyectos,
-  espacios,
-  env = process.env,
-  comando = comandoMotor,
-  comandoInteractivo = comandoHarness,
-  maxActivos = 6,
-  lanzarPty = spawn,
-  seguimiento = null,
-  conversations = null,
-  toolCatalog = null,
-  consultarSaldo = () => saldoDeepSeek(env.DEEPSEEK_API_KEY ?? null),
-  // A silent CLI must not hold a slot forever, including interactive harnesses.
-  limiteMs = minutosConfigurados(env.SB_SESION_MAX_MIN, SESION_MAX_MIN),
-  inactividadMs = minutosConfigurados(env.SB_SESION_INACTIVIDAD_MIN, 15),
-  idleControllerMs = Number(env.SB_CONTROLADOR_OCIOSO_MIN || 0) > 0
-    ? minutosConfigurados(env.SB_CONTROLADOR_OCIOSO_MIN, 30)
-    : 0,
-  programar = setTimeout,
-  cancelarTemporizador = clearTimeout,
-  registrar = (linea) => console.error(linea),
-}) {
-  /** @type {Map<string, ActiveJob>} */
-  const activos = new Map();
-  /** @type {Map<string, LiveTerminal>} */
-  const terminales = new Map();
-  /** @type {Map<string, ChildProcessWithoutNullStreams>} */
-  const liveProcesses = new Map();
-  /**
-   * Processes that already emitted "exit" (exitCode alone misses signals).
-   * @type {WeakSet<ChildProcess>}
-   */
-  const exitedProcesses = new WeakSet();
-  /** @type {Map<string, NodeJS.Timeout>} */
-  const idleTimers = new Map();
-  /** @type {Map<string, string>} */
-  const sessionTokenFiles = new Map();
-  /** @type {Map<string, ToolProfile>} */
-  const sessionProfiles = new Map();
-  /** @type {Map<string, boolean>} */
-  const sessionBillingGrants = new Map();
-  /** @type {Map<string, () => Promise<unknown>>} */
-  const materializedSkillCleanups = new Map();
-  const materializedSkillsBySession = new Map();
-  /** @type {ResourceQueueEntry[]} */
-  const resourceQueue = [];
-  /** @type {Map<string, QueuedJob>} */
-  const queuedPromises = new Map();
-  let nextEnqueueSeq = 1;
-  /** @type {Promise<unknown>} */
-  let cola = Promise.resolve();
-  /**
-   * @template T
-   * @param {() => T | Promise<T>} fn
-   */
-  function serial(fn) {
-    const siguiente = cola.then(fn);
-    cola = siguiente.catch(() => {});
-    return siguiente;
-  }
+export function crearEjecutor(options) {
+  const config = resolveExecutorOptions(options);
+  const {
+    registro,
+    equipos,
+    proyectos,
+    espacios,
+    env,
+    comando,
+    comandoInteractivo,
+    maxActivos,
+    lanzarPty,
+    seguimiento,
+    conversations,
+    toolCatalog,
+    consultarSaldo,
+    limiteMs,
+    inactividadMs,
+    idleControllerMs,
+    programar,
+    cancelarTemporizador,
+    registrar,
+  } = config;
+  const state = createExecutionState();
+  const {
+    activos,
+    terminales,
+    liveProcesses,
+    exitedProcesses,
+    idleTimers,
+    sessionTokenFiles,
+    sessionProfiles,
+    sessionBillingGrants,
+    materializedSkillCleanups,
+    materializedSkillsBySession,
+    resourceQueue,
+    queuedPromises,
+    takeEnqueueSeq,
+    serial,
+    drenando,
+  } = state;
   function sessionTokenDir() {
     const base =
       env.SB_LANZADOR_DATA_DIR || path.join(os.tmpdir(), "sb-lanzador");
@@ -1486,7 +1453,7 @@ export function crearEjecutor({
         : resolvedToolProfileId
           ? structuredClone(baseProfile)
           : null;
-    const enqueueOrder = queueSlot ? nextEnqueueSeq++ : null;
+    const enqueueOrder = queueSlot ? takeEnqueueSeq() : null;
     const sesion = await registro.crear({
       id,
       motor,
@@ -1603,11 +1570,6 @@ export function crearEjecutor({
     });
     return registro.leer().find((s) => s.id === sesion.id) || sesion;
   }
-  /**
-   * Sessions whose next queued message is being started.
-   * @type {Set<string>}
-   */
-  const drenando = new Set();
   /**
    * Starts the next queued message of an idle structured session. Called when
    * a turn ends and after a message is queued, since either can happen first.
