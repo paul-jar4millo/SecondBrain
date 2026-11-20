@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   characterState,
   etiquetaRoster,
-} from "../src/features/room/team-panel.js";
+} from "../src/features/room/team-panel";
 describe("resultados y estado real de la sala", () => {
   it("las acciones del proveedor mandan sobre el rol y terminar no significa seguir trabajando", () => {
     expect(

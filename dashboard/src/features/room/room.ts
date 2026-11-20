@@ -26,10 +26,10 @@ import {
   tourInstructions,
 } from "./room-life";
 import { FONDO, dressWorld } from "./room-world.js";
-import { characterState, etiquetaRoster } from "./team-panel.js";
-import { cursorFor, pickTarget } from "./room-pick.js";
-import { createOverlayStack } from "./room-overlays.js";
-import { createWorldBoards } from "./room-boards.js";
+import { characterState, etiquetaRoster } from "./team-panel";
+import { cursorFor, pickTarget } from "./room-pick";
+import { createOverlayStack } from "./room-overlays";
+import { createWorldBoards } from "./room-boards";
 import {
   sceneSessions,
   conciliarCopias,
@@ -50,7 +50,7 @@ import {
   observedCompletions,
   createRoomSound,
   waitingFlow,
-} from "./room-controls.js";
+} from "./room-controls";
 import {
   QUALITY,
   QUALITY_LABELS,
@@ -60,7 +60,7 @@ import {
   nextPixelRatio,
   qualityFor,
   shadowUpdateDue,
-} from "./room-quality.js";
+} from "./room-quality";
 
 import type {
   AgentsState,

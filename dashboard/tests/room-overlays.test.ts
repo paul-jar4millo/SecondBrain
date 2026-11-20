@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createOverlayStack } from "../src/features/room/room-overlays.js";
+import { createOverlayStack } from "../src/features/room/room-overlays";
 
 function fakeButton() {
   const attrs = new Map<string, string>();
