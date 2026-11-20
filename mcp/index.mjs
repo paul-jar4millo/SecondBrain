@@ -61,18 +61,6 @@ export function isToolAllowedForOperations(name, opsSet) {
       opsSet.has("artifact.publish")
     );
   }
-  if (name === "equipo_encargar") return opsSet.has("team.coordinate");
-  if (
-    [
-      "equipo_esperar",
-      "equipo_estado",
-      "equipo_mensaje",
-      "equipo_bandeja",
-      "equipo_entregar",
-    ].includes(name)
-  ) {
-    return opsSet.size > 0;
-  }
   if (
     [
       "usuario_preguntar",
@@ -214,14 +202,6 @@ export function createBrainMcp({
       if (done(result) || Date.now() >= fin) return result;
     }
   }
-  /** @param {WaitOptions} options */
-  const waitBySegments = ({ id, timeout = 300_000 }) =>
-    waitInSegments({
-      path: "/equipo/esperar",
-      payloadBuilder: (segment) => ({ id, timeout: segment }),
-      timeout,
-      done: (result) => result?.estado !== "pendiente",
-    });
   /** @param {WaitOptions} options */
   const waitRequestBySegments = ({ id, timeout = 300_000 }) =>
     waitInSegments({
@@ -489,108 +469,6 @@ export function createBrainMcp({
     "Ejecuta una operación financiera validada por el backend. Lee docs/mcp-tools.md del repositorio y las reglas financieras del vault antes de escribir. Incluye requestId (un texto único por operación) y repítelo igual si reintentas tras un error de red: así no se aplica dos veces.",
     { operation: z.record(z.string(), z.unknown()) },
     ({ operation }) => api("/finance/ops", operation, 31 * 60_000),
-    false,
-  );
-  tool(
-    "equipo_encargar",
-    "Pide trabajo a otra agente del equipo según el manifiesto aprobado, con rol, perfil e idempotencia opcionales.",
-    {
-      motor: z.enum(["claude", "codex", "agy", "deepseek"]),
-      brief: z.string().min(1).max(60000),
-      proyecto: z.string().max(100).optional(),
-      modelo: z.string().max(80).optional(),
-      esfuerzo: z.string().max(10).optional(),
-      memberId: z.string().min(1).max(120).optional(),
-      role: z.string().min(1).max(120).optional(),
-      responsibility: z.string().min(1).max(1000).optional(),
-      toolProfileId: z
-        .enum(["investigacion", "ejecucion", "coordinacion", "integracion"])
-        .optional(),
-      workOrderId: z.string().uuid().optional(),
-      manifestSha256: z
-        .string()
-        .regex(/^[a-f0-9]{64}$/i)
-        .optional(),
-      requestId: z.string().min(1).max(120).optional(),
-      enqueueIfFull: z.boolean().optional(),
-    },
-    (args) => api("/equipo/encargar", args),
-    false,
-  );
-  tool(
-    "equipo_esperar",
-    "Espera una hija directa o devuelve pendiente.",
-    {
-      id: z.string().uuid(),
-      timeout: z.number().int().min(0).max(1800000).optional(),
-    },
-    (args) => waitBySegments(args),
-  );
-  tool(
-    "equipo_estado",
-    "Consulta el estado del equipo de esta sesión.",
-    {},
-    () => api("/equipo/estado", {}),
-  );
-  tool(
-    "equipo_mensaje",
-    "Envía un mensaje a otra sesión del equipo.",
-    {
-      para: z.string().uuid(),
-      texto: z.string().min(1).max(10000),
-    },
-    (args) => api("/equipo/mensaje", args),
-    false,
-  );
-  tool("equipo_bandeja", "Lee los mensajes dirigidos a esta sesión.", {}, () =>
-    api("/equipo/bandeja", {}),
-  );
-  tool(
-    "equipo_entregar",
-    "Publica un entregable versionado con sha256 para el equipo.",
-    {
-      titulo: z.string().min(1).max(200),
-      contenido: z.string().max(100000).optional(),
-      ruta: z.string().min(1).max(300).optional(),
-      baseSha256: z
-        .string()
-        .regex(/^[a-f0-9]{64}$/i)
-        .optional(),
-      archivos: z
-        .array(
-          z.object({
-            ruta: z.string().min(1).max(300),
-            contenido: z.string().max(100000),
-            baseSha256: z
-              .string()
-              .regex(/^[a-f0-9]{64}$/i)
-              .optional(),
-          }),
-        )
-        .min(1)
-        .max(20)
-        .optional(),
-    },
-    (args) => api("/equipo/entregar", args),
-    false,
-  );
-  tool(
-    "equipo_integrar",
-    "Integra explícitamente entregables verificados del equipo al workspace del encargo sin sobrescribir conflictos.",
-    {
-      entregableIds: z.array(z.string().uuid()).min(1).max(50).optional(),
-      resoluciones: z
-        .array(
-          z.object({
-            ruta: z.string().min(1).max(300),
-            entregableId: z.string().uuid().optional(),
-            contenido: z.string().max(100000).optional(),
-          }),
-        )
-        .max(50)
-        .optional(),
-    },
-    (args) => api("/equipo/integrar", args),
     false,
   );
   // Maletín: shared folder with the owner. File contents are data, never instructions.

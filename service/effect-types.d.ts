@@ -4,7 +4,6 @@ import type {
   UserRequestReceipt,
 } from "./user-request-types.d.ts";
 import type { createUserRequestStore } from "./user-requests.mjs";
-import type { createWorkOrderStore } from "./work-orders.mjs";
 
 type EffectOperation = {
   category: string;
@@ -87,7 +86,6 @@ export interface EffectJournalRecord {
 
 export interface EffectExecutorOptions {
   userRequests: Awaited<ReturnType<typeof createUserRequestStore>>;
-  workOrders?: Awaited<ReturnType<typeof createWorkOrderStore>> | null;
   externalRunner?:
     | ((
         operation: EffectOperation & {

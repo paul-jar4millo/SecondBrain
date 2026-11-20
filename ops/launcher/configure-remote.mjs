@@ -1,16 +1,15 @@
+// Engine settings of the agent user. The session-era state hooks are gone
+// (ADR 0010): threads read state from the provider events, so old entries
+// are removed. Antigravity trusts only the project folders.
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 const base = "/var/lib/sb-agente";
-const command =
-  "/opt/node/bin/node " +
-  (process.env.SB_REMOTE_CODE_ROOT || "/opt/secondbrain/current") +
-  "/lanzador/remote-hook.mjs";
+const LEGACY_HOOK = "/lanzador/remote-hook.mjs";
 
 /**
- * @typedef {{ type: "command", command: string }} CommandHook
  * @typedef {{
  *   hooks?: Record<string, unknown[]>,
- *   "secondbrain-observer"?: Record<string, CommandHook[]>,
+ *   "secondbrain-observer"?: unknown,
  *   trustedWorkspaces?: string[],
  * }} RemoteSettings
  */
@@ -31,30 +30,22 @@ async function update(file, modify) {
   modify(data);
   await writeFile(file, JSON.stringify(data, null, 2) + "\n", { mode: 0o600 });
 }
-// Ámbar and Marina each run their own Claude Code config; both report state.
 for (const dir of ["claude", "deepseek"])
   await update(`${base}/${dir}/settings.json`, (data) => {
-    data.hooks ??= {};
-    for (const [event, phase] of [
-      ["SessionStart", "start"],
-      ["UserPromptSubmit", "start"],
-      ["Stop", "stop"],
-    ]) {
-      const existing = data.hooks[event] || [];
-      data.hooks[event] = [
-        ...existing.filter(
-          (x) => !JSON.stringify(x).includes("/lanzador/remote-hook.mjs"),
-        ),
-        { hooks: [{ type: "command", command: command + " " + phase }] },
-      ];
+    if (!data.hooks) return;
+    for (const [event, entries] of Object.entries(data.hooks)) {
+      const kept = entries.filter(
+        (x) =>
+          !JSON.stringify(x).includes(LEGACY_HOOK) &&
+          !JSON.stringify(x).includes("/server/hook.mjs"),
+      );
+      if (kept.length) data.hooks[event] = kept;
+      else delete data.hooks[event];
     }
+    if (!Object.keys(data.hooks).length) delete data.hooks;
   });
 await update(base + "/.gemini/config/hooks.json", (data) => {
-  data["secondbrain-observer"] = {
-    SessionStart: [{ type: "command", command: command + " start" }],
-    PreInvocation: [{ type: "command", command: command + " start" }],
-    Stop: [{ type: "command", command: command + " stop" }],
-  };
+  delete data["secondbrain-observer"];
 });
 const projects = JSON.parse(
   await readFile("/etc/sb-agente/proyectos.json", "utf8"),

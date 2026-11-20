@@ -47,7 +47,7 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
   await put("service/http/context.mjs", "export const context = true;");
   await put("service/http/routes/vault.mjs", "export const routes = true;");
   await put("service/http/route-types.d.ts", "export {};");
-  await put("launcher/execution/state.mjs", "export const state = true;");
+  await put("launcher/threads/runtime.mjs", "export const runtime = true;");
   await put(
     "launcher/version-registry.mjs",
     "export const SESSION_REGISTRY_VERSION = 2;\n",
@@ -57,12 +57,11 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
   await put("assets/reference-bank/auth.json", "secret");
   await put("vault/Home.md", "private");
   await put("ops/compat/index.mjs", "// launcher");
-  await put("launcher/skills/equipo-cuatro-fases.md", "# Guía sintética");
   await put("launcher/skills/no-publicar.env", "secret");
   await put("launcher/skills/resumen-matutino.md", "# Resumen");
   await put("ops/launcher/install.sh", "#!/bin/sh");
   const target = path.join(temp, "release");
-  // The release keeps the launcher in lanzador/: host units and sb-hilo use that path.
+  // The release keeps the launcher in lanzador/: host units and entry points use that path.
   await packageRelease(target, { sourceRoot: source });
   assert.equal(
     await readFile(path.join(target, "dashboard/dist/index.html"), "utf8"),
@@ -91,16 +90,15 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
     "package.json",
   ]);
   assert.deepEqual((await readdir(path.join(target, "lanzador"))).sort(), [
-    "execution",
     "index.mjs",
     "package-lock.json",
     "package.json",
     "registro-version.mjs",
     "skills",
+    "threads",
     "version-registry.mjs",
   ]);
   assert.deepEqual(await readdir(path.join(target, "lanzador/skills")), [
-    "equipo-cuatro-fases.md",
     "resumen-matutino.md",
   ]);
   // The helper already installed on hosts reads the old marker name.

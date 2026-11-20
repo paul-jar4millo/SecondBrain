@@ -7,7 +7,7 @@ import {
   DEEPSEEK_THINKING,
 } from "./engines.mjs";
 
-/** @import { LauncherEngine } from "./session-types.d.ts" */
+/** @typedef {"claude" | "codex" | "agy" | "deepseek"} LauncherEngine */
 /** @typedef {{ id: string, nombre: string, esfuerzo?: string, esfuerzos?: string[] }} LauncherModel */
 /** @typedef {Record<LauncherEngine, LauncherModel[]>} ModelCatalog */
 /**

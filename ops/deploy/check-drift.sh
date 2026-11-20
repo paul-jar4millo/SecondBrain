@@ -16,7 +16,6 @@ check() {
 }
 check "$release/ops/deploy/deploy-release.sh" /usr/local/sbin/secondbrain-deploy
 check "$release/ops/deploy/launcher-compatible.mjs" /usr/local/lib/secondbrain/launcher-compatible.mjs
-check "$release/ops/lanzador/sb-hilo" /usr/local/bin/sb-hilo
 for unit in secondbrain-lanzador.service claude-sb-agente.service resumen-matutino.service resumen-matutino.timer; do
   check "$release/ops/lanzador/$unit" "/etc/systemd/system/$unit"
 done

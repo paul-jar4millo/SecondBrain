@@ -5,7 +5,11 @@ import { spawn as nodeSpawn } from "node:child_process";
 import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { effortEnvironment, environmentOf } from "../engines.mjs";
-import { PROVIDER_BY_ENGINE } from "../execution/process-tools.mjs";
+import {
+  PROVIDER_BY_ENGINE,
+  acpGeminiDir,
+  sanitizeChildEnv,
+} from "./child-env.mjs";
 import { sessionCommand, stopSessionScope } from "../limits.mjs";
 import { TOOL_PROFILES_BASE } from "../tool-catalog-data.mjs";
 import { buildMcpConfigForProfile } from "../tool-catalog.mjs";
@@ -42,8 +46,6 @@ export function profileFor(profile, readOnly) {
 /**
  * @param {{
  *   env: NodeJS.ProcessEnv,
- *   sanitizeChildEnv: (env: NodeJS.ProcessEnv, profile: ToolProfile, tokenFile: string | null, billing: boolean, engine: string) => NodeJS.ProcessEnv,
- *   acpGeminiDirFor: (id: string) => string,
  *   toolCatalog?: { getProfile(id: string): ToolProfile | null | undefined } | null,
  *   spawn?: typeof nodeSpawn,
  *   tokenDir?: string | null,
@@ -51,8 +53,6 @@ export function profileFor(profile, readOnly) {
  */
 export function createProviderContextFactory({
   env,
-  sanitizeChildEnv,
-  acpGeminiDirFor,
   toolCatalog = null,
   spawn = nodeSpawn,
   tokenDir = null,
@@ -108,7 +108,7 @@ export function createProviderContextFactory({
     const childEnv = { ...childBase, ...mcp.envOverrides };
     const geminiDir =
       engine === "agy" && !env.SB_AGY_ACP_ARGS
-        ? acpGeminiDirFor(scopeId)
+        ? acpGeminiDir(env, scopeId)
         : null;
     if (geminiDir) await mkdir(geminiDir, { recursive: true, mode: 0o700 });
     return {
