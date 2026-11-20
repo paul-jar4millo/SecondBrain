@@ -13,6 +13,10 @@ import { promisify } from "node:util";
 
 const runFile = promisify(execFile);
 
+/** Credential provider of each engine, when it differs from the engine id. */
+/** @type {Partial<Record<string, string>>} */
+export const PROVIDER_BY_ENGINE = { codex: "chatgpt", agy: "gemini" };
+
 /**
  * @param {ExecutorConfig} config
  */
