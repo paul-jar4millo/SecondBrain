@@ -11,7 +11,7 @@ case ${1:-} in
   exec 9>/run/lock/secondbrain-offhost-backup.lock
   flock -n 9 || { echo 'Backup already running' >&2; exit 1; }
   log=$(mktemp "$work/capture-XXXXXXXX.log")
-  if ! vzdump "$vmid" --dumpdir "$work" --mode suspend --compress zstd --remove 0 --prune-backups keep-last=2 >"$log" 2>&1; then
+  if ! vzdump "$vmid" --dumpdir "$work" --mode suspend --compress zstd --remove 1 --prune-backups keep-last=2 >"$log" 2>&1; then
     echo "Container capture failed; inspect $log" >&2; exit 1
   fi
   archive=$(find "$work" -maxdepth 1 -type f -name "vzdump-lxc-$vmid-*.tar.zst" -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
