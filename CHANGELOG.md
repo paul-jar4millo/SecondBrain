@@ -4,6 +4,15 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-11-20
+
+### Fixed
+
+- Codex threads no longer die at startup with "Proveedor desconectado". The
+  launcher named the `claude.ai` connector to Codex, which reads the dot as
+  nesting and rejected the resulting `claude` server.
+- The provider's stderr goes to the launcher's journal.
+
 ## [0.4.0] - 2026-11-20
 
 Agent work moves from sessions to threads (ADR 0009–0011). The session-era
