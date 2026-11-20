@@ -17,6 +17,11 @@ const ProjectDetail = lazy(() =>
 const TeamPage = lazy(() =>
   import("../features/team/TeamPage").then((m) => ({ default: m.TeamPage })),
 );
+const ThreadsPage = lazy(() =>
+  import("../features/threads/ThreadsPage").then((m) => ({
+    default: m.ThreadsPage,
+  })),
+);
 const FinancePage = lazy(() =>
   import("../features/finance/FinancePage").then((m) => ({
     default: m.FinancePage,
@@ -42,6 +47,8 @@ export default function ToolRoutes() {
         <Route path="/agenda" element={<Navigate to="/projects" replace />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/team" element={<TeamPage />} />
+        <Route path="/threads" element={<ThreadsPage />} />
+        <Route path="/threads/:id" element={<ThreadsPage />} />
         {projectDashboards.map(({ id, path, Component }) => (
           <Route
             key={id}
