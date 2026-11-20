@@ -4,7 +4,7 @@ import {
   thumbAxis,
   observedCompletions,
   waitingFlow,
-} from "../src/features/room/room-controls.js";
+} from "../src/features/room/room-controls";
 it("offers Continue only to the agent whose current phase is waiting", () => {
   const flow = {
     id: "f1",
