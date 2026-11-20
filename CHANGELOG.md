@@ -4,6 +4,14 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-11-20
+
+### Fixed
+
+- Releases ship `lanzador/registro-version.mjs` again. The compatibility
+  helper installed on hosts before v0.2.0 reads that file; without it the
+  host kept the v0.1.2 launcher after every deploy.
+
 ## [0.3.0] - 2026-11-20
 
 Internal refactor with no change to HTTP routes, MCP tools, environment
@@ -131,6 +139,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.3.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.3.1
 [0.3.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.3.0
 [0.2.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.2.0
 [0.1.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.2
