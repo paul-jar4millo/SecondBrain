@@ -15,6 +15,15 @@ type ToolCatalog = Awaited<ReturnType<typeof createToolCatalogStore>>;
 type WorkspaceRegistry = Awaited<ReturnType<typeof openWorkspaces>>;
 
 export interface LauncherServerOptions {
+  threads?: {
+    http: {
+      handle(
+        req: import("node:http").IncomingMessage,
+        res: import("node:http").ServerResponse,
+        url: URL,
+      ): Promise<boolean>;
+    };
+  } | null;
   registro: SessionRegistry;
   ejecutor: ReturnType<typeof createExecutor>;
   conversations?: ReturnType<typeof createProviderConversations> | null;
