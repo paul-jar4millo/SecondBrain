@@ -4,7 +4,7 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.2] - 2026-11-19
 
 ### Added
 
@@ -23,6 +23,15 @@ All notable changes are documented here. The format follows
   a fast exit can no longer leave the session working forever.
 - Tests: the artifact end-to-end test reproduces the follow-up race on purpose
   and two terminal tests no longer depend on timing.
+
+### Changed
+
+- Dependencies: minor and patch updates across modules (this fixes the
+  `minimatch` advisory), GitHub Actions to their current majors,
+  `react-markdown` 10 and `lucide-react` 1. Dependabot updates `vitest` and
+  its plugins together and holds back TypeScript 7 and `@types/node` majors.
+- Repository: `main` accepts changes only through pull requests with the
+  `verify`, `commits` and `audit` checks passing.
 
 ## [0.1.1] - 2026-11-19
 
@@ -64,5 +73,6 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.1.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.2
 [0.1.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.1
 [0.1.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.0
