@@ -1,9 +1,9 @@
 # Plan: reescritura del chat de agentes como sistema de **Threads**
 
-> **Estado (2026-11-20).** En `main`: A0 #41, A1 #42, A2 #43, A3 #44, A4 #45,
-> A5 #46, A6 #47, A7 #48, A8 #49, A9 #50. Pendiente: desplegar A9 (tag v* del
-> dueño), paso de datos en el LXC (ya confirmado), lista e2e con
-> `ops/verify-runtime.mjs` y A10; después las fases B, C y D.
+> **Estado (2026-11-20).** En `main`: A0–A9 (#41–#50), fixes #51 y #53;
+> v0.4.0 desplegada y paso de datos de A9 hecho; v0.4.1 pendiente de
+> aprobación. Falta la lista e2e con Codex y A10. Después: **fase 1.5**
+> (despliegue robusto y servidor en inglés), luego B, C y D.
 
 ## Contexto
 
@@ -63,6 +63,145 @@ Decisiones del usuario (cerradas): TS nativo (Node ≥24, type stripping, sin bu
 - **A8 UI Threads** en `dashboard/src/features/threads/`: `ThreadsPage, ThreadList, Timeline, WorkGroup ("Trabajó 42 s", plegable), items/*` (renderer por kind), `Composer` (send/steer/queue/interrupt, tarjetas de request inline, selector agente/modelo reutilizando `ModelEffortPicker`), `SidePanel` (Diff/Plan), `DiffView` (reutiliza `splitPatch`/`lineKind` de `harness-changes.ts`), `CloseDialog, NewThreadDialog, InboxList`, `thread-stream.ts` (resume + fallback), `thread-store.ts` (reducer). Rutas en `ToolRoutes.tsx`, nav en `Workspace.tsx`, i18n `es.ts`/`en.ts`. Móvil: una columna, panel lateral como hoja, composer pegado al teclado, objetivos de 44 px.
 - **A9 Borrado legacy backend + ops.** Launcher: `terminal.py, harness, remote*, hook, flow, items, conversations, sessions, version-registry, cli` (+ `bin`), `conversation/*`, `provider-conversations`, `teams`, `execution/{delegation,terminal-io,run-remote,conversation-queue}`, deps `@xterm/*`. Service: `agents-sessions, agents-conversation, team-actions, agent-bridges, work-orders, change-feed`. MCP: `equipo_*`. Ops: `sb-hilo`, `ops/compat/hook.mjs`; portar `resumen-matutino.sh` a `POST /threads`; actualizar `configure.mjs, check-drift.sh, verificar.sh`. **Paso de datos en el LXC**: parar launcher, listar lo que se borra (`sesiones.json`, conversaciones, detalles), **pedir confirmación al usuario**, borrar.
 - **A10 Borrado legacy dashboard + refugio + suites.** Borrar `AgentWorkspace, ProviderConversation, HarnessChanges, SessionPanel, team-store/controller`; mover `UsageBars, ModelEffortPicker, TeamPrimitives` y un único mapa motor→personaje a `features/agents/`; conservar `ApprovalPanel` (finanzas). `room-sessions.ts` lee la proyección de threads; renombrar `room-threads.ts`→`room-team-lines.ts`. Recablear proyectos/tareas/finanzas/ajustes a `openThread`/`NewThreadDialog`. Reescribir `ops/verify-conversations.mjs` + `verify-workspaces.mjs` como `verify-threads.mjs` (escritorio + 375 px), `fake-stream.mjs`, regex de CI.
+
+### Fase 1.5 — despliegue robusto y servidor en inglés
+
+Va entre A (cuando pasen la lista e2e y A10) y B. B, C y D añaden servicios
+(bot de Discord, push, resumen), y cada uno multiplica lo que hoy se rompe al
+desplegar.
+
+**Lo que se rompió en el camino (2026-11)**
+
+- v0.3.1: la release no traía `registro-version.mjs` y el host se quedó con el
+  launcher de v0.1.2 sin avisar (capa de compatibilidad
+  `launcher-compatible.mjs` + marcadores de versión).
+- v0.4.0: el deploy cambió el código, pero no las unidades systemd. Hubo
+  deriva hasta correr `aprovisionar.sh desplegar` a mano. `verificar.sh` no
+  viaja en la release y hubo que copiarlo.
+- v0.4.0: todos los threads de Codex morían al arrancar. CI usa proveedores
+  falsos, y Codex 0.167 rechazó una opción `-c` que el falso aceptaba. Solo la
+  e2e manual lo encontró (#53).
+- Estado repartido entre `/opt`, `/etc`, `/var/lib` y `/srv`, con nombres en
+  español y en inglés mezclados (`lanzador`, `estado`, `proyectos`,
+  `SB_LANZADOR_*`, `/agentes/*`, `/sala/*`…).
+
+**Decisión: contenedor para lo que no ejecuta agentes; el launcher sigue
+nativo.**
+
+- **Service + MCP + dashboard → imagen OCI.** Ya existen
+  `dashboard/Dockerfile` y `compose.yml`. CI construye la imagen una vez, la
+  publica en GHCR y despliega por _digest_. El rollback es volver al digest
+  anterior. Desaparecen `npm ci` en el host, `releases/<sha>`, el symlink y
+  `deploy-release.sh`. El LXC 204 ya es `unprivileged` con `nesting=1`; se
+  usa **Podman + Quadlet**: sin daemon, la unidad es un archivo systemd
+  declarativo y `podman auto-update` sigue el digest fijado. Docker queda
+  como alternativa si Quadlet da problemas en el LXC.
+- **El launcher no va en contenedor.** Depende de cosas que un contenedor
+  anidado en un LXC sin privilegios complica sin ganar nada:
+  - aislamiento por usuario (`sb-agente`) con nftables;
+  - un scope `systemd-run --user` por thread, con límites de memoria y CPU;
+  - las CLIs con sesiones iniciadas;
+  - worktrees en `/srv`.
+
+  Se vuelve declarativo:
+  - un solo `install` idempotente que el deploy corre siempre;
+  - unidades y configuración generadas y aplicadas en cada deploy (deriva
+    = el deploy falla);
+  - versiones de las CLIs (`codex`, `claude`, `agy`) fijadas en un
+    manifiesto.
+
+- Se descarta una VM o un LXC con Docker para todo: duplica el aislamiento que
+  ya da el LXC, y los agentes necesitan el host tal cual.
+
+**PRs**
+
+- **P1 El deploy aplica todo y se comprueba solo.**
+  - `deploy-release.sh` corre `configure.mjs`, `daemon-reload` y
+    `install.sh` del launcher. Al final ejecuta `verificar.sh`, que ahora
+    viaja en la release, y si falla vuelve atrás.
+  - Se borran `launcher-compatible.mjs`, los marcadores
+    `registro-version.mjs` / `version-registry.mjs` y `ops/compat/`.
+  - Se actualiza el helper del host (`/usr/local/sbin/secondbrain-deploy`)
+    en un paso manual único y documentado.
+- **P2 Contrato real con las CLIs en CI.**
+  - Manifiesto `ops/agents/versions.json` con las versiones fijadas. El
+    host instala exactamente esas.
+  - Un job de CI instala esas versiones y valida, sin cuenta, los
+    argumentos que genera el launcher: `codex app-server` con nuestros
+    `-c` y `--print-startup-config`, `claude --mcp-config` y el `initialize`
+    de ACP.
+  - Dependabot propone las subidas, y el job las prueba antes del merge.
+    Con esto, #53 se habría detectado en CI.
+- **P3 Imagen del service.**
+  - El `Dockerfile` pasa a ser multi-módulo (`service`, `mcp`, `dashboard`,
+    `contracts`) sin el launcher, con usuario no root.
+  - Healthcheck y SBOM. El job `build` publica
+    `ghcr.io/<dueño>/secondbrain@sha256:…`.
+  - Smoke del contenedor en CI (ya existe `smoke-container.mjs`).
+- **P4 Service en Podman en el LXC.**
+  - Unidad Quadlet `secondbrain.container`.
+  - Volúmenes: vault, datos y el socket/puerto del launcher en loopback.
+  - Se migran el estado y las credenciales sin perder sesiones de login.
+  - `deploy.yml` fija el digest y espera la salud.
+  - Rollback probado a propósito (digest anterior).
+  - `verificar.sh` comprueba la imagen activa. Se retira el flujo
+    `releases/<sha>` del service.
+- **P5 Nombres del servidor en inglés (host).**
+  - **Rutas:**
+    - `/var/lib/sb-agente/estado/lanzador` → `/var/lib/sb-agent/state/launcher`;
+    - `/srv/sb-agente/proyectos` → `/srv/sb-agent/projects`;
+    - `entregables` → `deliverables`.
+  - **Unidades:**
+    - `secondbrain-lanzador` → `secondbrain-launcher`;
+    - `resumen-matutino` → `morning-summary`;
+    - `secondbrain-aviso@` → `secondbrain-notify@`.
+  - **Scripts:**
+    - `aprovisionar`, `verificar`, `conectar` → `provision`, `verify`, `connect`;
+    - `agregar-repo` → `add-repo`;
+    - `enviar-aviso` → `send-notice`;
+    - `estado-pc` y `prender-pc` → `pc-status` y `pc-wake`;
+    - carpetas `dentro/` y `plantillas/` → `inside/` y `templates/`.
+  - **Release y variables:**
+    - la carpeta `lanzador/` de la release → `launcher/`;
+    - `SB_LANZADOR_*` → `SB_LAUNCHER_*`;
+    - `SB_PROYECTOS_FILE` → `SB_PROJECTS_FILE`;
+    - `SB_AGENTE` → `SB_AGENT`;
+    - `SB_SKILL_RESUMEN` → `SB_SKILL_SUMMARY`;
+    - `ACTIVAR_AUTOMATIZACIONES` → `ENABLE_AUTOMATIONS`.
+  - **Mensajes:** los de operador (shell, logs) en inglés.
+  - **Migración:** un script único, idempotente y con dry-run por defecto:
+    para servicios, mueve, reescribe las unidades y arranca. Durante una
+    release, los nombres viejos siguen como alias. Lo que no se renombra es
+    la cuenta Unix `sb-agente`; cambiarla rompe sesiones de las CLIs y
+    permisos, así que se decide aparte.
+- **P6 API y datos en inglés.**
+  - **Rutas del service:**
+    - `/agentes/*` → `/agents/*`;
+    - `/sala/*` → `/room/*`;
+    - `/solicitudes/*` → `/requests/*`;
+    - `/efectos/*` → `/effects/*`;
+    - `/aprobaciones` → `/approvals`;
+    - `/bandeja` → `/inbox`;
+    - `/mundo/*` → `/world/*`;
+    - `/oauth/clientes` → `/oauth/clients`.
+  - **Rutas del launcher:** `/estado`, `/capacidades`, `/proyectos`,
+    `/modelos`, `/uso`, `/espacios`, `/herramientas/*`.
+  - **Claves JSON** (`espacios.json`: `revision/vinculos`, campos de
+    respuesta).
+  - Las rutas viejas responden como alias con cabecera `Deprecation` durante
+    una release. Políticas de `routes.mjs`, dashboard, MCP y docs en el mismo
+    PR. El texto de la UI sigue en español.
+- **P7 Retirar alias** y extender `ops/naming.mjs` a rutas HTTP, variables
+  `SB_*`, nombres de archivo de `ops/` y unidades systemd. CI falla si
+  aparece un nombre nuevo en español fuera del texto de UI.
+
+**Verificación de la fase**
+
+- Un deploy desde cero en un LXC nuevo con `instalar.sh` + tag.
+- Un deploy de actualización.
+- Un rollback forzado (healthcheck roto a propósito).
+- `verificar.sh` en verde tras cada uno, sin pasos manuales.
+- La e2e con Codex y con Claude contra el LXC.
 
 ### Fase B — multiagente
 
