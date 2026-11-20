@@ -21,7 +21,14 @@ import { TOOL_PROFILES_BASE, narrowChildProfile } from "../tool-catalog.mjs";
  *   { lanzarTrabajo: (sesion: LauncherSession, brief: string, cwd: string, turnOptions?: TurnOptions) => void }} deps
  */
 export function createStarter(config, state, deps) {
-  const { env, equipos, espacios, proyectos, registro, toolCatalog } = config;
+  const {
+    env,
+    equipos: teams,
+    espacios: spaces,
+    proyectos: projects,
+    registro: registry,
+    toolCatalog,
+  } = config;
   const {
     queuedPromises,
     resourceQueue,
@@ -30,28 +37,28 @@ export function createStarter(config, state, deps) {
     takeEnqueueSeq,
   } = state;
   const {
-    asegurarCupo,
+    asegurarCupo: ensureSlot,
     cleanupSessionRuntimeSecrets,
-    copiarEntradasProyecto,
-    limpiarWorkspaceMiembro,
+    copiarEntradasProyecto: copyProjectEntries,
+    limpiarWorkspaceMiembro: cleanMemberWorkspace,
     writeSessionTokenFile,
-    lanzarTrabajo,
+    lanzarTrabajo: launchWork,
   } = deps;
   /** @param {ExecutionRequest} input */
-  async function iniciar({
+  async function start({
     id = null,
     motor,
-    origen,
-    proyecto,
+    origen: origin,
+    proyecto: project,
     brief,
     modelo = null,
     esfuerzo = null,
-    equipoId = null,
-    padreId = null,
-    espacioId = null,
+    equipoId: teamId = null,
+    padreId: parentId = null,
+    espacioId: spaceId = null,
     harness = false,
     structured = false,
-    contextoHeredado = null,
+    contextoHeredado: inheritedContext = null,
     workOrderId = null,
     memberId = null,
     role = null,
@@ -72,7 +79,7 @@ export function createStarter(config, state, deps) {
     const verifiedGrant =
       billingGrantVerified === true || env.SB_ALLOW_BILLED_DEEPSEEK === "1";
     if (
-      (structured || origen !== "equipo" || workOrderId || manifest) &&
+      (structured || origin !== "equipo" || workOrderId || manifest) &&
       motor === "deepseek" &&
       !verifiedGrant
     ) {
@@ -83,22 +90,22 @@ export function createStarter(config, state, deps) {
     }
     /** @type {import("../types.d.ts").ExecutionContext | null} */
     let context =
-      contextoHeredado ||
-      (espacioId && espacios ? await espacios.resolver(espacioId) : null);
-    const projectKey = String(proyecto);
-    if (!context && !Object.hasOwn(proyectos, projectKey))
+      inheritedContext ||
+      (spaceId && spaces ? await spaces.resolver(spaceId) : null);
+    const projectKey = String(project);
+    if (!context && !Object.hasOwn(projects, projectKey))
       throw new Error("Proyecto desconocido");
     if (typeof brief !== "string" || !brief.trim())
       throw new Error("Encargo vacío");
     let resolvedMemberId = memberId;
     let resolvedRole = role;
     let resolvedResponsibility = responsibility;
-    let resolvedModelo = modelo;
-    let resolvedEsfuerzo = esfuerzo;
+    let resolvedModel = modelo;
+    let resolvedEffort = esfuerzo;
     let resolvedToolProfileId = toolProfileId;
     let resolvedManifestSha256 = manifestSha256 || manifest?.sha256 || null;
 
-    if (!padreId && manifest && Array.isArray(manifest.team)) {
+    if (!parentId && manifest && Array.isArray(manifest.team)) {
       const card =
         manifest.team.find(
           (c) =>
@@ -133,33 +140,33 @@ export function createStarter(config, state, deps) {
       resolvedRole = resolvedRole || card.role || null;
       resolvedResponsibility =
         resolvedResponsibility || card.responsibility || null;
-      resolvedModelo = resolvedModelo || card.model || null;
-      resolvedEsfuerzo = resolvedEsfuerzo || card.effort || null;
+      resolvedModel = resolvedModel || card.model || null;
+      resolvedEffort = resolvedEffort || card.effort || null;
       resolvedToolProfileId =
         resolvedToolProfileId || card.toolProfileId || null;
     }
 
     let queueSlot = false;
     try {
-      await asegurarCupo(null);
+      await ensureSlot(null);
     } catch (error) {
       if (!enqueueIfFull) throw error;
       queueSlot = true;
     }
 
-    const targetCwd = context?.cwd || proyectos[projectKey];
+    const targetCwd = context?.cwd || projects[projectKey];
     const validatedAttachments = structured
       ? validateEngineAttachments(motor, attachments, targetCwd)
       : [];
     const isolateChild = Boolean(
-      padreId &&
+      parentId &&
       (structured || workOrderId || memberId || manifest || isolateWorkspace),
     );
     let workspaceKind = "shared";
     let workspacePath = targetCwd;
     if (isolateChild) {
       const base = targetCwd;
-      const scopeFolder = String(equipoId || workOrderId || "solo").replace(
+      const scopeFolder = String(teamId || workOrderId || "solo").replace(
         /[^a-zA-Z0-9._-]/g,
         "_",
       );
@@ -211,13 +218,13 @@ export function createStarter(config, state, deps) {
         workspaceKind = "git-worktree";
       } else {
         await mkdir(isolated, { recursive: true, mode: 0o700 });
-        await copiarEntradasProyecto(base, isolated);
+        await copyProjectEntries(base, isolated);
         workspaceKind = "directory";
       }
       workspacePath = isolated;
       context = {
         cwd: isolated,
-        repositorio: context?.repositorio || proyecto,
+        repositorio: context?.repositorio || project,
       };
     }
     const baseProfileId = resolvedToolProfileId || "ejecucion";
@@ -232,17 +239,17 @@ export function createStarter(config, state, deps) {
           ? structuredClone(baseProfile)
           : null;
     const enqueueOrder = queueSlot ? takeEnqueueSeq() : null;
-    const sesion = await registro.crear({
+    const session = await registry.crear({
       id,
       motor,
-      origen,
-      equipoId,
-      padreId,
-      proyecto: (context ? context.repositorio : proyecto) ?? undefined,
+      origen: origin,
+      equipoId: teamId,
+      padreId: parentId,
+      proyecto: (context ? context.repositorio : project) ?? undefined,
       encargo: brief,
-      modelo: resolvedModelo,
-      esfuerzo: resolvedEsfuerzo,
-      espacioId,
+      modelo: resolvedModel,
+      esfuerzo: resolvedEffort,
+      espacioId: spaceId,
       harness,
       structured,
       workOrderId,
@@ -262,22 +269,22 @@ export function createStarter(config, state, deps) {
       directorio:
         workspacePath ||
         context?.cwd ||
-        (proyecto ? proyectos[proyecto] : undefined),
+        (project ? projects[project] : undefined),
     });
-    if (resolvedProfile) sessionProfiles.set(sesion.id, resolvedProfile);
-    sessionBillingGrants.set(sesion.id, billingGrantVerified === true);
+    if (resolvedProfile) sessionProfiles.set(session.id, resolvedProfile);
+    sessionBillingGrants.set(session.id, billingGrantVerified === true);
     if (capabilityToken) {
-      await writeSessionTokenFile(sesion.id, capabilityToken);
+      await writeSessionTokenFile(session.id, capabilityToken);
     }
-    if (padreId) {
+    if (parentId) {
       try {
-        if (!equipos || !equipoId) throw new Error("Equipos no disponibles");
-        await equipos.agregar(equipoId, padreId, sesion.id, motor, {
+        if (!teams || !teamId) throw new Error("Equipos no disponibles");
+        await teams.agregar(teamId, parentId, session.id, motor, {
           memberId: resolvedMemberId,
           role: resolvedRole,
           responsibility: resolvedResponsibility,
-          modelo: resolvedModelo,
-          esfuerzo: resolvedEsfuerzo,
+          modelo: resolvedModel,
+          esfuerzo: resolvedEffort,
           toolProfileId: resolvedToolProfileId,
           workOrderId,
           manifest,
@@ -287,18 +294,18 @@ export function createStarter(config, state, deps) {
           workspaceKind,
         });
       } catch (error) {
-        await cleanupSessionRuntimeSecrets(sesion.id);
-        await registro.actualizar(sesion.id, {
+        await cleanupSessionRuntimeSecrets(session.id);
+        await registry.actualizar(session.id, {
           estado: "error",
           enColaRecursos: false,
           error: "No se pudo unir al equipo.",
         });
-        await limpiarWorkspaceMiembro(sesion);
+        await cleanMemberWorkspace(session);
         throw error;
       }
-    } else if (equipos && (manifest || workOrderId)) {
+    } else if (teams && (manifest || workOrderId)) {
       try {
-        const equipoLider = await equipos.crear(sesion.id, {
+        const leadTeam = await teams.crear(session.id, {
           workOrderId,
           manifest,
           manifestSha256: resolvedManifestSha256,
@@ -306,17 +313,17 @@ export function createStarter(config, state, deps) {
           memberId: resolvedMemberId,
           role: resolvedRole,
           responsibility: resolvedResponsibility,
-          modelo: resolvedModelo,
-          esfuerzo: resolvedEsfuerzo,
+          modelo: resolvedModel,
+          esfuerzo: resolvedEffort,
           toolProfileId: resolvedToolProfileId,
           workspacePath,
           workspaceKind,
           directorioIntegracion: targetCwd,
         });
-        await registro.vincularEquipo(sesion.id, equipoLider.id);
+        await registry.vincularEquipo(session.id, leadTeam.id);
       } catch (error) {
-        await cleanupSessionRuntimeSecrets(sesion.id);
-        await registro.actualizar(sesion.id, {
+        await cleanupSessionRuntimeSecrets(session.id);
+        await registry.actualizar(session.id, {
           estado: "error",
           enColaRecursos: false,
           error: "No se pudo inicializar el equipo del encargo.",
@@ -324,7 +331,7 @@ export function createStarter(config, state, deps) {
         throw error;
       }
     }
-    const cwdFinal = context?.cwd || proyectos[projectKey];
+    const cwdFinal = context?.cwd || projects[projectKey];
     if (queueSlot) {
       /** @type {() => void} */
       let resolvePromise = () => {};
@@ -332,23 +339,23 @@ export function createStarter(config, state, deps) {
       const promise = new Promise((resolve) => {
         resolvePromise = resolve;
       });
-      queuedPromises.set(sesion.id, { promise, resolve: resolvePromise });
+      queuedPromises.set(session.id, { promise, resolve: resolvePromise });
       resourceQueue.push({
-        sesionId: sesion.id,
+        sesionId: session.id,
         brief,
         cwd: cwdFinal,
         attachments: validatedAttachments,
         commandId: null,
       });
-      return registro.leer().find((s) => s.id === sesion.id) || sesion;
+      return registry.leer().find((s) => s.id === session.id) || session;
     }
-    await registro.actualizar(sesion.id, { estado: "trabajando" });
-    lanzarTrabajo(sesion, brief, cwdFinal, {
+    await registry.actualizar(session.id, { estado: "trabajando" });
+    launchWork(session, brief, cwdFinal, {
       attachments: validatedAttachments,
     });
-    return registro.leer().find((s) => s.id === sesion.id) || sesion;
+    return registry.leer().find((s) => s.id === session.id) || session;
   }
   return {
-    iniciar,
+    iniciar: start,
   };
 }

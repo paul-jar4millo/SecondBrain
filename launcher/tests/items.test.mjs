@@ -6,18 +6,18 @@ import path from "node:path";
 import {
   createItems,
   createNormalizer,
-  localizarTranscript,
-  normalizarItems,
-  resumirEntrada,
+  locateTranscript,
+  normalizeItems,
+  summarizeEntry,
 } from "../items.mjs";
 
-const lineas = (...eventos) => eventos.map((e) => JSON.stringify(e)).join("\n");
-const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+const lines = (...events) => events.map((e) => JSON.stringify(e)).join("\n");
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("Claude: empareja tool_use con tool_result y conserva el orden", () => {
-  const items = normalizarItems(
+  const items = normalizeItems(
     "claude",
-    lineas(
+    lines(
       {
         type: "user",
         uuid: "u1",
@@ -123,7 +123,7 @@ test("Claude: empareja tool_use con tool_result y conserva el orden", () => {
 test("una herramienta sin resultado queda pendiente y el resultado la actualiza con el mismo id", () => {
   const n = createNormalizer("claude");
   n.alimentar(
-    lineas({
+    lines({
       type: "assistant",
       uuid: "a",
       message: {
@@ -136,7 +136,7 @@ test("una herramienta sin resultado queda pendiente y el resultado la actualiza 
   assert.equal(primero[0].herramienta.estado, "pendiente");
   assert.deepEqual(n.drenar(), []);
   n.alimentar(
-    lineas({
+    lines({
       type: "user",
       uuid: "b",
       message: {
@@ -151,11 +151,11 @@ test("una herramienta sin resultado queda pendiente y el resultado la actualiza 
 });
 
 test("acota resumen a 200 y resultado a 2000 caracteres", () => {
-  assert.equal(resumirEntrada({ command: "x".repeat(500) }).length, 200);
-  assert.equal(resumirEntrada({ otro: [1, 2] }), '{"otro":[1,2]}');
-  const [item] = normalizarItems(
+  assert.equal(summarizeEntry({ command: "x".repeat(500) }).length, 200);
+  assert.equal(summarizeEntry({ otro: [1, 2] }), '{"otro":[1,2]}');
+  const [item] = normalizeItems(
     "claude",
-    lineas(
+    lines(
       {
         type: "assistant",
         uuid: "a",
@@ -189,9 +189,9 @@ test("acota resumen a 200 y resultado a 2000 caracteres", () => {
 });
 
 test("Codex: function_call y su salida, sin mensajes internos del entorno", () => {
-  const items = normalizarItems(
+  const items = normalizeItems(
     "codex",
-    lineas(
+    lines(
       { type: "session_meta", payload: { id: "native" } },
       {
         type: "response_item",
@@ -297,9 +297,9 @@ test("Codex: function_call y su salida, sin mensajes internos del entorno", () =
 });
 
 test("Antigravity: texto de usuario y respuesta; pasos de herramienta degradan a genéricos", () => {
-  const items = normalizarItems(
+  const items = normalizeItems(
     "agy",
-    lineas(
+    lines(
       {
         type: "USER_INPUT",
         content:
@@ -321,40 +321,40 @@ test("Antigravity: texto de usuario y respuesta; pasos de herramienta degradan a
 });
 
 test("ignora líneas rotas y motores desconocidos fallan", () => {
-  assert.deepEqual(normalizarItems("claude", '{"roto":\nnada'), []);
+  assert.deepEqual(normalizeItems("claude", '{"roto":\nnada'), []);
   assert.throws(() => createNormalizer("otro"));
 });
 
-async function entornoTemporal(t) {
-  const raiz = await mkdtemp(path.join(tmpdir(), "sb-items-"));
-  t.after(() => rm(raiz, { recursive: true, force: true }));
-  return raiz;
+async function temporaryEnvironment(t) {
+  const root = await mkdtemp(path.join(tmpdir(), "sb-items-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  return root;
 }
 
 test("localiza el transcript de cada proveedor desde el id de la sesión", async (t) => {
-  const raiz = await entornoTemporal(t);
+  const root = await temporaryEnvironment(t);
   const id = "a1111111-1111-4111-8111-111111111111";
   const native = "b2222222-2222-4222-8222-222222222222";
-  await mkdir(path.join(raiz, "claude/projects/-w-p1"), { recursive: true });
-  await writeFile(path.join(raiz, "claude/projects/-w-p1", id + ".jsonl"), "");
-  await mkdir(path.join(raiz, "deepseek/projects/-w-p1"), { recursive: true });
+  await mkdir(path.join(root, "claude/projects/-w-p1"), { recursive: true });
+  await writeFile(path.join(root, "claude/projects/-w-p1", id + ".jsonl"), "");
+  await mkdir(path.join(root, "deepseek/projects/-w-p1"), { recursive: true });
   await writeFile(
-    path.join(raiz, "deepseek/projects/-w-p1", id + ".jsonl"),
+    path.join(root, "deepseek/projects/-w-p1", id + ".jsonl"),
     "",
   );
-  await mkdir(path.join(raiz, "codex/sessions/2026/01/01"), {
+  await mkdir(path.join(root, "codex/sessions/2026/01/01"), {
     recursive: true,
   });
   await writeFile(
     path.join(
-      raiz,
+      root,
       "codex/sessions/2026/01/01",
       `rollout-2026-01-01T00-00-00-${native}.jsonl`,
     ),
     "",
   );
   const agy = path.join(
-    raiz,
+    root,
     ".gemini/antigravity-cli/brain",
     id,
     ".system_generated/logs",
@@ -362,36 +362,30 @@ test("localiza el transcript de cada proveedor desde el id de la sesión", async
   await mkdir(agy, { recursive: true });
   await writeFile(path.join(agy, "transcript.jsonl"), "");
   const env = {
-    HOME: raiz,
-    AGENTES_CLAUDE_DIR: path.join(raiz, "claude"),
-    AGENTES_DEEPSEEK_DIR: path.join(raiz, "deepseek"),
-    CODEX_HOME: path.join(raiz, "codex"),
+    HOME: root,
+    AGENTES_CLAUDE_DIR: path.join(root, "claude"),
+    AGENTES_DEEPSEEK_DIR: path.join(root, "deepseek"),
+    CODEX_HOME: path.join(root, "codex"),
   };
   assert.match(
-    await localizarTranscript({ id, motor: "claude", conversacionId: id }, env),
+    await locateTranscript({ id, motor: "claude", conversacionId: id }, env),
     /claude[\\/]projects[\\/]-w-p1[\\/]a1111111/,
   );
   assert.match(
-    await localizarTranscript(
-      { id, motor: "deepseek", conversacionId: id },
-      env,
-    ),
+    await locateTranscript({ id, motor: "deepseek", conversacionId: id }, env),
     /deepseek[\\/]projects/,
   );
   assert.match(
-    await localizarTranscript(
-      { id, motor: "codex", conversacionId: native },
-      env,
-    ),
+    await locateTranscript({ id, motor: "codex", conversacionId: native }, env),
     /rollout-.*b2222222/,
   );
-  assert.equal(await localizarTranscript({ id, motor: "codex" }, env), null);
+  assert.equal(await locateTranscript({ id, motor: "codex" }, env), null);
   assert.match(
-    await localizarTranscript({ id, motor: "agy", conversacionId: id }, env),
+    await locateTranscript({ id, motor: "agy", conversacionId: id }, env),
     /transcript\.jsonl$/,
   );
   assert.equal(
-    await localizarTranscript(
+    await locateTranscript(
       { id: "c3333333-3333-4333-8333-333333333333", motor: "claude" },
       env,
     ),
@@ -400,56 +394,56 @@ test("localiza el transcript de cada proveedor desde el id de la sesión", async
 });
 
 test("sigue el transcript por offset, emite solo lo añadido y se detiene con el último lector", async (t) => {
-  const raiz = await entornoTemporal(t);
+  const root = await temporaryEnvironment(t);
   const id = "a1111111-1111-4111-8111-111111111111";
-  const carpeta = path.join(raiz, "claude/projects/-w");
-  await mkdir(carpeta, { recursive: true });
-  const archivo = path.join(carpeta, id + ".jsonl");
-  const registro = {
+  const folder = path.join(root, "claude/projects/-w");
+  await mkdir(folder, { recursive: true });
+  const archivo = path.join(folder, id + ".jsonl");
+  const registry = {
     leer: () => [{ id, motor: "claude", conversacionId: id }],
   };
   const items = createItems({
-    registro,
-    env: { HOME: raiz, AGENTES_CLAUDE_DIR: path.join(raiz, "claude") },
+    registro: registry,
+    env: { HOME: root, AGENTES_CLAUDE_DIR: path.join(root, "claude") },
     intervalo: 20,
   });
-  const recibido = [];
+  const received = [];
   // The file does not exist yet: the follower waits for it.
-  const lector = items.suscribir(id, (lista) => recibido.push(lista));
-  t.after(() => lector.off());
-  assert.deepEqual(lector.ultimos(), []);
-  await espera(60);
-  assert.equal(recibido.length, 0);
+  const reader = items.suscribir(id, (list) => received.push(list));
+  t.after(() => reader.off());
+  assert.deepEqual(reader.ultimos(), []);
+  await wait(60);
+  assert.equal(received.length, 0);
   await writeFile(
     archivo,
-    lineas({ type: "user", uuid: "u1", message: { content: "Hola" } }) + "\n",
+    lines({ type: "user", uuid: "u1", message: { content: "Hola" } }) + "\n",
   );
-  for (let i = 0; i < 100 && !recibido.length; i++) await espera(20);
+  for (let i = 0; i < 100 && !received.length; i++) await wait(20);
   assert.deepEqual(
-    recibido.flat().map((x) => x.texto),
+    received.flat().map((x) => x.texto),
     ["Hola"],
   );
   // A half-written line waits for its newline.
-  const parcial = lineas({
+  const parcial = lines({
     type: "assistant",
     uuid: "a1",
     message: { content: [{ type: "text", text: "Respuesta" }] },
   });
   await appendFile(archivo, parcial.slice(0, 30));
-  await espera(80);
-  assert.equal(recibido.flat().length, 1);
+  await wait(80);
+  assert.equal(received.flat().length, 1);
   await appendFile(archivo, parcial.slice(30) + "\n");
-  for (let i = 0; i < 100 && recibido.flat().length < 2; i++) await espera(20);
+  for (let i = 0; i < 100 && received.flat().length < 2; i++) await wait(20);
   assert.deepEqual(
-    recibido.flat().map((x) => x.texto),
+    received.flat().map((x) => x.texto),
     ["Hola", "Respuesta"],
   );
-  assert.equal(lector.ultimos(1).length, 1);
+  assert.equal(reader.ultimos(1).length, 1);
   assert.equal(items.activos(), 1);
   const segundo = items.suscribir(id, () => {});
   assert.equal(segundo.ultimos().length, 2);
   segundo.off();
   assert.equal(items.activos(), 1);
-  lector.off();
+  reader.off();
   assert.equal(items.activos(), 0);
 });

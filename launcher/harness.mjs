@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import xterm from "@xterm/headless";
 import { SerializeAddon } from "@xterm/addon-serialize";
-import { opcionesClaude } from "./engines.mjs";
+import { claudeOptions } from "./engines.mjs";
 
 /** @import { TerminalEvent, TerminalSnapshot } from "./types.d.ts" */
 /** @import { LauncherSession } from "./session-types.d.ts" */
@@ -12,14 +12,14 @@ const { Terminal } = xterm;
  * A repository's own .mcp.json wins over the user's config. SecondBrain's runs
  * the server over `ssh` from the owner's PC, so inside the container it died with
  * CONNECTION_CLOSED. Harnesses always get the local server, whatever the folder.
- * @param {NodeJS.ProcessEnv} [entorno]
+ * @param {NodeJS.ProcessEnv} [environment]
  */
-export function mcpLocal(entorno = {}) {
-  if (!entorno.SB_BRAIN_TOKEN_FILE) return [];
+export function mcpLocal(environment = {}) {
+  if (!environment.SB_BRAIN_TOKEN_FILE) return [];
   const env = Object.fromEntries(
     ["SB_BRAIN_TOKEN_FILE", "SB_BRAIN_URL", "SB_AGENTE", "SB_SESSION_ID"]
-      .filter((clave) => entorno[clave])
-      .map((clave) => [clave, entorno[clave]]),
+      .filter((key) => environment[key])
+      .map((key) => [key, environment[key]]),
   );
   return [
     // --mcp-config is variadic: the next flag is what ends its list.
@@ -41,27 +41,32 @@ export function mcpLocal(entorno = {}) {
 /**
  * @param {Pick<LauncherSession, "id" | "motor" | "modelo" | "esfuerzo" | "conversacionId">} sesion
  * @param {string} brief
- * @param {NodeJS.ProcessEnv} entorno
+ * @param {NodeJS.ProcessEnv} environment
  */
-export function comandoHarness(sesion, brief, entorno) {
-  const { motor, modelo, esfuerzo, conversacionId } = sesion;
-  if (motor === "claude" || motor === "deepseek")
+export function comandoHarness(sesion, brief, environment) {
+  const {
+    motor: engine,
+    modelo,
+    esfuerzo: effort,
+    conversacionId: conversationId,
+  } = sesion;
+  if (engine === "claude" || engine === "deepseek")
     return {
       bin: "claude",
       args: [
         "--permission-mode",
         "bypassPermissions",
-        ...(motor === "claude" ? ["--remote-control=SecondBrain"] : []),
-        ...(conversacionId
-          ? ["--resume", conversacionId]
+        ...(engine === "claude" ? ["--remote-control=SecondBrain"] : []),
+        ...(conversationId
+          ? ["--resume", conversationId]
           : ["--session-id", sesion.id]),
-        ...mcpLocal(entorno),
-        ...opcionesClaude(motor, { modelo, esfuerzo }),
+        ...mcpLocal(environment),
+        ...claudeOptions(engine, { modelo, esfuerzo: effort }),
         "--",
         brief,
       ],
     };
-  if (motor === "codex")
+  if (engine === "codex")
     return {
       bin: "codex",
       args: [
@@ -73,18 +78,18 @@ export function comandoHarness(sesion, brief, entorno) {
         "-c",
         "model_auto_compact_token_limit=350000",
         ...(modelo ? ["-m", modelo] : []),
-        ...(esfuerzo ? ["-c", `model_reasoning_effort="${esfuerzo}"`] : []),
-        ...(conversacionId ? ["resume", conversacionId] : []),
+        ...(effort ? ["-c", `model_reasoning_effort="${effort}"`] : []),
+        ...(conversationId ? ["resume", conversationId] : []),
         "--",
         `Contexto SecondBrain: sesión ${sesion.id}.\n\n${brief}`,
       ],
     };
-  if (motor === "agy")
+  if (engine === "agy")
     return {
       bin: "agy",
       args: [
         "--dangerously-skip-permissions",
-        ...(conversacionId ? ["--conversation", conversacionId] : []),
+        ...(conversationId ? ["--conversation", conversationId] : []),
         ...(modelo ? ["--model", modelo] : []),
       ],
     };
@@ -103,20 +108,20 @@ export const MAX_ROWS = 150;
  * is replayed into a client, that client answers it again and the program gets
  * phantom input. Best effort: a sequence split between two chunks is left alone.
  */
-const RESPUESTAS = new RegExp(
+const RESPONSES = new RegExp(
   String.fromCharCode(27) +
     String.raw`\[(?:\?[\d;]*c|>\d+(?:;\d+)+c|\d+;\d+R|\??[\d;]+\$y)`,
   "g",
 );
-/** @param {string} texto */
-export const quitarRespuestas = (texto) => texto.replace(RESPUESTAS, "");
+/** @param {string} text */
+export const removeResponses = (text) => text.replace(RESPONSES, "");
 
 /**
  * Applies the size rule shared by every resize request.
  * @param {unknown} cols
  * @param {unknown} rows
  */
-export function tamanoPermitido(cols, rows) {
+export function allowedSize(cols, rows) {
   if (
     typeof cols !== "number" ||
     typeof rows !== "number" ||
@@ -147,23 +152,23 @@ export function createTerminal({
     scrollback,
     allowProposedApi: true,
   });
-  const serializador = new SerializeAddon();
-  pantalla.loadAddon(serializador);
+  const serializer = new SerializeAddon();
+  pantalla.loadAddon(serializer);
   /** @type {Set<(event: TerminalEvent) => void>} */
-  const oyentes = new Set();
+  const listeners = new Set();
   let seq = 0;
-  /** @param {TerminalEvent} evento */
-  const avisar = (evento) => {
-    for (const oyente of oyentes) {
+  /** @param {TerminalEvent} event */
+  const notify = (event) => {
+    for (const listener of listeners) {
       try {
-        oyente(evento);
+        listener(event);
       } catch {
         /* a broken reader never stops the program */
       }
     }
   };
-  const serializar = (lineas = scrollback) =>
-    serializador.serialize({ scrollback: lineas });
+  const serializar = (lines = scrollback) =>
+    serializer.serialize({ scrollback: lines });
   return {
     get seq() {
       return seq;
@@ -174,27 +179,27 @@ export function createTerminal({
     get rows() {
       return pantalla.rows;
     },
-    /** @param {unknown} texto */
-    append(texto) {
-      const datos = quitarRespuestas(String(texto));
-      if (!datos) return;
+    /** @param {unknown} text */
+    append(text) {
+      const data = removeResponses(String(text));
+      if (!data) return;
       seq++;
-      pantalla.write(datos);
-      avisar({ tipo: "salida", datos, seq });
+      pantalla.write(data);
+      notify({ tipo: "salida", datos: data, seq });
     },
     /**
      * Resolves once every chunk appended so far has been parsed.
      * @returns {Promise<TerminalSnapshot>}
      */
     snapshot() {
-      const hasta = seq;
+      const until = seq;
       return new Promise((resolve) => {
         pantalla.write("", () =>
           resolve({
             datos: serializar(),
             cols: pantalla.cols,
             rows: pantalla.rows,
-            seq: hasta,
+            seq: until,
           }),
         );
       });
@@ -202,21 +207,21 @@ export function createTerminal({
     /** Current state without waiting for pending writes (periodic persistence). */
     serializar,
     /**
-     * @param {number} nuevasCols
-     * @param {number} nuevasFilas
+     * @param {number} newCols
+     * @param {number} newRows
      */
-    redimensionar(nuevasCols, nuevasFilas) {
-      if (nuevasCols === pantalla.cols && nuevasFilas === pantalla.rows) return;
-      pantalla.resize(nuevasCols, nuevasFilas);
-      avisar({ tipo: "tamano", cols: nuevasCols, rows: nuevasFilas });
+    redimensionar(newCols, newRows) {
+      if (newCols === pantalla.cols && newRows === pantalla.rows) return;
+      pantalla.resize(newCols, newRows);
+      notify({ tipo: "tamano", cols: newCols, rows: newRows });
     },
     /** @param {(event: TerminalEvent) => void} fn */
     suscribir(fn) {
-      oyentes.add(fn);
-      return () => oyentes.delete(fn);
+      listeners.add(fn);
+      return () => listeners.delete(fn);
     },
     dispose() {
-      oyentes.clear();
+      listeners.clear();
       pantalla.dispose();
     },
   };
@@ -226,39 +231,39 @@ export function createTerminal({
  * Per-reader coalescing: small PTY chunks become one `salida` every `ms`, so a
  * redraw that arrives in pieces costs one network write. `desde` and `seq` bound
  * the chunks inside, letting the client notice a gap.
- * @param {(batch: { datos: string, desde: number, seq: number }) => void} enviar
+ * @param {(batch: { datos: string, desde: number, seq: number }) => void} send
  */
-export function coalescer(enviar, ms = 24) {
-  let datos = "";
-  let desde = 0;
+export function coalesce(send, ms = 24) {
+  let data = "";
+  let from = 0;
   let seq = 0;
   /** @type {NodeJS.Timeout | undefined} */
   let timer;
-  const vaciar = () => {
+  const flush = () => {
     clearTimeout(timer);
     timer = undefined;
-    if (!datos) return;
-    const lote = { datos, desde, seq };
-    datos = "";
-    enviar(lote);
+    if (!data) return;
+    const batch = { datos: data, desde: from, seq };
+    data = "";
+    send(batch);
   };
   return {
     /**
-     * @param {string} texto
+     * @param {string} text
      * @param {number} numero
      */
-    agregar(texto, numero) {
-      if (!datos) desde = numero;
-      datos += texto;
+    agregar(text, numero) {
+      if (!data) from = numero;
+      data += text;
       seq = numero;
-      if (datos.length > 65536) vaciar();
-      else timer ??= setTimeout(vaciar, ms);
+      if (data.length > 65536) flush();
+      else timer ??= setTimeout(flush, ms);
     },
-    vaciar,
+    vaciar: flush,
     cancelar() {
       clearTimeout(timer);
       timer = undefined;
-      datos = "";
+      data = "";
     },
   };
 }

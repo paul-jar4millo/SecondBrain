@@ -13,19 +13,30 @@ import { TOOL_PROFILES_BASE, narrowChildProfile } from "../tool-catalog.mjs";
  *   Pick<ReturnType<typeof import("./secrets.mjs").createSessionSecrets>, "resolveSessionEffectiveProfile">} deps
  */
 export function createDelegation(config, state, deps) {
-  const { consultarSaldo, env, equipos, registro, toolCatalog } = config;
-  const { activos, queuedPromises, serial, sessionBillingGrants } = state;
+  const {
+    consultarSaldo: queryBalance,
+    env,
+    equipos: teams,
+    registro: registry,
+    toolCatalog,
+  } = config;
+  const {
+    activos: active,
+    queuedPromises,
+    serial,
+    sessionBillingGrants,
+  } = state;
   const { iniciar, resolveSessionEffectiveProfile } = deps;
   /** @param {ExecutionRequest} input */
-  function encargar({
+  function delegate({
     id = null,
-    motor,
-    origen,
-    proyecto,
+    motor: engine,
+    origen: origin,
+    proyecto: project,
     brief,
-    modelo,
-    esfuerzo,
-    espacioId,
+    modelo: model,
+    esfuerzo: effort,
+    espacioId: spaceId,
     harness,
     structured,
     workOrderId,
@@ -46,13 +57,13 @@ export function createDelegation(config, state, deps) {
     return serial(() =>
       iniciar({
         id,
-        motor,
-        origen,
-        proyecto,
+        motor: engine,
+        origen: origin,
+        proyecto: project,
         brief,
-        modelo,
-        esfuerzo,
-        espacioId,
+        modelo: model,
+        esfuerzo: effort,
+        espacioId: spaceId,
         harness,
         structured,
         workOrderId,
@@ -72,18 +83,18 @@ export function createDelegation(config, state, deps) {
     );
   }
   /**
-   * @param {string} padreId
+   * @param {string} parentId
    * @param {Omit<ExecutionRequest, "origen">} input
    */
-  function encargarHija(
-    padreId,
+  function delegateChild(
+    parentId,
     {
       id = null,
-      motor,
-      proyecto,
+      motor: engine,
+      proyecto: project,
       brief,
-      modelo,
-      esfuerzo,
+      modelo: model,
+      esfuerzo: effort,
       toolProfileId = null,
       effectiveProfile = null,
       skillIds = null,
@@ -103,27 +114,27 @@ export function createDelegation(config, state, deps) {
     },
   ) {
     return serial(async () => {
-      if (!equipos) throw new Error("Equipos no disponibles");
-      const padre = registro.leer().find((s) => s.id === padreId);
-      if (!padre || !activos.has(padreId))
+      if (!teams) throw new Error("Equipos no disponibles");
+      const parent = registry.leer().find((s) => s.id === parentId);
+      if (!parent || !active.has(parentId))
         throw new Error("Sesión padre no activa");
 
       if (requestId) {
-        const miembroPrevio = equipos.buscarPorRequestId?.(padreId, requestId);
-        if (miembroPrevio) {
-          const sesionPrevia = registro
+        const previousMember = teams.buscarPorRequestId?.(parentId, requestId);
+        if (previousMember) {
+          const previousSession = registry
             .leer()
-            .find((s) => s.id === miembroPrevio.id && !s.eliminada);
-          if (sesionPrevia) {
-            return { ...sesionPrevia, repetido: true };
+            .find((s) => s.id === previousMember.id && !s.eliminada);
+          if (previousSession) {
+            return { ...previousSession, repetido: true };
           }
         }
       }
 
       if (
         workOrderId &&
-        padre.workOrderId &&
-        workOrderId !== padre.workOrderId
+        parent.workOrderId &&
+        workOrderId !== parent.workOrderId
       ) {
         throw new LauncherError(
           "La integrante no puede encargar trabajo de otro encargo.",
@@ -131,83 +142,83 @@ export function createDelegation(config, state, deps) {
         );
       }
 
-      let equipo;
-      if (padre.equipoId) {
-        equipo = equipos.estado(padreId);
+      let team;
+      if (parent.equipoId) {
+        team = teams.estado(parentId);
       } else {
-        equipo = await equipos.crear(padreId, {
-          workOrderId: workOrderId || padre.workOrderId || null,
+        team = await teams.crear(parentId, {
+          workOrderId: workOrderId || parent.workOrderId || null,
           manifest,
-          manifestSha256: manifestSha256 || padre.manifestSha256 || null,
-          motor: padre.motor,
-          memberId: padre.memberId || null,
-          role: padre.role || null,
-          responsibility: padre.responsibility || null,
-          modelo: padre.modelo || null,
-          esfuerzo: padre.esfuerzo || null,
-          toolProfileId: padre.toolProfileId || null,
-          workspacePath: padre.workspacePath || padre.directorio || null,
-          workspaceKind: padre.workspaceKind || "shared",
-          directorioIntegracion: padre.directorio || null,
+          manifestSha256: manifestSha256 || parent.manifestSha256 || null,
+          motor: parent.motor,
+          memberId: parent.memberId || null,
+          role: parent.role || null,
+          responsibility: parent.responsibility || null,
+          modelo: parent.modelo || null,
+          esfuerzo: parent.esfuerzo || null,
+          toolProfileId: parent.toolProfileId || null,
+          workspacePath: parent.workspacePath || parent.directorio || null,
+          workspaceKind: parent.workspaceKind || "shared",
+          directorioIntegracion: parent.directorio || null,
         });
-        await registro.vincularEquipo(padreId, equipo.id);
+        await registry.vincularEquipo(parentId, team.id);
       }
 
-      const comprobacion = equipos.comprobar(padreId, motor, {
+      const comprobacion = teams.comprobar(parentId, engine, {
         memberId,
         role,
         responsibility,
-        modelo,
-        esfuerzo,
+        modelo: model,
+        esfuerzo: effort,
         toolProfileId,
-        manifest: manifest || equipo.manifest || null,
-        manifestSha256: manifestSha256 || padre.manifestSha256 || null,
+        manifest: manifest || team.manifest || null,
+        manifestSha256: manifestSha256 || parent.manifestSha256 || null,
         requestId,
       });
       const resolved = comprobacion?.resolved || {
-        motor,
+        motor: engine,
         memberId,
         role,
         responsibility,
-        modelo,
-        esfuerzo,
+        modelo: model,
+        esfuerzo: effort,
         toolProfileId,
-        manifestSha256: manifestSha256 || padre.manifestSha256 || null,
+        manifestSha256: manifestSha256 || parent.manifestSha256 || null,
       };
 
       const hasManifestOrStructured = Boolean(
-        padre.structured ||
+        parent.structured ||
         manifest ||
-        equipo.manifest ||
+        team.manifest ||
         workOrderId ||
-        padre.workOrderId,
+        parent.workOrderId,
       );
       // Billing authorization is inherited from the session the user
       // started; an agent cannot grant it to itself through equipo_encargar.
       const childBillingGrant =
-        (sessionBillingGrants.has(padreId)
-          ? sessionBillingGrants.get(padreId) === true
-          : padre.billingAuthorized === true) ||
+        (sessionBillingGrants.has(parentId)
+          ? sessionBillingGrants.get(parentId) === true
+          : parent.billingAuthorized === true) ||
         env.SB_ALLOW_BILLED_DEEPSEEK === "1";
       // Work orders follow the spending policy: billed DeepSeek needs explicit authorization.
       // Legacy delegation keeps its balance check unchanged.
-      if (motor === "deepseek") {
+      if (engine === "deepseek") {
         if (hasManifestOrStructured) {
           if (!childBillingGrant)
             throw new LauncherError(
               "DeepSeek bloqueado por la política de gasto sin autorización explícita de gasto.",
               403,
             );
-        } else if ((await consultarSaldo()) < 0.2) {
+        } else if ((await queryBalance()) < 0.2) {
           throw new Error("Saldo DeepSeek insuficiente");
         }
       }
 
-      const parentProfile = resolveSessionEffectiveProfile(padre);
+      const parentProfile = resolveSessionEffectiveProfile(parent);
       const requestedProfileId =
-        padre.toolProfileId === "investigacion"
+        parent.toolProfileId === "investigacion"
           ? "investigacion"
-          : resolved.toolProfileId || padre.toolProfileId || "investigacion";
+          : resolved.toolProfileId || parent.toolProfileId || "investigacion";
       const baseChildProfile =
         toolCatalog?.getProfile(requestedProfileId) ||
         TOOL_PROFILES_BASE[requestedProfileId] ||
@@ -222,24 +233,24 @@ export function createDelegation(config, state, deps) {
       );
       return iniciar({
         id,
-        motor,
+        motor: engine,
         origen: "equipo",
-        proyecto: proyecto || padre.proyecto,
-        espacioId: proyecto ? null : padre.espacioId,
+        proyecto: project || parent.proyecto,
+        espacioId: project ? null : parent.espacioId,
         contextoHeredado:
-          !proyecto && padre.directorio
-            ? { cwd: padre.directorio, repositorio: padre.proyecto }
+          !project && parent.directorio
+            ? { cwd: parent.directorio, repositorio: parent.proyecto }
             : null,
         brief,
         modelo: resolved.modelo ?? null,
         esfuerzo: resolved.esfuerzo ?? null,
-        structured: padre.structured === true,
+        structured: parent.structured === true,
         workOrderId:
-          padre.workOrderId || equipo.workOrderId || workOrderId || null,
+          parent.workOrderId || team.workOrderId || workOrderId || null,
         memberId: resolved.memberId || null,
         role: resolved.role || null,
         responsibility: resolved.responsibility || null,
-        manifest: manifest || equipo.manifest || null,
+        manifest: manifest || team.manifest || null,
         manifestSha256: resolved.manifestSha256 || null,
         requestId,
         toolProfileId: childEffectiveProfile.id,
@@ -251,48 +262,48 @@ export function createDelegation(config, state, deps) {
         isolateWorkspace: Boolean(
           isolateWorkspace ||
           manifest ||
-          equipo.manifest ||
+          team.manifest ||
           workOrderId ||
-          padre.workOrderId ||
+          parent.workOrderId ||
           memberId,
         ),
-        equipoId: equipo.id,
-        padreId,
+        equipoId: team.id,
+        padreId: parentId,
       });
     });
   }
   /**
-   * @param {string} padreId
-   * @param {string} hijaId
+   * @param {string} parentId
+   * @param {string} childId
    */
-  async function esperarHija(padreId, hijaId, timeout = 300000) {
-    const hija = registro
+  async function waitChild(parentId, childId, timeout = 300000) {
+    const child = registry
       .leer()
-      .find((s) => s.id === hijaId && s.padreId === padreId);
-    if (!hija) throw new Error("Sesión hija inexistente");
+      .find((s) => s.id === childId && s.padreId === parentId);
+    if (!child) throw new Error("Sesión hija inexistente");
     if (!Number.isFinite(timeout) || timeout < 0 || timeout > 1800000)
       throw new Error("Tiempo de espera inválido");
-    const trabajo =
-      activos.get(hijaId)?.promesa || queuedPromises.get(hijaId)?.promise;
-    if (trabajo) {
-      let reloj;
+    const work =
+      active.get(childId)?.promesa || queuedPromises.get(childId)?.promise;
+    if (work) {
+      let clock;
       await Promise.race([
-        trabajo,
+        work,
         new Promise((resolve) => {
-          reloj = setTimeout(resolve, timeout);
+          clock = setTimeout(resolve, timeout);
         }),
       ]);
-      clearTimeout(reloj);
+      clearTimeout(clock);
     }
-    const actual = registro.leer().find((s) => s.id === hijaId);
+    const actual = registry.leer().find((s) => s.id === childId);
     if (!actual) throw new Error("Sesión hija inexistente");
     return ["pendiente", "trabajando"].includes(actual.estado)
-      ? { id: hijaId, estado: "pendiente" }
+      ? { id: childId, estado: "pendiente" }
       : actual;
   }
   return {
-    encargar,
-    encargarHija,
-    esperarHija,
+    encargar: delegate,
+    encargarHija: delegateChild,
+    esperarHija: waitChild,
   };
 }

@@ -1,7 +1,7 @@
 // Controller for Claude Code through the Claude Agent SDK.
 import { randomUUID } from "node:crypto";
 import { LauncherError } from "../../errors.mjs";
-import { IDENTIDAD_MARINA, validateEngineAttachments } from "../../engines.mjs";
+import { MARINA_IDENTITY, validateEngineAttachments } from "../../engines.mjs";
 import {
   validateAndExtractElicitationContent,
   validateRequestedSchema,
@@ -370,7 +370,7 @@ export function createClaudeController(queryOverride = null) {
                 systemPrompt: {
                   type: "preset",
                   preset: "claude_code",
-                  append: IDENTIDAD_MARINA,
+                  append: MARINA_IDENTITY,
                 },
               }
             : {}),

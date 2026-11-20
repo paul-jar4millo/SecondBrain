@@ -23,7 +23,7 @@ const cacheCodex = JSON.stringify({
     { slug: "--rm", display_name: "Malo", visibility: "list" },
   ],
 });
-const salidaAgy =
+const agyOutput =
   "Fetching available models...\n\x1b[1mgemini-x-high\x1b[0m\tGemini X (High)\nclaude-y\tClaude Y\n--evil\tMal\n";
 
 test("lee los catálogos de Codex y Antigravity sin ocultos ni opciones", () => {
@@ -35,40 +35,40 @@ test("lee los catálogos de Codex y Antigravity sin ocultos ni opciones", () => 
       esfuerzos: ["low", "high"],
     },
   ]);
-  assert.deepEqual(readAgyModels(salidaAgy), [
+  assert.deepEqual(readAgyModels(agyOutput), [
     { id: "gemini-x-high", nombre: "Gemini X (High)" },
     { id: "claude-y", nombre: "Claude Y" },
   ]);
 });
 
 test("valida modelo y esfuerzo contra lo que ofrece cada motor", async () => {
-  let consultas = 0;
-  const catalogo = createModelCatalog({
+  let queries = 0;
+  const catalog = createModelCatalog({
     env: { CODEX_HOME: "/codex" },
     leer: async () => cacheCodex,
-    agy: async () => (consultas++, salidaAgy),
+    agy: async () => (queries++, agyOutput),
   });
-  const todos = await catalogo.modelos();
+  const all = await catalog.modelos();
   assert.deepEqual(
-    todos.claude.map((m) => m.id),
+    all.claude.map((m) => m.id),
     ["opus", "sonnet", "haiku"],
   );
   assert.deepEqual(
-    todos.deepseek.map((m) => m.id),
+    all.deepseek.map((m) => m.id),
     ["deepseek-flash[1m]"],
   );
-  assert.ok(todos.claude[0].esfuerzos.includes("max"));
-  await catalogo.modelos();
-  assert.equal(consultas, 1, "se guarda en caché");
-  await catalogo.validar("claude", undefined, undefined);
-  await catalogo.validar("codex", "gpt-a", "high");
-  await catalogo.validar("agy", "claude-y");
-  await catalogo.validar("claude", "opus", "xhigh");
-  await catalogo.validar("claude", undefined, "xhigh");
-  await catalogo.validar("claude", "haiku", "high");
-  await catalogo.validar("claude", "sonnet", "xhigh");
-  await catalogo.validar("deepseek", "deepseek-flash[1m]", "max");
-  for (const [motor, modelo, esfuerzo] of [
+  assert.ok(all.claude[0].esfuerzos.includes("max"));
+  await catalog.modelos();
+  assert.equal(queries, 1, "se guarda en caché");
+  await catalog.validar("claude", undefined, undefined);
+  await catalog.validar("codex", "gpt-a", "high");
+  await catalog.validar("agy", "claude-y");
+  await catalog.validar("claude", "opus", "xhigh");
+  await catalog.validar("claude", undefined, "xhigh");
+  await catalog.validar("claude", "haiku", "high");
+  await catalog.validar("claude", "sonnet", "xhigh");
+  await catalog.validar("deepseek", "deepseek-flash[1m]", "max");
+  for (const [engine, model, effort] of [
     ["claude", "gpt-a"],
     ["codex", "gpt-a", "max"],
     ["codex", "oculto"],
@@ -78,23 +78,23 @@ test("valida modelo y esfuerzo contra lo que ofrece cada motor", async () => {
     ["claude", undefined, "ultra"],
     ["agy", undefined, "high"],
   ])
-    await assert.rejects(catalogo.validar(motor, modelo, esfuerzo), {
+    await assert.rejects(catalog.validar(engine, model, effort), {
       message: "Modelo no disponible",
     });
 });
 
 test("un fallo al consultar deja solo el predeterminado y se reintenta", async () => {
-  let consultas = 0;
-  const catalogo = createModelCatalog({
+  let queries = 0;
+  const catalog = createModelCatalog({
     env: {},
     agy: async () => {
-      consultas++;
+      queries++;
       throw new Error("sin red");
     },
   });
-  assert.deepEqual((await catalogo.modelos()).agy, []);
-  await catalogo.modelos();
-  assert.equal(consultas, 2);
+  assert.deepEqual((await catalog.modelos()).agy, []);
+  await catalog.modelos();
+  assert.equal(queries, 2);
 });
 
 test("pasa el modelo a cada CLI y nunca a DeepSeek", () => {
@@ -121,7 +121,7 @@ test("pasa el modelo a cada CLI y nunca a DeepSeek", () => {
 });
 
 test("el servidor publica los modelos y rechaza uno que no existe", async (t) => {
-  const huella = (s) => createHash("sha256").update(s).digest("hex");
+  const fingerprint = (s) => createHash("sha256").update(s).digest("hex");
   const pedidos = [];
   const server = createLauncherServer({
     registro: { leer: () => [], subscribe: () => () => {} },
@@ -129,10 +129,10 @@ test("el servidor publica los modelos y rechaza uno que no existe", async (t) =>
     catalogo: createModelCatalog({
       env: { CODEX_HOME: "/c" },
       leer: async () => cacheCodex,
-      agy: async () => salidaAgy,
+      agy: async () => agyOutput,
     }),
-    controlHash: huella("control"),
-    hookHash: huella("hook"),
+    controlHash: fingerprint("control"),
+    hookHash: fingerprint("hook"),
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -142,9 +142,9 @@ test("el servidor publica los modelos y rechaza uno que no existe", async (t) =>
     authorization: "Bearer control",
     "content-type": "application/json",
   };
-  const modelos = await (await fetch(url + "/modelos", { headers })).json();
-  assert.equal(modelos.codex[0].id, "gpt-a");
-  const encargar = (extra) =>
+  const models = await (await fetch(url + "/modelos", { headers })).json();
+  assert.equal(models.codex[0].id, "gpt-a");
+  const delegate = (extra) =>
     fetch(url + "/sesiones", {
       method: "POST",
       headers,
@@ -157,13 +157,13 @@ test("el servidor publica los modelos y rechaza uno que no existe", async (t) =>
       }),
     });
   assert.equal(
-    (await encargar({ modelo: "gpt-a", esfuerzo: "low" })).status,
+    (await delegate({ modelo: "gpt-a", esfuerzo: "low" })).status,
     202,
   );
-  const malo = await encargar({ modelo: "gpt-z" });
+  const malo = await delegate({ modelo: "gpt-z" });
   assert.equal(malo.status, 400);
   assert.equal((await malo.json()).error, "Modelo no disponible");
-  assert.equal((await encargar({ modelo: 3 })).status, 400);
+  assert.equal((await delegate({ modelo: 3 })).status, 400);
   assert.equal(pedidos.length, 1);
   assert.equal(pedidos[0].modelo, "gpt-a");
 });

@@ -5,7 +5,7 @@
  */
 export function redactDiagnostic(
   valor,
-  { env = process.env, textos = [] } = {},
+  { env = process.env, textos: texts = [] } = {},
 ) {
   let texto = String(valor ?? "");
   const privados = [
@@ -14,7 +14,7 @@ export function redactDiagnostic(
         /token|secret|password|api.?key|authorization/i.test(key),
       )
       .map(([, value]) => value),
-    ...textos,
+    ...texts,
   ]
     .filter((value) => typeof value === "string")
     .filter(Boolean)

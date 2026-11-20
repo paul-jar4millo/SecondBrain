@@ -8,9 +8,9 @@ export const git = (cwd, ...args) =>
 
 /** A synthetic repository with one commit, a .gitignore and two tracked files. */
 export async function repoSintetico(t, { commit = true } = {}) {
-  const raiz = await mkdtemp(path.join(tmpdir(), "sb-cp-"));
-  t.after(() => rm(raiz, { recursive: true, force: true }));
-  const cwd = await realpath(raiz);
+  const root = await mkdtemp(path.join(tmpdir(), "sb-cp-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const cwd = await realpath(root);
   git(cwd, "init", "-q", "-b", "main");
   git(cwd, "config", "user.email", "t@example.test");
   git(cwd, "config", "user.name", "Test");

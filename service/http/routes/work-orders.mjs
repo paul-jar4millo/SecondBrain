@@ -5,18 +5,24 @@ import { ENGINE_ACTOR } from "../../agent-profiles.mjs";
 
 /** @type {RouteModule} */
 export const workOrderRoutes = (ctx, req) => {
-  const { actorOf, auth, lanzador, runStoreOp, sesionesLanzador, workOrders } =
-    ctx;
-  const { callerCap, consulta, request, required, response } = req;
+  const {
+    actorOf,
+    auth,
+    lanzador: launcher,
+    runStoreOp,
+    sesionesLanzador: launcherSessions,
+    workOrders,
+  } = ctx;
+  const { callerCap, consulta: query, request, required, response } = req;
   return {
     "GET /encargos": async () =>
       send(response, 200, { encargos: workOrders.list() }),
     "GET /encargos/detalle": async () => {
       const id = required("id");
-      const rawCursor = consulta.get("cursor");
+      const rawCursor = query.get("cursor");
       const cursor = rawCursor !== null ? Number(rawCursor) : 0;
-      const recipientScope = consulta.get("recipientScope") || undefined;
-      const requestedMemberId = consulta.get("memberId") || undefined;
+      const recipientScope = query.get("recipientScope") || undefined;
+      const requestedMemberId = query.get("memberId") || undefined;
       const wo = workOrders.get(id);
       if (!wo) throw new Failure("Encargo no encontrado.", 404);
       if (callerCap?.workOrderId && callerCap.workOrderId !== id) {
@@ -48,15 +54,15 @@ export const workOrderRoutes = (ctx, req) => {
             ? { cursor, recipientScope: "equipo" }
             : { cursor, memberId: matched.id };
       }
-      const detalle = await runStoreOp(() =>
+      const detail = await runStoreOp(() =>
         workOrders.getSnapshotAndFeed(id, feedArgs),
       );
-      if (!detalle) throw new Failure("Encargo no encontrado.", 404);
-      return send(response, 200, detalle);
+      if (!detail) throw new Failure("Encargo no encontrado.", 404);
+      return send(response, 200, detail);
     },
     "GET /encargos/artefactos/descargar": async () => {
       const workOrderId = required("workOrderId");
-      const artifactId = consulta.get("artifactId");
+      const artifactId = query.get("artifactId");
       const wo = workOrders.get(workOrderId);
       if (!wo) throw new Failure("Encargo no encontrado.", 404);
       if (callerCap?.workOrderId && callerCap.workOrderId !== workOrderId) {
@@ -79,7 +85,7 @@ export const workOrderRoutes = (ctx, req) => {
       if (!art || !art.sessionId) {
         throw new Failure("Artefacto no encontrado.", 404);
       }
-      const upstream = await lanzador.descargarArtefacto(
+      const upstream = await launcher.descargarArtefacto(
         art.sessionId,
         artifactId,
       );
@@ -88,34 +94,34 @@ export const workOrderRoutes = (ctx, req) => {
     },
     "POST /encargos": async () => {
       const data = await body(request);
-      const encargo = await runStoreOp(() => workOrders.createWorkOrder(data));
-      return send(response, 201, { ok: true, encargo });
+      const task = await runStoreOp(() => workOrders.createWorkOrder(data));
+      return send(response, 201, { ok: true, encargo: task });
     },
     "POST /encargos/equipo": async () => {
       const data = await body(request);
-      const encargo = await runStoreOp(() =>
+      const task = await runStoreOp(() =>
         workOrders.updateTeam(data.workOrderId, data),
       );
-      return send(response, 200, { ok: true, encargo });
+      return send(response, 200, { ok: true, encargo: task });
     },
     "POST /encargos/iniciar": async () => {
       const { workOrderId, expectedRevision } = await body(request);
-      const encargo = await runStoreOp(() =>
+      const task = await runStoreOp(() =>
         workOrders.startWorkOrder(workOrderId, { expectedRevision }),
       );
-      return send(response, 200, { ok: true, encargo });
+      return send(response, 200, { ok: true, encargo: task });
     },
     "POST /encargos/mensajes": async () => {
       const data = await body(request);
-      const resultado = await runStoreOp(() =>
+      const result = await runStoreOp(() =>
         workOrders.enqueueMessage(data.workOrderId, data),
       );
-      return send(response, 200, { ok: true, ...resultado });
+      return send(response, 200, { ok: true, ...result });
     },
     "POST /encargos/eventos": async () => {
       const data = await body(request);
       const { agentId, sessionUuid } = agentHeaders(request);
-      const resultado = await runStoreOp(() =>
+      const result = await runStoreOp(() =>
         workOrders.appendEvent(data.workOrderId, {
           ...data,
           sourceId:
@@ -124,65 +130,65 @@ export const workOrderRoutes = (ctx, req) => {
           sessionId: data.sessionId ?? sessionUuid,
         }),
       );
-      return send(response, 200, { ok: true, ...resultado });
+      return send(response, 200, { ok: true, ...result });
     },
     "POST /encargos/handoffs": async () => {
       const data = await body(request);
-      const resultado = await runStoreOp(() =>
+      const result = await runStoreOp(() =>
         workOrders.createHandoff(data.workOrderId, data),
       );
-      return send(response, 200, { ok: true, ...resultado });
+      return send(response, 200, { ok: true, ...result });
     },
     "POST /encargos/verificar": async () => {
       const data = await body(request);
-      const encargo = await runStoreOp(() =>
+      const task = await runStoreOp(() =>
         workOrders.verifyWorkOrder(data.workOrderId, {
           ...data,
           actor: auth.state?.username || actorOf(request),
         }),
       );
-      return send(response, 200, { ok: true, encargo });
+      return send(response, 200, { ok: true, encargo: task });
     },
     "POST /encargos/integrar": async () => {
       const data = await body(request);
-      const sesionObj = (await sesionesLanzador()).find(
+      const sessionObj = (await launcherSessions()).find(
         (s) => s.id === data.sesion,
       );
-      if (!sesionObj) throw new Failure("Sesión no activa.", 403);
-      const actor = ENGINE_ACTOR[sesionObj.motor];
-      const resultado = await lanzador.equipo("integrar", data.sesion, actor, {
+      if (!sessionObj) throw new Failure("Sesión no activa.", 403);
+      const actor = ENGINE_ACTOR[sessionObj.motor];
+      const result = await launcher.equipo("integrar", data.sesion, actor, {
         entregableIds: data.entregableIds,
         resoluciones: data.resoluciones,
         targetDir: data.targetDir,
       });
-      const targetWo = data.workOrderId || sesionObj.workOrderId;
+      const targetWo = data.workOrderId || sessionObj.workOrderId;
       if (targetWo && workOrders.get(targetWo)) {
         await runStoreOp(() =>
           workOrders.appendEvent(targetWo, {
             sourceId: actorOf(request),
             sessionId: data.sesion,
-            idempotencyKey: resultado.integracion?.id
-              ? `wo-integ:${resultado.integracion.id}`
+            idempotencyKey: result.integracion?.id
+              ? `wo-integ:${result.integracion.id}`
               : undefined,
             type: "member.status",
             provenance: "observed",
             payload: {
               reason:
-                resultado.estado === "conflicto"
+                result.estado === "conflicto"
                   ? "integration_conflict"
                   : "integration_completed",
-              estado: resultado.estado,
-              conflictos: resultado.conflictos || [],
+              estado: result.estado,
+              conflictos: result.conflictos || [],
               // Local paths stay in the lanzador; events carry hashes.
-              integrados: (resultado.integrados || []).map(
+              integrados: (result.integrados || []).map(
                 /** @param {Record<string, unknown>} entry */
-                ({ destino: _destino, ...item }) => item,
+                ({ destino: _target, ...item }) => item,
               ),
             },
           }),
         ).catch(() => {});
       }
-      return send(response, 200, resultado);
+      return send(response, 200, result);
     },
   };
 };

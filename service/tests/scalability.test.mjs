@@ -42,7 +42,7 @@ test("unchanged scans reuse file contents while external edits, rename and delet
 test("launcher events reconnect with the control credential and unsubscribe on stop", async (t) => {
   let abiertas = 0,
     autorizadas = 0,
-    respuestas = [];
+    responses = [];
   const server = http.createServer((req, res) => {
     if (req.headers.authorization !== "Bearer control") {
       res.writeHead(401).end();
@@ -52,7 +52,7 @@ test("launcher events reconnect with the control credential and unsubscribe on s
     abiertas++;
     res.writeHead(200, { "Content-Type": "text/event-stream" });
     res.write("data: changed\n\n");
-    respuestas.push(res);
+    responses.push(res);
     res.on("close", () => abiertas--);
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -61,22 +61,22 @@ test("launcher events reconnect with the control credential and unsubscribe on s
     server.close();
   });
   const url = `http://127.0.0.1:${server.address().port}`;
-  let cambios = 0;
+  let changes = 0;
   const malo = createLauncherClient(Failure, { url, token: "otro" }).subscribe(
-    () => cambios++,
+    () => changes++,
   );
   await new Promise((r) => setTimeout(r, 100));
   malo();
-  assert.equal(cambios, 0);
+  assert.equal(changes, 0);
   const stop = createLauncherClient(Failure, {
     url,
     token: "control",
-  }).subscribe(() => cambios++);
+  }).subscribe(() => changes++);
   await new Promise((r) => setTimeout(r, 100));
-  assert.ok(cambios >= 1 && autorizadas === 1);
-  respuestas[0].write("data: changed\n\n");
+  assert.ok(changes >= 1 && autorizadas === 1);
+  responses[0].write("data: changed\n\n");
   await new Promise((r) => setTimeout(r, 50));
-  assert.ok(cambios >= 2);
+  assert.ok(changes >= 2);
   stop();
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(abiertas, 0);

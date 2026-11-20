@@ -20,7 +20,7 @@ import { createPrClient } from "./pr.mjs";
 import { createActions } from "./actions.mjs";
 import { LauncherError } from "./errors.mjs";
 import { redactDiagnostic } from "./diagnostics.mjs";
-import { CAPACIDADES, REQUISITOS } from "./engines.mjs";
+import { CAPABILITIES, REQUIREMENTS } from "./engines.mjs";
 import { readLimits } from "./limits.mjs";
 import {
   createProviderConversations,
@@ -32,7 +32,7 @@ import { createToolCatalogStore } from "./tool-catalog.mjs";
 /** @import { ExecutionRequest } from "./types.d.ts" */
 
 // Plain Errors thrown while checking a request; they are the caller's fault.
-const VALIDACIONES = new Set([
+const VALIDATIONS = new Set([
   "Campo no modificable",
   "Conversación no disponible",
   "Encargo vacío",
@@ -64,68 +64,68 @@ const VALIDACIONES = new Set([
 export async function arrancar(env = process.env) {
   const limits = readLimits(env);
   /** An absolute path the launcher cannot start without. */
-  const requiredPath = (/** @type {string} */ nombre) => {
-    const value = env[nombre];
+  const requiredPath = (/** @type {string} */ name) => {
+    const value = env[name];
     if (!value || !path.isAbsolute(value))
-      throw new Error(`Falta configuración: ${nombre}`);
+      throw new Error(`Falta configuración: ${name}`);
     return value;
   };
   const dataDir = requiredPath("SB_LANZADOR_DATA_DIR");
   const controlHashFile = requiredPath("SB_CONTROL_HASH_FILE");
   const hookHashFile = requiredPath("SB_HOOK_HASH_FILE");
-  const proyectosFile = requiredPath("SB_PROYECTOS_FILE");
-  const puerto = Number(env.SB_LANZADOR_PORT ?? 8092);
-  if (!Number.isInteger(puerto) || puerto < 0 || puerto > 65535)
+  const projectsFile = requiredPath("SB_PROYECTOS_FILE");
+  const port = Number(env.SB_LANZADOR_PORT ?? 8092);
+  if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw new Error("Puerto inválido");
-  const proyectos = JSON.parse(await readFile(proyectosFile, "utf8"));
-  if (!proyectos || Array.isArray(proyectos) || typeof proyectos !== "object")
+  const projects = JSON.parse(await readFile(projectsFile, "utf8"));
+  if (!projects || Array.isArray(projects) || typeof projects !== "object")
     throw new Error("Proyectos inválidos");
-  for (const [nombre, directorio] of Object.entries(proyectos)) {
+  for (const [nombre, directorio] of Object.entries(projects)) {
     if (
       !/^[a-z0-9_-]+$/i.test(nombre) ||
       typeof directorio !== "string" ||
       !path.isAbsolute(directorio)
     )
       throw new Error("Proyecto inválido");
-    proyectos[nombre] = await realpath(directorio);
-    if (!(await stat(proyectos[nombre])).isDirectory())
+    projects[nombre] = await realpath(directorio);
+    if (!(await stat(projects[nombre])).isDirectory())
       throw new Error("Proyecto no es directorio");
   }
   const controlHash = (await readFile(controlHashFile, "utf8")).trim();
   const hookHash = (await readFile(hookHashFile, "utf8")).trim();
-  const soltar = await acquireInstance(dataDir);
+  const release = await acquireInstance(dataDir);
   try {
-    const registro = await openSessionRegistry(
+    const registry = await openSessionRegistry(
       path.join(dataDir, "sesiones.json"),
       {
         retencionDias: limits.retencionDias,
       },
     );
-    const equipos = await openTeams(path.join(dataDir, "equipos"), {
+    const teams = await openTeams(path.join(dataDir, "equipos"), {
       activo: (id) =>
-        registro
+        registry
           .leer()
           .some(
             (s) =>
               s.id === id && ["pendiente", "trabajando"].includes(s.estado),
           ),
-      onChange: () => registro.notificar(),
+      onChange: () => registry.notificar(),
     });
-    const espacios = await openWorkspaces({
+    const spaces = await openWorkspaces({
       archivo: path.join(dataDir, "espacios.json"),
-      proyectos,
+      proyectos: projects,
       workspaces: path.join(dataDir, "workspaces"),
     });
-    const ejecutorGit = createGit({ env });
+    const gitExecutor = createGit({ env });
     const checkpoints = createCheckpoints({
-      git: ejecutorGit,
+      git: gitExecutor,
       dirIndices: path.join(dataDir, "indices-checkpoint"),
     });
-    const seguimiento = createTracking({
-      registro,
+    const tracking = createTracking({
+      registro: registry,
       checkpoints,
       cwdDe: (s) =>
-        s.directorio || (s.proyecto ? proyectos[s.proyecto] : null) || null,
+        s.directorio || (s.proyecto ? projects[s.proyecto] : null) || null,
     });
     const conversations = createProviderConversations({
       directory: path.join(dataDir, "conversations"),
@@ -134,61 +134,61 @@ export async function arrancar(env = process.env) {
       dataDir: dataDir,
       env,
     });
-    const ejecutor = createExecutor({
-      registro,
-      equipos,
-      proyectos,
-      espacios,
+    const executor = createExecutor({
+      registro: registry,
+      equipos: teams,
+      proyectos: projects,
+      espacios: spaces,
       env,
-      seguimiento,
+      seguimiento: tracking,
       conversations,
       toolCatalog,
       maxActivos: limits.maxActivos,
     });
-    const catalogo = createModelCatalog({ env });
-    const itemsSesion = createItems({ registro, env });
-    const acciones = createActions({
-      registro,
-      seguimiento,
+    const catalog = createModelCatalog({ env });
+    const sessionItems = createItems({ registro: registry, env });
+    const actions = createActions({
+      registro: registry,
+      seguimiento: tracking,
       checkpoints,
-      pr: createPrClient({ git: ejecutorGit, info: checkpoints.info, env }),
-      catalogo,
-      proyectos,
-      items: itemsSesion,
+      pr: createPrClient({ git: gitExecutor, info: checkpoints.info, env }),
+      catalogo: catalog,
+      proyectos: projects,
+      items: sessionItems,
     });
-    const dejarConversaciones = env.HOME
-      ? watchConversations({ registro, env, proyectos })
+    const unsubscribeConversations = env.HOME
+      ? watchConversations({ registro: registry, env, proyectos: projects })
       : () => {};
-    const servidor = createLauncherServer({
-      registro,
-      ejecutor,
+    const server = createLauncherServer({
+      registro: registry,
+      ejecutor: executor,
       conversations,
       toolCatalog,
-      catalogo,
+      catalogo: catalog,
       uso: createUsage({ env }),
-      items: itemsSesion,
-      acciones,
-      equipos,
-      proyectos,
-      espacios,
+      items: sessionItems,
+      acciones: actions,
+      equipos: teams,
+      proyectos: projects,
+      espacios: spaces,
       controlHash,
       hookHash,
     });
-    servidor.once("close", () => {
-      dejarConversaciones();
-      Promise.resolve(ejecutor.cerrarTodo?.())
+    server.once("close", () => {
+      unsubscribeConversations();
+      Promise.resolve(executor.cerrarTodo?.())
         .catch(() => {})
         .finally(() => {
-          soltar().catch(() => {});
+          release().catch(() => {});
         });
     });
     await new Promise((resolve, reject) => {
-      servidor.once("error", reject);
-      servidor.listen(puerto, "127.0.0.1", () => resolve(undefined));
+      server.once("error", reject);
+      server.listen(port, "127.0.0.1", () => resolve(undefined));
     });
-    return servidor;
+    return server;
   } catch (error) {
-    await soltar();
+    await release();
     throw error;
   }
 }
@@ -197,12 +197,12 @@ export async function arrancar(env = process.env) {
  * @param {unknown} header
  * @param {string} hash
  */
-function autorizado(header, hash) {
+function authorized(header, hash) {
   if (typeof header !== "string" || !header.startsWith("Bearer ")) return false;
-  const esperado = Buffer.from(hash, "hex");
-  const recibido = createHash("sha256").update(header.slice(7)).digest();
+  const expected = Buffer.from(hash, "hex");
+  const received = createHash("sha256").update(header.slice(7)).digest();
   return (
-    esperado.length === recibido.length && timingSafeEqual(esperado, recibido)
+    expected.length === received.length && timingSafeEqual(expected, received)
   );
 }
 
@@ -210,39 +210,37 @@ function autorizado(header, hash) {
 // manifest card fixes, so a card cannot carry an unavailable model.
 /**
  * @param {Pick<ReturnType<typeof createModelCatalog>, "validar">} catalogo
- * @param {Pick<LauncherRequestBody, "motor" | "modelo" | "esfuerzo" | "manifest" | "memberId">} datos
+ * @param {Pick<LauncherRequestBody, "motor" | "modelo" | "esfuerzo" | "manifest" | "memberId">} data
  * @param {{ coordinadora: boolean }} options
  */
-async function validarSeleccion(catalogo, datos, { coordinadora }) {
-  await catalogo.validar(datos.motor, datos.modelo, datos.esfuerzo);
-  const team = Array.isArray(datos.manifest?.team) ? datos.manifest.team : [];
+async function validateSelection(catalogo, data, { coordinadora }) {
+  await catalogo.validar(data.motor, data.modelo, data.esfuerzo);
+  const team = Array.isArray(data.manifest?.team) ? data.manifest.team : [];
   const card = team.find(
     (c) =>
       c?.assigned !== false &&
-      (datos.memberId
-        ? c.id === datos.memberId
-        : coordinadora && c.coordinator),
+      (data.memberId ? c.id === data.memberId : coordinadora && c.coordinator),
   );
-  if (card && (card.motor ?? card.engine) === datos.motor && card.model)
-    await catalogo.validar(datos.motor, card.model, card.effort || undefined);
+  if (card && (card.motor ?? card.engine) === data.motor && card.model)
+    await catalogo.validar(data.motor, card.model, card.effort || undefined);
 }
 
 /** @param {LauncherServerOptions} options */
 export function createLauncherServer({
-  registro,
-  ejecutor,
+  registro: registry,
+  ejecutor: executor,
   conversations,
   toolCatalog = null,
-  catalogo = createModelCatalog({ env: {}, agy: async () => "" }),
-  uso = async () => ({}),
+  catalogo: catalog = createModelCatalog({ env: {}, agy: async () => "" }),
+  uso: usage = async () => ({}),
   items,
-  acciones,
-  equipos,
-  proyectos = {},
-  espacios,
+  acciones: actions,
+  equipos: teams,
+  proyectos: projects = {},
+  espacios: spaces,
   controlHash,
   hookHash,
-  registrar = (linea) => console.error(linea),
+  registrar: register = (line) => console.error(line),
 }) {
   if (
     ![controlHash, hookHash].every((hash) => /^[a-f0-9]{64}$/i.test(hash)) ||
@@ -261,7 +259,7 @@ export function createLauncherServer({
      * @param {number} status
      * @param {unknown} [data]
      */
-    const enviar = (status, data) => {
+    const send = (status, data) => {
       res.writeHead(status, {
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
@@ -271,68 +269,68 @@ export function createLauncherServer({
     try {
       // Always set for requests that reach an http.Server.
       const url = req.url ?? "/";
-      const esHook = req.method === "POST" && url === "/eventos";
+      const isHook = req.method === "POST" && url === "/eventos";
       if (
-        !autorizado(req.headers.authorization, esHook ? hookHash : controlHash)
+        !authorized(req.headers.authorization, isHook ? hookHash : controlHash)
       )
-        return enviar(401, { error: "No autorizado." });
+        return send(401, { error: "No autorizado." });
       const ruta = new URL(url, "http://127.0.0.1");
-      const accionSesion =
+      const sessionAction =
         /^\/sesiones\/([a-f0-9-]{36})\/(diff|pr\/propuesta|revertir|pr\/redactar|pr)$/i.exec(
           ruta.pathname,
         );
       if (req.method === "GET" && url === "/capacidades")
-        return enviar(200, { motores: CAPACIDADES, requisitos: REQUISITOS });
-      if (req.method === "GET" && accionSesion && acciones) {
-        if (accionSesion[2] === "diff") {
+        return send(200, { motores: CAPABILITIES, requisitos: REQUIREMENTS });
+      if (req.method === "GET" && sessionAction && actions) {
+        if (sessionAction[2] === "diff") {
           /** @param {string | null} v */
           const numero = (v) => (v === null ? undefined : Number(v));
           const desde = numero(ruta.searchParams.get("desde"));
           const hasta = ruta.searchParams.get("hasta");
           /** @param {number | undefined} v */
-          const valido = (v) =>
+          const valid = (v) =>
             v === undefined || (Number.isInteger(v) && v >= 1);
           if (
-            !valido(desde) ||
-            !(hasta === null || hasta === "actual" || valido(Number(hasta)))
+            !valid(desde) ||
+            !(hasta === null || hasta === "actual" || valid(Number(hasta)))
           )
             throw new LauncherError("Rango de cambios inválido.", 400);
-          return enviar(
+          return send(
             200,
-            await acciones.diff(
-              accionSesion[1],
+            await actions.diff(
+              sessionAction[1],
               desde,
               hasta === null || hasta === "actual" ? undefined : Number(hasta),
             ),
           );
         }
-        if (accionSesion[2] === "pr/propuesta")
-          return enviar(200, await acciones.propuesta(accionSesion[1]));
+        if (sessionAction[2] === "pr/propuesta")
+          return send(200, await actions.propuesta(sessionAction[1]));
       }
       if (req.method === "GET" && url === "/estado")
-        return enviar(
+        return send(
           200,
-          acciones
-            ? await acciones.listar()
-            : registro
+          actions
+            ? await actions.listar()
+            : registry
                 .leer()
                 .filter((s) => !s.eliminada)
                 .map(({ terminal: _terminal, ...session }) => session),
         );
       if (req.method === "GET" && url === "/proyectos")
-        return enviar(200, Object.keys(proyectos));
+        return send(200, Object.keys(projects));
       if (req.method === "GET" && url === "/modelos")
-        return enviar(200, await catalogo.modelos());
+        return send(200, await catalog.modelos());
       if (req.method === "GET" && url === "/uso")
-        return enviar(200, await uso());
-      if (req.method === "GET" && url === "/espacios" && espacios)
-        return enviar(200, espacios.leer());
+        return send(200, await usage());
+      if (req.method === "GET" && url === "/espacios" && spaces)
+        return send(200, spaces.leer());
       if (req.method === "GET" && ruta.pathname === "/herramientas/catalogo") {
         const cat = await getToolCatalog();
         if (ruta.searchParams.get("probe") === "true") {
           await cat.runHealthChecks({ optIn: true, probeTimeoutMs: 1500 });
         }
-        return enviar(
+        return send(
           200,
           cat.evaluateCatalog({
             motor: ruta.searchParams.get("motor") || "codex",
@@ -344,7 +342,7 @@ export function createLauncherServer({
         );
       }
       const terminalRoute = /^\/sesiones\/([a-f0-9-]{36})\/terminal$/.exec(url);
-      const flujoRoute = /^\/sesiones\/([a-f0-9-]{36})\/stream$/.exec(url);
+      const flowRoute = /^\/sesiones\/([a-f0-9-]{36})\/stream$/.exec(url);
       const conversationRoute =
         /^\/sesiones\/([a-f0-9-]{36})\/conversation(?:\/(answer|messages|queue|queue\/cancel|shutdown))?$/.exec(
           ruta.pathname,
@@ -359,7 +357,7 @@ export function createLauncherServer({
           res,
           id: conversationRoute[1],
           conversations,
-          registro,
+          registro: registry,
         });
       if (
         req.method === "GET" &&
@@ -367,7 +365,7 @@ export function createLauncherServer({
         conversationRoute[2] === "queue" &&
         conversations
       ) {
-        return enviar(200, {
+        return send(200, {
           queue: await conversations.listQueue(conversationRoute[1]),
         });
       }
@@ -376,7 +374,7 @@ export function createLauncherServer({
           ruta.pathname,
         );
       if (req.method === "GET" && conversationArtifactRoute && conversations) {
-        const session = registro
+        const session = registry
           .leer()
           .find((s) => s.id === conversationArtifactRoute[1] && !s.eliminada);
         if (!session?.structured) {
@@ -406,12 +404,12 @@ export function createLauncherServer({
         res.end(buffer);
         return;
       }
-      if (req.method === "GET" && flujoRoute)
+      if (req.method === "GET" && flowRoute)
         return serveFlow({
           res,
-          id: flujoRoute[1],
-          ejecutor,
-          registro,
+          id: flowRoute[1],
+          ejecutor: executor,
+          registro: registry,
           items,
         });
       if (req.method === "GET" && url === "/events") {
@@ -421,7 +419,7 @@ export function createLauncherServer({
           Connection: "keep-alive",
         });
         res.write(": connected\n\n");
-        const dejar = registro.subscribe(() => res.write("data: changed\n\n"));
+        const dejar = registry.subscribe(() => res.write("data: changed\n\n"));
         const heartbeat = setInterval(
           () => res.write(": heartbeat\n\n"),
           25000,
@@ -437,14 +435,14 @@ export function createLauncherServer({
         req.method === "POST" &&
         /^\/sesiones\/([a-f0-9-]+)\/cancelar$/i.exec(url);
       if (cancelar) {
-        await ejecutor.cancelar(cancelar[1]);
-        return enviar(202, { ok: true });
+        await executor.cancelar(cancelar[1]);
+        return send(202, { ok: true });
       }
-      const eliminar =
+      const remove =
         req.method === "POST" &&
         /^\/sesiones\/([a-f0-9-]{36})\/eliminar$/i.exec(url);
-      if (eliminar) return enviar(200, await ejecutor.eliminar(eliminar[1]));
-      const accionesEquipo = [
+      if (remove) return send(200, await executor.eliminar(remove[1]));
+      const teamActions = [
         "encargar",
         "esperar",
         "estado",
@@ -453,8 +451,8 @@ export function createLauncherServer({
         "entregar",
         "integrar",
       ];
-      const accionEquipo =
-        url.startsWith("/equipo/") && accionesEquipo.includes(url.slice(8))
+      const teamAction =
+        url.startsWith("/equipo/") && teamActions.includes(url.slice(8))
           ? url.slice(8)
           : null;
       if (
@@ -466,44 +464,44 @@ export function createLauncherServer({
           "/herramientas/perfiles",
           "/herramientas/skills/resolver",
         ].includes(url) &&
-          !accionEquipo &&
+          !teamAction &&
           !terminalRoute &&
           !conversationRoute &&
-          !(accionSesion && acciones))
+          !(sessionAction && actions))
       )
-        return enviar(404, { error: "Ruta no encontrada." });
+        return send(404, { error: "Ruta no encontrada." });
       // Chunks stay as bytes until the end: a multi-byte character split
       // between two chunks must not be decoded (and broken) separately.
-      const partes = [];
+      const parts = [];
       let bytes = 0;
-      for await (const parte of req) {
-        const buffer = Buffer.from(parte);
+      for await (const part of req) {
+        const buffer = Buffer.from(part);
         bytes += buffer.length;
         if (bytes > 512000)
-          return enviar(413, { error: "Petición demasiado grande." });
-        partes.push(buffer);
+          return send(413, { error: "Petición demasiado grande." });
+        parts.push(buffer);
       }
-      const cuerpo = Buffer.concat(partes).toString("utf8");
+      const cuerpo = Buffer.concat(parts).toString("utf8");
       try {
         datos = JSON.parse(cuerpo);
       } catch {
-        return enviar(400, { error: "JSON inválido." });
+        return send(400, { error: "JSON inválido." });
       }
       if (!datos || typeof datos !== "object" || Array.isArray(datos))
-        return enviar(400, { error: "Petición inválida." });
+        return send(400, { error: "Petición inválida." });
       // Validated as a plain object above; a const keeps that inside callbacks.
       const body = datos;
-      if (url === "/espacios" && espacios)
-        return enviar(
+      if (url === "/espacios" && spaces)
+        return send(
           200,
-          await espacios.vincular(
-            /** @type {Parameters<typeof espacios.vincular>[0]} */ (body),
+          await spaces.vincular(
+            /** @type {Parameters<typeof spaces.vincular>[0]} */ (body),
           ),
         );
       if (url === "/herramientas/perfiles") {
         const cat = await getToolCatalog();
         try {
-          return enviar(
+          return send(
             200,
             await cat.updateProfile(
               /** @type {string} */ (body.profileId),
@@ -520,29 +518,29 @@ export function createLauncherServer({
           billingAuthorized: _ignoredBilling,
           verifiedOperatorBillingGrant: _ignoredGrant,
           optInProbe = false,
-          ...safeDatos
+          ...safeData
         } = body && typeof body === "object" ? body : {};
         try {
           if (optInProbe === true) {
             await cat.runHealthChecks({
               optIn: true,
-              cwd: safeDatos.cwd || null,
+              cwd: safeData.cwd || null,
               probeTimeoutMs: 1500,
             });
           }
-          return enviar(200, await cat.resolveSkillsForTask(safeDatos));
+          return send(200, await cat.resolveSkillsForTask(safeData));
         } catch (err) {
           throw new LauncherError(err.message, 400);
         }
       }
       if (conversationRoute && conversationRoute[2] && conversations) {
-        const session = registro
+        const session = registry
           .leer()
           .find((s) => s.id === conversationRoute[1] && !s.eliminada);
         if (!session?.structured)
           throw new LauncherError("Conversación no disponible.", 404);
         if (conversationRoute[2] === "answer")
-          return enviar(
+          return send(
             200,
             await conversations.answer(
               session.id,
@@ -550,19 +548,19 @@ export function createLauncherServer({
             ),
           );
         if (conversationRoute[2] === "messages")
-          return enviar(200, await ejecutor.enviarMensaje(session.id, body));
+          return send(200, await executor.enviarMensaje(session.id, body));
         if (conversationRoute[2] === "queue/cancel")
-          return enviar(
+          return send(
             200,
-            await ejecutor.cancelarCola(
+            await executor.cancelarCola(
               session.id,
               /** @type {string} */ (body.clientMessageId),
             ),
           );
         if (conversationRoute[2] === "shutdown")
-          return enviar(
+          return send(
             200,
-            await ejecutor.cerrarConexion(
+            await executor.cerrarConexion(
               session.id,
               typeof body.reason === "string" && body.reason.trim()
                 ? body.reason.trim()
@@ -570,47 +568,47 @@ export function createLauncherServer({
             ),
           );
       }
-      if (accionSesion && acciones) {
-        const id = accionSesion[1];
-        if (accionSesion[2] === "revertir")
-          return enviar(
+      if (sessionAction && actions) {
+        const id = sessionAction[1];
+        if (sessionAction[2] === "revertir")
+          return send(
             200,
-            await acciones.revertir(id, /** @type {number} */ (body.n)),
+            await actions.revertir(id, /** @type {number} */ (body.n)),
           );
-        if (accionSesion[2] === "pr")
-          return enviar(200, await acciones.pr(id, body));
-        if (accionSesion[2] === "pr/redactar")
-          return enviar(200, await acciones.redactar(id));
-        return enviar(404, { error: "Ruta no encontrada." });
+        if (sessionAction[2] === "pr")
+          return send(200, await actions.pr(id, body));
+        if (sessionAction[2] === "pr/redactar")
+          return send(200, await actions.redactar(id));
+        return send(404, { error: "Ruta no encontrada." });
       }
       if (terminalRoute) {
-        if (body.interrumpir === true && acciones) {
-          const sesion = registro.leer().find((s) => s.id === terminalRoute[1]);
-          if (sesion && !(await acciones.capacidades(sesion))?.interrumpir)
+        if (body.interrumpir === true && actions) {
+          const sesion = registry.leer().find((s) => s.id === terminalRoute[1]);
+          if (sesion && !(await actions.capacidades(sesion))?.interrumpir)
             throw new LauncherError(
               "Esta sesión no tiene terminal en marcha para interrumpir el turno.",
             );
         }
-        return enviar(200, ejecutor.entrada(terminalRoute[1], body));
+        return send(200, executor.entrada(terminalRoute[1], body));
       }
-      if (accionEquipo) {
-        const sesion = registro
+      if (teamAction) {
+        const sesion = registry
           .leer()
           .find((s) => s.id === body.sesion && s.estado === "trabajando");
         /** @type {Record<string, string>} */
-        const actores = {
+        const actors = {
           claude: "ambar",
           codex: "menta",
           agy: "lira",
           deepseek: "marina",
         };
-        const actor = actores[sesion?.motor ?? ""];
-        if (!equipos || !sesion || !actor || body.actor !== actor)
-          return enviar(403, { error: "Sesión no activa." });
-        let resultado;
-        if (accionEquipo === "encargar") {
-          await validarSeleccion(catalogo, body, { coordinadora: false });
-          resultado = await ejecutor.encargarHija(sesion.id, {
+        const actor = actors[sesion?.motor ?? ""];
+        if (!teams || !sesion || !actor || body.actor !== actor)
+          return send(403, { error: "Sesión no activa." });
+        let result;
+        if (teamAction === "encargar") {
+          await validateSelection(catalog, body, { coordinadora: false });
+          result = await executor.encargarHija(sesion.id, {
             id: body.id || null,
             motor: /** @type {string} */ (body.motor),
             proyecto: body.proyecto,
@@ -642,43 +640,43 @@ export function createLauncherServer({
               : {}),
           });
         }
-        if (accionEquipo === "esperar")
-          resultado = await ejecutor.esperarHija(
+        if (teamAction === "esperar")
+          result = await executor.esperarHija(
             sesion.id,
             /** @type {string} */ (body.id),
             body.timeout,
           );
-        if (accionEquipo === "estado") resultado = equipos.estado(sesion.id);
-        if (accionEquipo === "mensaje")
-          resultado = await equipos.mensaje(
+        if (teamAction === "estado") result = teams.estado(sesion.id);
+        if (teamAction === "mensaje")
+          result = await teams.mensaje(
             sesion.id,
             /** @type {string} */ (body.para),
             /** @type {string} */ (body.texto),
           );
-        if (accionEquipo === "bandeja") resultado = equipos.bandeja(sesion.id);
-        if (accionEquipo === "entregar") {
-          const tieneCamposExtra =
+        if (teamAction === "bandeja") result = teams.bandeja(sesion.id);
+        if (teamAction === "entregar") {
+          const hasExtraFields =
             body.ruta !== undefined ||
             body.baseSha256 !== undefined ||
             body.archivos !== undefined;
-          resultado = tieneCamposExtra
-            ? await equipos.entregar(sesion.id, {
+          result = hasExtraFields
+            ? await teams.entregar(sesion.id, {
                 titulo: /** @type {string} */ (body.titulo),
                 contenido: body.contenido,
                 ruta: body.ruta,
                 baseSha256: body.baseSha256,
                 archivos: body.archivos,
               })
-            : await equipos.entregar(
+            : await teams.entregar(
                 sesion.id,
                 /** @type {string} */ (body.titulo),
                 body.contenido ?? undefined,
               );
         }
-        if (accionEquipo === "integrar") {
+        if (teamAction === "integrar") {
           let resolvedTarget =
             sesion.directorio ||
-            (sesion.proyecto ? proyectos[sesion.proyecto] : null) ||
+            (sesion.proyecto ? projects[sesion.proyecto] : null) ||
             null;
           if (typeof body.targetDir === "string" && body.targetDir.trim()) {
             const baseAllowed = resolvedTarget
@@ -698,24 +696,24 @@ export function createLauncherServer({
               );
             }
           }
-          resultado = await equipos.integrar(sesion.id, {
+          result = await teams.integrar(sesion.id, {
             entregableIds: body.entregableIds,
             targetDir: resolvedTarget,
             resoluciones: body.resoluciones,
           });
         }
         // Marks the sender so the room can animate a real handoff; ids only.
-        if (["mensaje", "entregar"].includes(accionEquipo)) {
+        if (["mensaje", "entregar"].includes(teamAction)) {
           try {
             const para =
-              accionEquipo === "mensaje"
+              teamAction === "mensaje"
                 ? body.para
-                : equipos.estado(sesion.id).lider;
+                : teams.estado(sesion.id).lider;
             if (para && para !== sesion.id)
-              await registro.actualizar(sesion.id, {
+              await registry.actualizar(sesion.id, {
                 relevo: {
-                  id: /** @type {{ id: string }} */ (resultado).id,
-                  tipo: accionEquipo === "mensaje" ? "mensaje" : "entregable",
+                  id: /** @type {{ id: string }} */ (result).id,
+                  tipo: teamAction === "mensaje" ? "mensaje" : "entregable",
                   para,
                 },
               });
@@ -723,59 +721,59 @@ export function createLauncherServer({
             /* the animation never blocks a team tool */
           }
         }
-        return enviar(200, resultado);
+        return send(200, result);
       }
-      if (esHook) {
-        const sesion = registro
+      if (isHook) {
+        const sesion = registry
           .leer()
           .find(
             (s) =>
               s.id === body.id &&
               ["pendiente", "trabajando"].includes(s.estado),
           );
-        if (!sesion) return enviar(404, { error: "Sesión no activa." });
+        if (!sesion) return send(404, { error: "Sesión no activa." });
         if (
           typeof body.herramienta !== "string" ||
           body.herramienta.length > 100
         )
-          return enviar(400, { error: "Herramienta inválida." });
-        const fase = inferPhase(body.herramienta);
-        if (fase)
-          await registro.actualizar(sesion.id, {
-            fase,
+          return send(400, { error: "Herramienta inválida." });
+        const phase = inferPhase(body.herramienta);
+        if (phase)
+          await registry.actualizar(sesion.id, {
+            fase: phase,
             ultimaAccion: {
               investigar: "Consultando información",
               planificar: "Planificando",
               programar: "Trabajando con archivos",
               revisar: "Revisando",
-            }[fase],
+            }[phase],
           });
-        return enviar(204);
+        return send(204);
       }
       if (
         /** @type {const} */ (["modelo", "esfuerzo"]).some(
           (k) => body[k] !== undefined && typeof body[k] !== "string",
         )
       )
-        return enviar(400, { error: "Petición inválida." });
+        return send(400, { error: "Petición inválida." });
       if (body.continuar) {
-        const previa = acciones
-          ? registro.leer().find((s) => s.id === body.continuar)
+        const previous = actions
+          ? registry.leer().find((s) => s.id === body.continuar)
           : null;
         // previa is only looked up when acciones exists.
         if (
-          previa &&
-          acciones &&
-          !(await acciones.capacidades(previa))?.continuar
+          previous &&
+          actions &&
+          !(await actions.capacidades(previous))?.continuar
         )
           throw new LauncherError(
             "Este agente no permite continuar esta conversación; abre una nueva.",
           );
       }
       if (body.continuar)
-        return enviar(
+        return send(
           202,
-          await ejecutor.continuar(
+          await executor.continuar(
             /** @type {string} */ (body.continuar),
             /** @type {string} */ (body.brief),
           ),
@@ -784,16 +782,16 @@ export function createLauncherServer({
         body.billingAuthorized === true &&
         body.billingGrantVerified !== true
       ) {
-        return enviar(403, {
+        return send(403, {
           error:
             "La autorización de gasto requiere concesión verificada del operador.",
           seguro: true,
         });
       }
-      await validarSeleccion(catalogo, body, { coordinadora: true });
-      return enviar(
+      await validateSelection(catalog, body, { coordinadora: true });
+      return send(
         202,
-        await ejecutor.encargar(
+        await executor.encargar(
           /** @type {ExecutionRequest} */ ({
             ...body,
             billingGrantVerified: body.billingGrantVerified === true,
@@ -802,8 +800,8 @@ export function createLauncherServer({
       );
     } catch (error) {
       if (error instanceof LauncherError && !res.headersSent)
-        return enviar(error.status, { error: error.message, seguro: true });
-      const conocidas = new Set([
+        return send(error.status, { error: error.message, seguro: true });
+      const known = new Set([
         "Conflicto de vínculos; actualiza e inténtalo de nuevo",
         "Modelo no disponible",
         "Saldo DeepSeek insuficiente",
@@ -816,19 +814,18 @@ export function createLauncherServer({
         "Terminal no disponible",
       ]);
       if (res.headersSent) return res.end();
-      const generico = "No se pudo procesar la petición.";
-      const conflicto = error?.message?.startsWith("Conflicto de vínculos");
-      if (conocidas.has(error?.message) || conflicto)
-        return enviar(conflicto ? 409 : 400, {
-          error: conocidas.has(error?.message) ? error.message : generico,
+      const generic = "No se pudo procesar la petición.";
+      const conflict = error?.message?.startsWith("Conflicto de vínculos");
+      if (known.has(error?.message) || conflict)
+        return send(conflict ? 409 : 400, {
+          error: known.has(error?.message) ? error.message : generic,
         });
       // Rejections of the request itself keep answering 400 without a trace.
-      if (VALIDACIONES.has(error?.message))
-        return enviar(400, { error: generico });
+      if (VALIDATIONS.has(error?.message)) return send(400, { error: generic });
       // Anything else is a bug or an environment failure: leave a trail that
       // never carries credentials, headers or the text of an assignment.
       try {
-        registrar(
+        register(
           JSON.stringify({
             evento: "lanzador.error",
             ruta: String(req.url ?? "").split("?")[0],
@@ -847,7 +844,7 @@ export function createLauncherServer({
           }),
         );
       } catch {}
-      enviar(500, { error: generico });
+      send(500, { error: generic });
     }
   });
 }

@@ -60,7 +60,7 @@ export async function runLiveVerification({
   const root = await mkdtemp(path.join(os.tmpdir(), "sb-runtime-live-"));
   const vaultRoot = path.join(root, "vault");
   const serviceData = path.join(root, "service-data");
-  const lanzadorData = path.join(root, "lanzador-data");
+  const launcherData = path.join(root, "lanzador-data");
   const projectDir = path.join(root, "proyecto-demo");
   const controlToken = randomBytes(24).toString("hex");
   const hookToken = randomBytes(24).toString("hex");
@@ -69,7 +69,7 @@ export async function runLiveVerification({
   const controlHashFile = path.join(root, "control.hash");
   const hookHashFile = path.join(root, "hook.hash");
   const brainTokenFile = path.join(root, "brain.token");
-  const proyectosFile = path.join(root, "proyectos.json");
+  const projectsFile = path.join(root, "proyectos.json");
 
   /** @type {Awaited<ReturnType<typeof createApplication>> | null} */
   let app = null;
@@ -97,7 +97,7 @@ export async function runLiveVerification({
     });
     await mkdir(path.join(vaultRoot, "99-Meta"), { recursive: true });
     await mkdir(serviceData, { recursive: true });
-    await mkdir(lanzadorData, { recursive: true });
+    await mkdir(launcherData, { recursive: true });
     await mkdir(path.join(projectDir, "informe"), { recursive: true });
 
     await writeFile(
@@ -150,25 +150,25 @@ export async function runLiveVerification({
     await writeFile(hookHashFile, sha256Hex(hookToken), { mode: 0o600 });
     await writeFile(brainTokenFile, brainToken, { mode: 0o600 });
     await writeFile(
-      proyectosFile,
+      projectsFile,
       JSON.stringify({ demo: projectDir }, null, 2),
       { mode: 0o600 },
     );
 
     /** @type {Record<string, string>} */
-    const lanzadorEnv = {
+    const launcherEnv = {
       ...process.env,
       SB_LANZADOR_PORT: "0",
-      SB_LANZADOR_DATA_DIR: lanzadorData,
+      SB_LANZADOR_DATA_DIR: launcherData,
       SB_CONTROL_HASH_FILE: controlHashFile,
       SB_HOOK_HASH_FILE: hookHashFile,
-      SB_PROYECTOS_FILE: proyectosFile,
+      SB_PROYECTOS_FILE: projectsFile,
       SB_BRAIN_TOKEN_FILE: brainTokenFile,
       SB_BRAIN_URL: "http://127.0.0.1:1/api/v1",
       SB_MAX_ACTIVOS: "2",
     };
 
-    launcher = await arrancar(lanzadorEnv);
+    launcher = await arrancar(launcherEnv);
     const launcherUrl = `http://127.0.0.1:${portOf(launcher)}`;
 
     app = await createApplication({
@@ -182,8 +182,8 @@ export async function runLiveVerification({
     await once(app.server, "listening");
     let servicePort = portOf(app.server);
     let baseApi = `http://127.0.0.1:${servicePort}/api/v1`;
-    lanzadorEnv.SB_BRAIN_URL = baseApi;
-    lanzadorEnv.AGENTES_BRAIN_URL = baseApi;
+    launcherEnv.SB_BRAIN_URL = baseApi;
+    launcherEnv.AGENTES_BRAIN_URL = baseApi;
 
     const getApiHeaders = async () => {
       const csrfRes = await fetch(`${baseApi}/auth/csrf`);
@@ -295,11 +295,11 @@ export async function runLiveVerification({
       while (!sseAbort.signal.aborted) {
         try {
           /** @type {{ solicitudes?: RuntimeProductQuestion[] }} */
-          const { solicitudes = [] } = await fetch(
+          const { solicitudes: requests = [] } = await fetch(
             `${baseApi}/solicitudes?workOrderId=${workOrderId}&kind=question&status=pendiente`,
             { signal: sseAbort.signal },
           ).then((r) => r.json());
-          for (const q of solicitudes) {
+          for (const q of requests) {
             if (productQuestionAnswered) continue;
             const resp = await fetch(`${baseApi}/solicitudes/responder`, {
               method: "POST",
@@ -620,8 +620,8 @@ export async function runLiveVerification({
       await once(app.server, "listening");
       servicePort = portOf(app.server);
       baseApi = `http://127.0.0.1:${servicePort}/api/v1`;
-      lanzadorEnv.SB_BRAIN_URL = baseApi;
-      lanzadorEnv.AGENTES_BRAIN_URL = baseApi;
+      launcherEnv.SB_BRAIN_URL = baseApi;
+      launcherEnv.AGENTES_BRAIN_URL = baseApi;
       apiHeaders = await getApiHeaders();
 
       /** @type {RuntimeWorkOrderDetail} */
@@ -871,7 +871,7 @@ export async function runLiveVerification({
       try {
         await access(
           path.join(
-            lanzadorData,
+            launcherData,
             "session-tokens",
             `${skillsSession.id}.token`,
           ),

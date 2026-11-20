@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 
 // Only what git and gh need. Tokens, when present, travel in the environment of
 // the child (never in its arguments) and are not logged by this module.
-const HEREDADAS = [
+const INHERITED = [
   "PATH",
   "HOME",
   "USERPROFILE",
@@ -23,10 +23,10 @@ const HEREDADAS = [
  * @param {NodeJS.ProcessEnv} [env]
  * @param {NodeJS.ProcessEnv} [extra]
  */
-export function entornoGit(env = process.env, extra = {}) {
+export function gitEnvironment(env = process.env, extra = {}) {
   return {
     ...Object.fromEntries(
-      HEREDADAS.filter((k) => env[k] !== undefined).map((k) => [k, env[k]]),
+      INHERITED.filter((k) => env[k] !== undefined).map((k) => [k, env[k]]),
     ),
     GIT_TERMINAL_PROMPT: "0",
     GCM_INTERACTIVE: "never",
@@ -47,25 +47,25 @@ export function createGit({
   env = process.env,
   timeout = 60000,
   // Tests run a fake gh as `node fake.mjs`; production uses the real one.
-  ghComando = ["gh"],
+  ghComando: ghCommand = ["gh"],
 } = {}) {
   /**
    * @param {string} bin
    * @param {string} cwd
    * @param {string[]} args
-   * @param {GitOptions} [opciones]
+   * @param {GitOptions} [options]
    * @returns {ReturnType<GitCommand>}
    */
-  function correr(bin, cwd, args, opciones = {}) {
+  function run(bin, cwd, args, options = {}) {
     return new Promise((resolve, reject) => {
       execFile(
         bin,
         args,
         {
           cwd,
-          env: entornoGit(env, opciones.env),
-          timeout: opciones.timeout ?? timeout,
-          maxBuffer: opciones.max ?? 16 * 1024 * 1024,
+          env: gitEnvironment(env, options.env),
+          timeout: options.timeout ?? timeout,
+          maxBuffer: options.max ?? 16 * 1024 * 1024,
           encoding: "utf8",
           windowsHide: true,
         },
@@ -73,7 +73,7 @@ export function createGit({
           if (!error) return resolve({ stdout, stderr });
           // Output over the limit is still useful to a caller that trims it.
           if (
-            opciones.tolerarExceso &&
+            options.tolerarExceso &&
             error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
           )
             return resolve({ stdout: stdout ?? "", stderr, excedido: true });
@@ -86,11 +86,11 @@ export function createGit({
   }
   return {
     git: /** @type {GitCommand} */ (
-      (cwd, args, opciones) => correr("git", cwd, args, opciones)
+      (cwd, args, options) => run("git", cwd, args, options)
     ),
     gh: /** @type {GitCommand} */ (
-      (cwd, args, opciones) =>
-        correr(ghComando[0], cwd, [...ghComando.slice(1), ...args], opciones)
+      (cwd, args, options) =>
+        run(ghCommand[0], cwd, [...ghCommand.slice(1), ...args], options)
     ),
   };
 }

@@ -10,70 +10,74 @@
  * @param {Pick<ReturnType<typeof import("./process-tools.mjs").createProcessTools>, "senalar">} deps
  */
 export function createMonitor(config, state, deps) {
-  const { cancelarTemporizador, inactividadMs, limiteMs, programar, registro } =
-    config;
-  const { activos } = state;
-  const { senalar } = deps;
+  const {
+    cancelarTemporizador: cancelTimer,
+    inactividadMs: inactivityMs,
+    limiteMs: limitMs,
+    programar: schedule,
+    registro: registry,
+  } = config;
+  const { activos: active } = state;
+  const { senalar: signal } = deps;
   /** @param {string} id */
   function activeJob(id) {
-    const job = activos.get(id);
+    const job = active.get(id);
     if (!job) throw new Error("Sesión no activa");
     return job;
   }
 
   /**
-   * @param {LauncherSession} sesion
-   * @param {MonitoredChild} hijo
+   * @param {LauncherSession} session
+   * @param {MonitoredChild} child
    */
-  function vigilar(sesion, hijo) {
-    const job = activeJob(sesion.id);
+  function watch(session, child) {
+    const job = activeJob(session.id);
     /** @type {NodeJS.Timeout | undefined} */
-    let escalada;
+    let scaled;
     /** @type {NodeJS.Timeout | undefined} */
-    let inactivo;
-    const actividad = () => {
-      cancelarTemporizador(inactivo);
+    let idle;
+    const activity = () => {
+      cancelTimer(idle);
       if (job.inactiva) {
         job.inactiva = false;
-        registro
-          .actualizar(sesion.id, { ultimaAccion: "Actividad reanudada." })
+        registry
+          .actualizar(session.id, { ultimaAccion: "Actividad reanudada." })
           .catch(() => {});
       }
-      inactivo = programar(() => {
-        if (!activos.has(sesion.id) || job.cancelada) return;
+      idle = schedule(() => {
+        if (!active.has(session.id) || job.cancelada) return;
         job.inactiva = true;
-        registro
-          .actualizar(sesion.id, {
+        registry
+          .actualizar(session.id, {
             ultimaAccion: "Sin actividad; puedes cancelar la sesión.",
           })
           .catch(() => {});
-      }, inactividadMs);
-      inactivo?.unref?.();
+      }, inactivityMs);
+      idle?.unref?.();
     };
-    actividad();
-    hijo.stdout.on("data", actividad);
-    hijo.stderr.on("data", actividad);
-    const tope = programar(() => {
-      if (job.cancelada || !activos.has(sesion.id)) return;
+    activity();
+    child.stdout.on("data", activity);
+    child.stderr.on("data", activity);
+    const cap = schedule(() => {
+      if (job.cancelada || !active.has(session.id)) return;
       job.excedida = true;
-      senalar(hijo, "SIGTERM");
-      escalada = programar(() => {
-        if (activos.get(sesion.id) === job) senalar(hijo, "SIGKILL");
+      signal(child, "SIGTERM");
+      scaled = schedule(() => {
+        if (active.get(session.id) === job) signal(child, "SIGKILL");
       }, 5000);
-      escalada?.unref?.();
-    }, limiteMs);
-    tope?.unref?.();
-    const detener = () => {
-      for (const reloj of [tope, inactivo, escalada])
-        cancelarTemporizador(reloj);
-      hijo.stdout.off("data", actividad);
-      hijo.stderr.off("data", actividad);
+      scaled?.unref?.();
+    }, limitMs);
+    cap?.unref?.();
+    const stop = () => {
+      for (const clock of [cap, idle, scaled]) cancelTimer(clock);
+      child.stdout.off("data", activity);
+      child.stderr.off("data", activity);
     };
-    job.detenerVigilante = detener;
-    return detener;
+    job.detenerVigilante = stop;
+    return stop;
   }
   return {
     activeJob,
-    vigilar,
+    vigilar: watch,
   };
 }

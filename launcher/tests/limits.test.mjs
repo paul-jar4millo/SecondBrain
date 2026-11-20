@@ -1,18 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readLimits, sessionCommand } from "../limits.mjs";
-import { entornoDe } from "../engines.mjs";
+import { environmentOf } from "../engines.mjs";
 
 test("the real provider environment carries only the local user's scope runtime", () => {
   const runtime = "/run/user/" + (process.getuid?.() ?? 1000);
   assert.equal(
-    entornoDe("chatgpt", { SB_SESSION_SCOPES: "1", XDG_RUNTIME_DIR: runtime })
-      .XDG_RUNTIME_DIR,
+    environmentOf("chatgpt", {
+      SB_SESSION_SCOPES: "1",
+      XDG_RUNTIME_DIR: runtime,
+    }).XDG_RUNTIME_DIR,
     runtime,
   );
   assert.throws(
     () =>
-      entornoDe("chatgpt", {
+      environmentOf("chatgpt", {
         SB_SESSION_SCOPES: "1",
         XDG_RUNTIME_DIR: "tcp:remote-host",
       }),

@@ -28,7 +28,7 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
 
   const vaultRoot = path.join(root, "vault");
   const serviceData = path.join(root, "service-data");
-  const lanzadorData = path.join(root, "lanzador-data");
+  const launcherData = path.join(root, "lanzador-data");
   const projDir = path.join(root, "proyecto");
   const outsideFile = path.join(root, "fuera.txt");
   await mkdir(path.join(vaultRoot, "00-Inbox"), { recursive: true });
@@ -47,15 +47,15 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
   // queued and runs as a follow-up turn: the race a fast agent creates.
   let releaseTurn1;
   const turn1Held = new Promise((r) => (releaseTurn1 = r));
-  const registro = await openSessionRegistry(
-    path.join(lanzadorData, "sesiones.json"),
+  const registry = await openSessionRegistry(
+    path.join(launcherData, "sesiones.json"),
   );
-  const toolCatalog = await createToolCatalogStore({ dataDir: lanzadorData });
+  const toolCatalog = await createToolCatalogStore({ dataDir: launcherData });
   await toolCatalog.updateProfile("ejecucion", { allowedMcps: [] });
 
   const conversations = createProviderConversations({
-    directory: path.join(lanzadorData, "conversations"),
-    registro,
+    directory: path.join(launcherData, "conversations"),
+    registro: registry,
     adapters: {
       codex: {
         createController: () => {
@@ -145,8 +145,8 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
     },
   });
 
-  const ejecutor = createExecutor({
-    registro,
+  const executor = createExecutor({
+    registro: registry,
     proyectos: { demo: projDir },
     env: {
       ...process.env,
@@ -154,7 +154,7 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
       USERPROFILE: root,
       CODEX_HOME: path.join(root, ".cx"),
       SB_CODEX_BIN: process.execPath,
-      SB_LANZADOR_DATA_DIR: lanzadorData,
+      SB_LANZADOR_DATA_DIR: launcherData,
     },
     conversations,
     toolCatalog,
@@ -163,8 +163,8 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
 
   const controlToken = "ctrl-token-art";
   const launcher = createLauncherServer({
-    registro,
-    ejecutor,
+    registro: registry,
+    ejecutor: executor,
     conversations,
     toolCatalog,
     catalogo: { modelos: async () => ({}), validar: async () => true },
@@ -180,7 +180,7 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
   launcher.listen(0, "127.0.0.1");
   await once(launcher, "listening");
   t.after(async () => {
-    await ejecutor.cerrarTodo("fin");
+    await executor.cerrarTodo("fin");
     launcher.closeAllConnections?.();
     await new Promise((r) => launcher.close(r));
   });

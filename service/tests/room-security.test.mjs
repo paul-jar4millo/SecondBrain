@@ -595,18 +595,18 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
   assert.equal(approvalReq.content, "Primer contenido exacto");
 
   // Sibling agent lira CANNOT read menta's pending effect, solicitud, or execute it
-  const siblingDetalle = await fetch(
+  const siblingDetail = await fetch(
     `${baseApi}/efectos/detalle?id=${fixedId}`,
     {
       headers: { authorization: `Bearer ${liraToken}` },
     },
   );
-  assert.equal(siblingDetalle.status, 403);
-  const siblingReqDetalle = await fetch(
+  assert.equal(siblingDetail.status, 403);
+  const siblingReqDetail = await fetch(
     `${baseApi}/solicitudes/detalle?id=${firstJson.operacion.approvalId}`,
     { headers: { authorization: `Bearer ${liraToken}` } },
   );
-  assert.equal(siblingReqDetalle.status, 403);
+  assert.equal(siblingReqDetail.status, 403);
   const siblingList = await (
     await fetch(`${baseApi}/efectos`, {
       headers: { authorization: `Bearer ${liraToken}` },

@@ -4,14 +4,10 @@ import { body, send } from "../io.mjs";
 /** @type {RouteModule} */
 export const roomRoutes = (ctx, req) => {
   const { sala } = ctx;
-  const { consulta, request, response } = req;
+  const { consulta: query, request, response } = req;
   return {
     "GET /sala": async () => {
-      return send(
-        response,
-        200,
-        sala.leer(consulta.get("espacio") ?? undefined),
-      );
+      return send(response, 200, sala.leer(query.get("espacio") ?? undefined));
     },
     "POST /sala/tablero": async () => {
       return send(response, 200, await sala.guardar(await body(request)));

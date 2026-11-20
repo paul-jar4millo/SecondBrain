@@ -16,8 +16,8 @@ import { createExecutor } from "../executor.mjs";
 import { git, repoSintetico } from "./helpers-git.mjs";
 import { manifiesto } from "./helpers-manifest.mjs";
 
-const existe = (ruta) =>
-  access(ruta).then(
+const exists = (path) =>
+  access(path).then(
     () => true,
     () => false,
   );
@@ -32,9 +32,9 @@ const coordinadora = {
   coordinator: true,
   toolProfileId: "coordinacion",
 };
-const tarjeta = (id, motor) => ({
+const tarjeta = (id, engine) => ({
   id,
-  motor,
+  motor: engine,
   model: `modelo-${id}`,
   effort: "medium",
   role: `Rol ${id}`,
@@ -44,41 +44,51 @@ const tarjeta = (id, motor) => ({
 });
 
 // Synthetic engines: a long-lived process the test cancels explicitly.
-async function entorno(t, { proyecto, maxActivos = 6 } = {}) {
+async function environment(
+  t,
+  { proyecto: project, maxActivos: maxActive = 6 } = {},
+) {
   const dir = await realpath(await mkdtemp(path.join(tmpdir(), "sb-aisla-")));
-  const datos = path.join(dir, "datos");
+  const data = path.join(dir, "datos");
   const fake = path.join(dir, "fake.mjs");
   await writeFile(fake, "setInterval(() => {}, 1000)");
-  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
-  const equipos = await openTeams(path.join(dir, "equipos"), {
+  const registry = await openSessionRegistry(path.join(dir, "sesiones.json"));
+  const teams = await openTeams(path.join(dir, "equipos"), {
     activo: (id) =>
-      registro
+      registry
         .leer()
         .some(
           (s) => s.id === id && ["pendiente", "trabajando"].includes(s.estado),
         ),
   });
-  const ejecutor = createExecutor({
-    registro,
-    equipos,
-    maxActivos,
-    env: { ...process.env, SB_LANZADOR_DATA_DIR: datos },
-    proyectos: { prueba: proyecto ?? dir },
+  const executor = createExecutor({
+    registro: registry,
+    equipos: teams,
+    maxActivos: maxActive,
+    env: { ...process.env, SB_LANZADOR_DATA_DIR: data },
+    proyectos: { prueba: project ?? dir },
     comando: () => ({ bin: process.execPath, args: [fake] }),
     registrar: () => {},
   });
   // Stops every synthetic process; Windows cannot delete a process's cwd.
-  async function detener() {
-    for (const s of registro.leer())
+  async function stop() {
+    for (const s of registry.leer())
       if (["pendiente", "trabajando"].includes(s.estado))
-        await ejecutor.cancelar(s.id).catch(() => {});
-    await Promise.all(registro.leer().map((s) => ejecutor.esperar(s.id)));
+        await executor.cancelar(s.id).catch(() => {});
+    await Promise.all(registry.leer().map((s) => executor.esperar(s.id)));
   }
   t.after(async () => {
-    await detener();
+    await stop();
     await rm(dir, { recursive: true, force: true });
   });
-  return { dir, datos, registro, equipos, ejecutor, detener };
+  return {
+    dir,
+    datos: data,
+    registro: registry,
+    equipos: teams,
+    ejecutor: executor,
+    detener: stop,
+  };
 }
 
 test("la coordinadora del manifiesto crea hijas con su modelo, rol y workspace propio", async (t) => {
@@ -87,7 +97,13 @@ test("la coordinadora del manifiesto crea hijas con su modelo, rol y workspace p
   );
   t.after(() => rm(proyecto, { recursive: true, force: true }));
   await writeFile(path.join(proyecto, "brief.md"), "contexto\n");
-  const { datos, registro, equipos, ejecutor, detener } = await entorno(t, {
+  const {
+    datos: data,
+    registro: registry,
+    equipos: teams,
+    ejecutor: executor,
+    detener: stop,
+  } = await environment(t, {
     proyecto,
   });
   const mf = manifiesto([
@@ -95,7 +111,7 @@ test("la coordinadora del manifiesto crea hijas con su modelo, rol y workspace p
     tarjeta("m-a", "codex"),
     tarjeta("m-b", "codex"),
   ]);
-  const lider = await ejecutor.encargar({
+  const lead = await executor.encargar({
     motor: "claude",
     origen: "sala",
     proyecto: "prueba",
@@ -103,41 +119,41 @@ test("la coordinadora del manifiesto crea hijas con su modelo, rol y workspace p
     manifest: mf,
     workOrderId: mf.workOrderId,
   });
-  assert.equal(lider.memberId, "m-coord");
-  assert.equal(lider.modelo, "modelo-coord");
-  assert.equal(equipos.estado(lider.id).manifestSha256, mf.sha256);
+  assert.equal(lead.memberId, "m-coord");
+  assert.equal(lead.modelo, "modelo-coord");
+  assert.equal(teams.estado(lead.id).manifestSha256, mf.sha256);
 
-  const a = await ejecutor.encargarHija(lider.id, {
+  const a = await executor.encargarHija(lead.id, {
     motor: "codex",
     brief: "parte A",
     memberId: "m-a",
   });
-  const b = await ejecutor.encargarHija(lider.id, {
+  const b = await executor.encargarHija(lead.id, {
     motor: "codex",
     brief: "parte B",
   });
-  for (const [hija, id] of [
+  for (const [child, id] of [
     [a, "m-a"],
     [b, "m-b"],
   ]) {
-    assert.equal(hija.memberId, id);
-    assert.equal(hija.modelo, `modelo-${id}`);
-    assert.equal(hija.esfuerzo, "medium");
-    assert.equal(hija.role, `Rol ${id}`);
-    assert.equal(hija.workspaceKind, "directory");
+    assert.equal(child.memberId, id);
+    assert.equal(child.modelo, `modelo-${id}`);
+    assert.equal(child.esfuerzo, "medium");
+    assert.equal(child.role, `Rol ${id}`);
+    assert.equal(child.workspaceKind, "directory");
     assert.ok(
-      hija.workspacePath.startsWith(path.join(datos, "member-workspaces")),
+      child.workspacePath.startsWith(path.join(data, "member-workspaces")),
     );
-    assert.equal(hija.directorio, hija.workspacePath);
+    assert.equal(child.directorio, child.workspacePath);
     // Non-Git tasks get a private copy of the project inputs.
     assert.equal(
-      await readFile(path.join(hija.workspacePath, "brief.md"), "utf8"),
+      await readFile(path.join(child.workspacePath, "brief.md"), "utf8"),
       "contexto\n",
     );
   }
   assert.notEqual(a.workspacePath, b.workspacePath);
   await assert.rejects(
-    ejecutor.encargarHija(lider.id, {
+    executor.encargarHija(lead.id, {
       motor: "codex",
       brief: "cambia",
       memberId: "m-a",
@@ -152,96 +168,100 @@ test("la coordinadora del manifiesto crea hijas con su modelo, rol y workspace p
     "contexto\n",
   );
 
-  await ejecutor.cancelar(a.id);
-  await ejecutor.esperar(a.id);
-  assert.ok(await existe(a.workspacePath), "se retiene tras terminar");
-  await ejecutor.eliminar(a.id);
-  assert.equal(await existe(a.workspacePath), false);
-  assert.ok(registro.leer().some((s) => s.id === b.id));
-  await detener();
+  await executor.cancelar(a.id);
+  await executor.esperar(a.id);
+  assert.ok(await exists(a.workspacePath), "se retiene tras terminar");
+  await executor.eliminar(a.id);
+  assert.equal(await exists(a.workspacePath), false);
+  assert.ok(registry.leer().some((s) => s.id === b.id));
+  await stop();
 });
 
 test("en un repositorio cada hija trabaja en un worktree separado que se limpia al eliminarla", async (t) => {
   const repo = await repoSintetico(t);
-  const { ejecutor, detener } = await entorno(t, { proyecto: repo });
+  const { ejecutor: executor, detener: stop } = await environment(t, {
+    proyecto: repo,
+  });
   const mf = manifiesto([coordinadora, tarjeta("m-a", "agy")]);
-  const lider = await ejecutor.encargar({
+  const lead = await executor.encargar({
     motor: "claude",
     origen: "sala",
     proyecto: "prueba",
     brief: "coordina",
     manifest: mf,
   });
-  const hija = await ejecutor.encargarHija(lider.id, {
+  const child = await executor.encargarHija(lead.id, {
     motor: "agy",
     brief: "edita",
   });
-  assert.equal(hija.workspaceKind, "git-worktree");
+  assert.equal(child.workspaceKind, "git-worktree");
   assert.match(git(repo, "worktree", "list"), /member-workspaces/);
-  await writeFile(path.join(hija.workspacePath, "a.txt"), "cambio aislado\n");
+  await writeFile(path.join(child.workspacePath, "a.txt"), "cambio aislado\n");
   assert.equal(await readFile(path.join(repo, "a.txt"), "utf8"), "uno\n");
 
-  await ejecutor.cancelar(hija.id);
-  await ejecutor.esperar(hija.id);
-  await ejecutor.eliminar(hija.id);
+  await executor.cancelar(child.id);
+  await executor.esperar(child.id);
+  await executor.eliminar(child.id);
   assert.doesNotMatch(git(repo, "worktree", "list"), /member-workspaces/);
-  assert.equal(await existe(hija.workspacePath), false);
-  await detener();
+  assert.equal(await exists(child.workspacePath), false);
+  await stop();
 });
 
 test("sin cupo de procesos la hija queda en cola con motivo visible y arranca al liberarse", async (t) => {
-  const { registro, ejecutor } = await entorno(t, { maxActivos: 2 });
+  const { registro: registry, ejecutor: executor } = await environment(t, {
+    maxActivos: 2,
+  });
   const mf = manifiesto([
     coordinadora,
     tarjeta("m-a", "codex"),
     tarjeta("m-b", "codex"),
     tarjeta("m-c", "codex"),
   ]);
-  const lider = await ejecutor.encargar({
+  const lead = await executor.encargar({
     motor: "claude",
     origen: "sala",
     proyecto: "prueba",
     brief: "coordina",
     manifest: mf,
   });
-  const a = await ejecutor.encargarHija(lider.id, {
+  const a = await executor.encargarHija(lead.id, {
     motor: "codex",
     brief: "a",
   });
-  const b = await ejecutor.encargarHija(lider.id, {
+  const b = await executor.encargarHija(lead.id, {
     motor: "codex",
     brief: "b",
   });
-  const c = await ejecutor.encargarHija(lider.id, {
+  const c = await executor.encargarHija(lead.id, {
     motor: "codex",
     brief: "c",
   });
   assert.equal(a.estado, "trabajando");
-  for (const hija of [b, c]) {
-    assert.equal(hija.estado, "pendiente");
-    assert.equal(hija.enColaRecursos, true);
-    assert.match(hija.motivoCola, /límite de procesos/);
+  for (const child of [b, c]) {
+    assert.equal(child.estado, "pendiente");
+    assert.equal(child.enColaRecursos, true);
+    assert.match(child.motivoCola, /límite de procesos/);
   }
   assert.ok(b.enqueueOrder < c.enqueueOrder);
-  assert.equal(ejecutor.activos(), 2);
+  assert.equal(executor.activos(), 2);
 
   // Cancelling a queued member never starts it.
-  await ejecutor.cancelar(c.id);
-  assert.equal(registro.leer().find((s) => s.id === c.id).estado, "cancelada");
+  await executor.cancelar(c.id);
+  assert.equal(registry.leer().find((s) => s.id === c.id).estado, "cancelada");
 
-  await ejecutor.cancelar(a.id);
-  await ejecutor.esperar(a.id);
-  const despachada = registro.leer().find((s) => s.id === b.id);
+  await executor.cancelar(a.id);
+  await executor.esperar(a.id);
+  const despachada = registry.leer().find((s) => s.id === b.id);
   assert.equal(despachada.estado, "trabajando");
   assert.equal(despachada.enColaRecursos, false);
-  assert.equal(ejecutor.activos(), 2);
-  assert.equal(registro.leer().find((s) => s.id === c.id).estado, "cancelada");
+  assert.equal(executor.activos(), 2);
+  assert.equal(registry.leer().find((s) => s.id === c.id).estado, "cancelada");
 });
 
 test("una ruta de encargo no se autoriza a sí misma para facturar DeepSeek", async (t) => {
-  const { ejecutor } = await entorno(t);
+  const { ejecutor: executor } = await environment(t);
   const mf = manifiesto([coordinadora, tarjeta("m-d", "deepseek")]);
-  const lider = await ejecutor.encargar({
+  const lead = await executor.encargar({
     motor: "claude",
     origen: "sala",
     proyecto: "prueba",
@@ -249,7 +269,7 @@ test("una ruta de encargo no se autoriza a sí misma para facturar DeepSeek", as
     manifest: mf,
   });
   await assert.rejects(
-    ejecutor.encargarHija(lider.id, {
+    executor.encargarHija(lead.id, {
       motor: "deepseek",
       brief: "gasta",
       billingAuthorized: true,

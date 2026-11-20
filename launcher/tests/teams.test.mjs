@@ -8,15 +8,15 @@ import { openTeams } from "../teams.mjs";
 test("miembros intercambian mensajes y entregables, conservados tras reiniciar", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-team-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const equipos = await openTeams(dir);
-  const equipo = await equipos.crear("lider");
-  await equipos.agregar(equipo.id, "lider", "hija1", "agy");
-  await equipos.agregar(equipo.id, "lider", "hija2", "deepseek");
-  await equipos.mensaje("lider", "hija1", "Busca X");
-  await equipos.entregar("hija1", "Hallazgos", "Resultado sintético");
-  assert.equal(equipos.bandeja("hija1")[0].texto, "Busca X");
+  const teams = await openTeams(dir);
+  const equipo = await teams.crear("lider");
+  await teams.agregar(equipo.id, "lider", "hija1", "agy");
+  await teams.agregar(equipo.id, "lider", "hija2", "deepseek");
+  await teams.mensaje("lider", "hija1", "Busca X");
+  await teams.entregar("hija1", "Hallazgos", "Resultado sintético");
+  assert.equal(teams.bandeja("hija1")[0].texto, "Busca X");
   assert.equal(
-    equipos.estado("lider").entregables[0].contenido,
+    teams.estado("lider").entregables[0].contenido,
     "Resultado sintético",
   );
   const recuperado = await openTeams(dir);
@@ -28,18 +28,15 @@ test("miembros intercambian mensajes y entregables, conservados tras reiniciar",
 test("rechaza profundidad superior a dos, exceso de miembros y mensajes entre equipos", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-team-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const equipos = await openTeams(dir);
-  const a = await equipos.crear("a");
-  const b = await equipos.crear("b");
-  await equipos.agregar(a.id, "a", "a1", "codex");
-  await equipos.agregar(a.id, "a1", "a2", "claude");
-  await assert.rejects(
-    equipos.agregar(a.id, "a2", "a3", "agy"),
-    /profundidad/i,
-  );
-  await equipos.agregar(a.id, "a", "a4", "agy");
-  await assert.rejects(equipos.agregar(a.id, "a", "a5", "agy"), /límite/i);
-  await assert.rejects(equipos.mensaje("a", "b", "hola"));
+  const teams = await openTeams(dir);
+  const a = await teams.crear("a");
+  const b = await teams.crear("b");
+  await teams.agregar(a.id, "a", "a1", "codex");
+  await teams.agregar(a.id, "a1", "a2", "claude");
+  await assert.rejects(teams.agregar(a.id, "a2", "a3", "agy"), /profundidad/i);
+  await teams.agregar(a.id, "a", "a4", "agy");
+  await assert.rejects(teams.agregar(a.id, "a", "a5", "agy"), /límite/i);
+  await assert.rejects(teams.mensaje("a", "b", "hola"));
   assert.notEqual(a.id, b.id);
 });
 
@@ -47,17 +44,17 @@ test("encargos simultáneos no sobrepasan el límite y un miembro terminado libe
   const dir = await mkdtemp(path.join(tmpdir(), "sb-team-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const inactivos = new Set();
-  const equipos = await openTeams(dir, {
+  const teams = await openTeams(dir, {
     activo: (id) => !inactivos.has(id),
   });
-  const team = await equipos.crear("lider");
-  const resultados = await Promise.allSettled(
+  const team = await teams.crear("lider");
+  const results = await Promise.allSettled(
     ["h1", "h2", "h3", "h4"].map((id) =>
-      equipos.agregar(team.id, "lider", id, "codex"),
+      teams.agregar(team.id, "lider", id, "codex"),
     ),
   );
-  assert.equal(resultados.filter((r) => r.status === "fulfilled").length, 3);
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 3);
   inactivos.add("h1");
-  await equipos.agregar(team.id, "lider", "h5", "agy");
-  assert.equal(equipos.estado("lider").miembros.length, 5);
+  await teams.agregar(team.id, "lider", "h5", "agy");
+  assert.equal(teams.estado("lider").miembros.length, 5);
 });
