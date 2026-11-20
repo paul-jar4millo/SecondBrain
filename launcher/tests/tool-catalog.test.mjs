@@ -23,8 +23,6 @@ import {
   PRODUCT_SKILLS_SPEC,
   TOOL_PROFILES_BASE,
 } from "../tool-catalog.mjs";
-import { openSessionRegistry } from "../sessions.mjs";
-import { createExecutor } from "../executor.mjs";
 import { createLauncherServer } from "../index.mjs";
 import { createApplication } from "../../service/index.mjs";
 
@@ -296,7 +294,6 @@ test("B/D: perfiles, aislamiento MCP, SHA-256 reales de 7 SKILL.md, bloqueo sin 
     assert.equal(found.fileExists, true, `${spec.id} should exist`);
     assert.equal(found.sha256, expectedSha, `${spec.id} sha256 mismatch`);
   }
-  await access(path.join(repoSkillsDir, "equipo-cuatro-fases.md"));
   await access(path.join(repoSkillsDir, "resumen-matutino.md"));
 
   // Opt-in healthcheck makes personal-context usable and selectively materializes ONLY requested skill
@@ -425,20 +422,10 @@ test("rutas HTTP /agentes/herramientas/* respetan permisos de sala y bloquean bi
     dataDir: path.join(dir, "lanzador-data"),
     env: { AGENTES_BRAIN_TOKEN_FILE: path.join(dir, "token") },
   });
-  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
-  const executor = createExecutor({
-    registro: registry,
-    proyectos: { demo: dir },
-    env: {},
-    toolCatalog,
-  });
   const h = (v) => createHash("sha256").update(v).digest("hex");
   const launcher = createLauncherServer({
-    registro: registry,
-    ejecutor: executor,
     toolCatalog,
     controlHash: h("ctrl"),
-    hookHash: h("hook"),
   });
   launcher.listen(0, "127.0.0.1");
   await once(launcher, "listening");

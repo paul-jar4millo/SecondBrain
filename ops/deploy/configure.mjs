@@ -121,7 +121,6 @@ export async function configure({
       "/usr/local/lib/secondbrain/launcher-compatible.mjs",
       0o644,
     ],
-    ["ops/lanzador/sb-hilo", "/usr/local/bin/sb-hilo", 0o755],
     [
       "ops/lxc/plantillas/secondbrain.service",
       "/etc/systemd/system/secondbrain.service",

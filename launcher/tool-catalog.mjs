@@ -434,7 +434,7 @@ function defaultConnectorEntries(
         "brain_search",
         "brain_write",
         "brain_finance",
-        "equipo_*",
+        "thread_ask_user",
         "files_*",
         "usuario_preguntar",
         "usuario_consultar_respuesta",

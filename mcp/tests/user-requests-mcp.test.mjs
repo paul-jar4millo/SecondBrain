@@ -11,7 +11,7 @@ import { createBrainMcp } from "../index.mjs";
 import { createApplication } from "../../service/index.mjs";
 import { getCsrfHeaders } from "../../service/tests/helpers/csrf.mjs";
 
-test("herramientas MCP usuario_preguntar, usuario_consultar_respuesta y usuario_esperar_respuesta coordinan por tramos con el encargo", async (t) => {
+test("herramientas MCP usuario_preguntar, usuario_consultar_respuesta y usuario_esperar_respuesta esperan por tramos la respuesta", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-mcp-req-"));
   const vault = path.join(dir, "vault");
   await mkdir(path.join(vault, "00-Inbox"), { recursive: true });
@@ -51,32 +51,10 @@ test("herramientas MCP usuario_preguntar, usuario_consultar_respuesta y usuario_
     return JSON.parse(res.content[0].text);
   }
 
-  // Create work order from authenticated app side
   const appHeaders = await getCsrfHeaders(baseUrl);
-  const { encargo: task } = await fetch(`${baseUrl}/encargos`, {
-    method: "POST",
-    headers: appHeaders,
-    body: JSON.stringify({
-      title: "Encargo MCP pregunta",
-      objective: "Probar herramientas MCP de pregunta persistente",
-      acceptanceCriteria: [{ text: "Respuesta recibida y registrada" }],
-      team: [
-        {
-          id: "ambar-1",
-          characterId: "ambar",
-          engine: "claude",
-          model: "claude-opus-4-7",
-          role: "Coordinadora",
-          responsibility: "Consultar al usuario",
-          coordinator: true,
-        },
-      ],
-    }),
-  }).then((r) => r.json());
 
-  // 1) Agent asks non-blocking persistent question linked to the WorkOrder
+  // 1) Agent asks a non-blocking persistent question
   const asked = await llamar("usuario_preguntar", {
-    workOrderId: task.id,
     titulo: "Prioridad sintética",
     pregunta: "¿Qué ruta priorizamos primero?",
     opciones: ["Ruta A", "Ruta B"],
@@ -112,13 +90,4 @@ test("herramientas MCP usuario_preguntar, usuario_consultar_respuesta y usuario_
   const waited = await waitPromise;
   assert.equal(waited.solicitud.status, "respuesta_recibida");
   assert.equal(waited.solicitud.response.answer, "Ruta B");
-
-  // WorkOrder timeline has both user_request.created and user_request.resolved events
-  const detail = await fetch(
-    `${baseUrl}/encargos/detalle?id=${task.id}&cursor=0`,
-  ).then((r) => r.json());
-  assert.deepEqual(
-    detail.events.map((e) => e.type),
-    ["user_request.created", "user_request.resolved"],
-  );
 });

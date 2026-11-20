@@ -17,7 +17,7 @@ node mcp/brain-cli.mjs brain_read '{"path":"Home.md"}'          # one-shot CLI
 
 Design choices:
 
-- Long waits (`equipo_esperar`, `usuario_esperar_respuesta`) are split into
+- Long waits (`usuario_esperar_respuesta`) are split into
   intervals shorter than HTTP timeouts.
 - `files_download` and `files_upload` stream to and from disk with SHA-256
   checks so large files never pass through the model's context; they exist

@@ -238,16 +238,6 @@ export const PRODUCT_SKILLS_SPEC = [
 /** @type {SkillSpec[]} */
 export const LOCAL_SKILL_SPECS = [
   {
-    id: "equipo-cuatro-fases",
-    file: "equipo-cuatro-fases.md",
-    requiredFiles: ["equipo-cuatro-fases.md"],
-    trigger: "Coordinación multiagente",
-    version: "local-md",
-    implemented: true,
-    requiredMcps: ["secondbrain"],
-    requiredOperations: ["team.coordinate"],
-  },
-  {
     id: "resumen-matutino",
     file: "resumen-matutino.md",
     requiredFiles: ["resumen-matutino.md"],

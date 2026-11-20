@@ -8,7 +8,6 @@ import { actorContext, Failure } from "./vault.mjs";
 import { createContext } from "./http/context.mjs";
 import { prepareResponse, sendError } from "./http/middleware.mjs";
 import { serveStatic } from "./http/static.mjs";
-import { TEAM_ACTION, handleTeamAction } from "./http/team-actions.mjs";
 import { buildRoutes } from "./http/routes/index.mjs";
 
 /** @import { ApplicationOptions, HttpRequest } from "./types.d.ts" */
@@ -30,11 +29,9 @@ export async function createApplication(options = {}) {
     stopLanzadorEvents: stopLauncherEvents,
     mcpRemoto: mcpRemote,
     aprobaciones: approvals,
-    workOrders,
     userRequests,
     effects,
     assertAgentCapabilityForRoute,
-    bridges,
     actorOf,
     logger,
   } = context;
@@ -81,13 +78,6 @@ export async function createApplication(options = {}) {
         );
         const consulta = new URL(request.url ?? "/", "http://localhost")
           .searchParams;
-        const teamAction = method === "POST" && TEAM_ACTION.exec(route);
-        if (teamAction)
-          return await handleTeamAction(
-            context,
-            { request, response, callerCap },
-            teamAction[1],
-          );
         if (
           policy &&
           !policy.query.safeParse(Object.fromEntries(consulta)).success
@@ -144,12 +134,10 @@ export async function createApplication(options = {}) {
   }, 86400000);
   maintenance.unref();
   const close = async () => {
-    bridges.close();
     clearInterval(maintenance);
     await approvals.cerrar();
     await effects.close();
     await userRequests.cerrar();
-    await workOrders.close();
     stopLauncherEvents();
     for (const watcher of watchers) watcher.close();
     context.cancelPendingChange();
@@ -165,7 +153,6 @@ export async function createApplication(options = {}) {
     vault,
     finance,
     auth,
-    workOrders,
     userRequests,
     effects,
     root,

@@ -24,6 +24,11 @@ probar "release activa" test -f /opt/secondbrain/current/REVISION
 probar "vault con Home.md" test -f /srv/secondbrain/vault/Home.md
 probar "script matutino legible por el servicio" runuser -u secondbrain -- test -r /opt/secondbrain/current/ops/lanzador/resumen-matutino.sh
 probar "comprobador de compatibilidad instalado" test -r /usr/local/lib/secondbrain/launcher-compatible.mjs
+probar "API de threads del lanzador" sh -c 'curl -fsS --max-time 5 -H "Authorization: Bearer $(cat /var/lib/secondbrain/lanzador-token)" http://127.0.0.1:8092/threads'
+no_debe "sb-hilo retirado (ADR 0010)" test -e /usr/local/bin/sb-hilo
+if [[ -e $agente/estado/lanzador/sesiones.json ]]; then
+  aviso "datos de sesiones antiguas (paso de datos de A9 pendiente)"
+fi
 probar "configuración operativa sin deriva" node /opt/secondbrain/current/ops/deploy/configure.mjs --release /opt/secondbrain/current --parameters /etc/secondbrain/parameters.json --check
 probar "utilidad de homelab instalada" test -x /usr/local/bin/estado-pc
 probar "gestor de usuario disponible" systemctl is-active --quiet "user@$(id -u sb-agente).service"

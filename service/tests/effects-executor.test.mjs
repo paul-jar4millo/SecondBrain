@@ -352,42 +352,6 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   assert.match(billedErr.error, /gasto/);
   assert.match(billedErr.error, /suscripci/i);
 
-  // Bypass 8: Agent with "investigacion" profile in WorkOrder CANNOT spoof "coordinacion" to prepare external effect
-  const { encargo: task } = await fetch(`${base}/encargos`, {
-    method: "POST",
-    headers: appHeaders,
-    body: JSON.stringify({
-      title: "Prueba perfil investigación",
-      objective: "Verificar aislamiento de efectos",
-      acceptanceCriteria: [{ text: "Solo lectura" }],
-      team: [
-        {
-          id: "lira-ro",
-          characterId: "lira",
-          engine: "agy",
-          model: "gemini-3.8-flash",
-          role: "Investigadora",
-          responsibility: "Solo lectura",
-          coordinator: true,
-          toolProfileId: "investigacion",
-        },
-      ],
-    }),
-  }).then((r) => r.json());
-
-  const spoofedPrep = await fetch(`${base}/efectos/preparar`, {
-    method: "POST",
-    headers: agentHeaders("lira"),
-    body: JSON.stringify({
-      workOrderId: task.id,
-      toolProfileId: "coordinacion", // tries to self-escalate despite WorkOrder assigning "investigacion"
-      category: "external_message",
-      action: "send_email",
-      recipient: "externo",
-      content: "Fuga no permitida",
-    }),
-  });
-  assert.equal(spoofedPrep.status, 403);
   assert.equal(externalCalls, 0);
 });
 

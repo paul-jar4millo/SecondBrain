@@ -54,7 +54,7 @@ async function setupOwner(baseRoot) {
   };
 }
 
-test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificados, acota delegación, bloquea gasto y persiste tras reinicio", async (t) => {
+test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificados, bloquea gasto y persiste tras reinicio", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-sec-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
 
@@ -131,43 +131,14 @@ test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificado
   let baseApi = `${baseRoot}/api/v1`;
   let ownerHdrs = await setupOwner(baseRoot);
 
-  // Create work order whose coordinator is limited to investigacion
-  const woRes = await fetch(`${baseApi}/encargos`, {
-    method: "POST",
-    headers: ownerHdrs,
-    body: JSON.stringify({
-      title: "Encargo acotado",
-      objective: "Investigar sin escribir",
-      acceptanceCriteria: [{ text: "Solo lectura" }],
-      team: [
-        {
-          id: "coord-ambar",
-          characterId: "ambar",
-          engine: "claude",
-          model: "claude-opus-4-7",
-          effort: "high",
-          role: "Coordinadora",
-          responsibility: "Coordinar",
-          coordinator: true,
-          toolProfileId: "investigacion",
-        },
-      ],
-    }),
-  });
-  assert.equal(woRes.status, 201);
-  const workOrderId = (await woRes.json()).encargo.id;
-
   // Spending policy: DeepSeek without operator grant rejected 403 even if billingAuthorized:true is spoofed
-  const dsDenied = await fetch(`${baseApi}/agentes/sesiones`, {
+  const dsDenied = await fetch(`${baseApi}/threads`, {
     method: "POST",
     headers: ownerHdrs,
     body: JSON.stringify({
-      motor: "deepseek",
-      origen: "encargo",
-      proyecto: "demo",
-      brief: "gastar",
-      structured: true,
-      billingAuthorized: true,
+      prompt: "gastar",
+      kind: "scratch",
+      agent: { engine: "deepseek" },
     }),
   });
   assert.equal(dsDenied.status, 403);
@@ -247,13 +218,6 @@ test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificado
         content: "hola",
       },
     ],
-    [
-      "POST /equipo/encargar",
-      {
-        motor: "codex",
-        brief: "sub",
-      },
-    ],
   ]) {
     const [, urlPath] = route.split(" ");
     const r = await fetch(`${baseApi}${urlPath}`, {
@@ -293,20 +257,7 @@ test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificado
         content: "hola",
       },
     ],
-    [
-      "POST",
-      "/equipo/encargar",
-      {
-        motor: "codex",
-        brief: "sub",
-      },
-    ],
     ["GET", "/vault/tasks", null],
-    [
-      "POST",
-      "/encargos",
-      { title: "x", objective: "y", acceptanceCriteria: [{ text: "z" }] },
-    ],
   ]) {
     const r = await fetch(`${baseApi}${urlPath}`, {
       method,
@@ -315,58 +266,6 @@ test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificado
     });
     assert.equal(r.status, 403, `Expected 403 on ${method} ${urlPath}`);
   }
-
-  // Coordinator mint & POST /equipo/encargar intersection:
-  // workOrder coordinator is investigacion, operator policy omits vault.write/file.write/effect.prepare -> child CANNOT get ejecucion writes
-  // F3: a draft work order cannot delegate; start it so its manifest is frozen.
-  const startRes = await fetch(`${baseApi}/encargos/iniciar`, {
-    method: "POST",
-    headers: ownerHdrs,
-    body: JSON.stringify({ workOrderId }),
-  });
-  assert.equal(startRes.status, 200);
-  const coordSessId = "33333333-3333-4333-8333-333333333333";
-  const resCoordCap = await fetch(`${baseApi}/agentes/capacidades/token`, {
-    method: "POST",
-    headers: ownerHdrs,
-    body: JSON.stringify({
-      sessionId: coordSessId,
-      workOrderId,
-      memberId: "coord-ambar",
-      actor: "ambar",
-      profileId: "coordinacion",
-    }),
-  });
-  assert.equal(resCoordCap.status, 201);
-  const { token: coordToken } = await resCoordCap.json();
-
-  const childRes = await fetch(`${baseApi}/equipo/encargar`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${coordToken}`,
-      "content-type": "application/json",
-      "x-sb-agente": "ambar",
-      "x-sb-sesion": coordSessId,
-    },
-    body: JSON.stringify({
-      motor: "codex",
-      brief: "subtarea",
-      toolProfileId: "ejecucion",
-    }),
-  });
-  assert.equal(childRes.status, 200);
-  const delegateCall = launcherCalls.find((c) => c.url === "/equipo/encargar");
-  assert.ok(delegateCall?.body?.capabilityToken?.startsWith("sbcap_"));
-  assert.equal(
-    delegateCall.body.effectiveProfile.allowedOperations.includes(
-      "vault.write",
-    ),
-    false,
-  );
-  assert.deepEqual(
-    delegateCall.body.effectiveProfile.allowedEffectCategories,
-    [],
-  );
 
   // Verify Home.md was untouched
   assert.match(
