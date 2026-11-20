@@ -43,7 +43,7 @@ const especie = (id, nombre, tipo, enfoque) => ({
   enfoque,
   ...TIPOS[tipo],
 });
-export const AGENTES = [
+export const AGENT_SPECS = [
   especie("ambar", "Ámbar", "claude", "Composición y narrativa"),
   especie("menta", "Menta", "chatgpt", "Variedad de ideas"),
   especie("lira", "Lira", "gemini", "Color y brillo"),
@@ -70,7 +70,7 @@ const TINTES = {
 const modelos = new Map();
 const cargador = new GLTFLoader();
 
-export function cargarModelo(nombre, alProgreso) {
+export function loadModel(nombre, alProgreso) {
   if (!modelos.has(nombre))
     modelos.set(
       nombre,
@@ -94,13 +94,13 @@ export function cargarModelo(nombre, alProgreso) {
     );
   return modelos.get(nombre);
 }
-export const MODELOS = [
+export const MODEL_NAMES = [
   "jugador",
   ...new Set(Object.values(TIPOS).map((t) => t.modelo)),
 ];
 /** Loads every figure in parallel; `alProgreso(nombre, cargado, total)` reports bytes. */
 export const cargarTodos = (alProgreso) =>
-  Promise.all(MODELOS.map((nombre) => cargarModelo(nombre, alProgreso)));
+  Promise.all(MODEL_NAMES.map((nombre) => loadModel(nombre, alProgreso)));
 
 // Las costuras de UV separan vértices; el contorno necesita una normal única por posición.
 function normalesDeContorno(geo) {
@@ -180,8 +180,8 @@ const planoCirculo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 const ESCALA = 1.18;
 
 /** Crea una figura desde un modelo ya cargado (usar cargarTodos antes). */
-export async function crearPersona(spec) {
-  const gltf = await cargarModelo(spec.modelo);
+export async function createCharacter(spec) {
+  const gltf = await loadModel(spec.modelo);
   const raiz = new THREE.Group();
   const figura = clonarFigura(gltf.scene);
   figura.scale.setScalar(ESCALA);

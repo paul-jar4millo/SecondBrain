@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
-  equiposEscena,
+  sceneTeams,
   figurasEsperandoOk,
-  puestosEquipo,
-  relevosNuevos,
+  teamSeats,
+  newHandoffs,
 } from "../src/features/room/room-teams";
-import { figuraDeSesion } from "../src/features/room/room-sessions";
-import type { SesionObservada } from "../src/features/room/room-sessions";
+import { sessionFigure } from "../src/features/room/room-sessions";
+import type { ObservedSession } from "../src/features/room/room-sessions";
 
 const sesion = (
   id: string,
-  motor: SesionObservada["motor"],
-  extra: Partial<SesionObservada> = {},
-): SesionObservada => ({
+  motor: ObservedSession["motor"],
+  extra: Partial<ObservedSession> = {},
+): ObservedSession => ({
   id,
   motor,
   copia: 0,
@@ -27,14 +27,14 @@ const equipo = [
 
 describe("figuras de sesión", () => {
   it("usa el personaje base y marca las copias", () => {
-    expect(figuraDeSesion({ motor: "codex", copia: 0 })).toBe("menta");
-    expect(figuraDeSesion({ motor: "codex", copia: 2 })).toBe("menta#2");
+    expect(sessionFigure({ motor: "codex", copia: 0 })).toBe("menta");
+    expect(sessionFigure({ motor: "codex", copia: 2 })).toBe("menta#2");
   });
 });
 
 describe("agrupación por equipo", () => {
   it("agrupa a la líder primero y une cada hija con un hilo", () => {
-    const { grupos, hilos } = equiposEscena([...equipo].reverse());
+    const { grupos, hilos } = sceneTeams([...equipo].reverse());
     expect(grupos).toEqual([
       { equipoId: "e1", miembros: ["ambar", "lira", "menta"] },
     ]);
@@ -48,7 +48,7 @@ describe("agrupación por equipo", () => {
     const terminada = equipo.map((s) =>
       s.id === "h2" ? { ...s, estado: "terminada" } : s,
     );
-    const { grupos, hilos } = equiposEscena(terminada);
+    const { grupos, hilos } = sceneTeams(terminada);
     expect(hilos.map((h) => h.hijaSesionId)).toEqual(["h1"]);
     expect(grupos[0].miembros).toEqual(["ambar", "menta"]);
   });
@@ -59,7 +59,7 @@ describe("agrupación por equipo", () => {
       sesion("b", "codex"),
       sesion("c", "agy", { equipoId: "e2", estado: "error" }),
     ];
-    expect(equiposEscena(solas)).toEqual({ grupos: [], hilos: [] });
+    expect(sceneTeams(solas)).toEqual({ grupos: [], hilos: [] });
   });
 
   it("separa equipos distintos y ubica cada copia con su figura", () => {
@@ -72,7 +72,7 @@ describe("agrupación por equipo", () => {
         copia: 1,
       }),
     ];
-    const { grupos, hilos } = equiposEscena(dos);
+    const { grupos, hilos } = sceneTeams(dos);
     expect(grupos.map((g) => g.equipoId)).toEqual(["e1", "e2"]);
     expect(hilos.find((h) => h.equipoId === "e2")).toMatchObject({
       de: "marina",
@@ -86,14 +86,14 @@ describe("agrupación por equipo", () => {
       sesion("h1", "codex", { equipoId: "e1", padreId: "lider" }),
       sesion("h2", "agy", { equipoId: "e1", padreId: "lider" }),
     ];
-    expect(equiposEscena(huerfana).hilos).toEqual([]);
+    expect(sceneTeams(huerfana).hilos).toEqual([]);
   });
 });
 
 describe("puestos alrededor de la mesa", () => {
   it("reparte a cada miembro en un círculo distinto mirando a la mesa", () => {
-    const { grupos } = equiposEscena(equipo);
-    const puestos = puestosEquipo(grupos);
+    const { grupos } = sceneTeams(equipo);
+    const puestos = teamSeats(grupos);
     expect([...puestos.keys()].sort()).toEqual(["ambar", "lira", "menta"]);
     const coords = [...puestos.values()].map((p) => `${p.x},${p.z}`);
     expect(new Set(coords).size).toBe(3);
@@ -103,7 +103,7 @@ describe("puestos alrededor de la mesa", () => {
   });
 
   it("usa mesas distintas para equipos distintos", () => {
-    const puestos = puestosEquipo([
+    const puestos = teamSeats([
       { equipoId: "a", miembros: ["ambar", "menta"] },
       { equipoId: "b", miembros: ["lira", "marina"] },
     ]);
@@ -118,19 +118,19 @@ describe("relevos reales del lanzador", () => {
       : s,
   );
   it("devuelve solo relevos nuevos entre figuras activas", () => {
-    const { nuevos, ids } = relevosNuevos(conRelevo, new Set());
+    const { nuevos, ids } = newHandoffs(conRelevo, new Set());
     expect(ids).toEqual(["r1"]);
     expect(nuevos).toEqual([
       { id: "r1", tipo: "entregable", de: "menta", para: "ambar" },
     ]);
-    expect(relevosNuevos(conRelevo, new Set(["r1"])).nuevos).toEqual([]);
+    expect(newHandoffs(conRelevo, new Set(["r1"])).nuevos).toEqual([]);
   });
   it("no inventa relevos y descarta los de sesiones terminadas", () => {
-    expect(relevosNuevos(equipo, new Set()).nuevos).toEqual([]);
+    expect(newHandoffs(equipo, new Set()).nuevos).toEqual([]);
     const fin = conRelevo.map((s) =>
       s.id === "lider" ? { ...s, estado: "terminada" } : s,
     );
-    const r = relevosNuevos(fin, new Set());
+    const r = newHandoffs(fin, new Set());
     expect(r.nuevos).toEqual([]);
     expect(r.ids).toEqual(["r1"]);
   });

@@ -12,7 +12,7 @@ const ESTADOS = {
 };
 const NECESITA_ATENCION = new Set(["error", "interrumpido"]);
 
-export function estadoPersonaje(a) {
+export function characterState(a) {
   if (a.ocupada)
     return {
       trabajando: true,

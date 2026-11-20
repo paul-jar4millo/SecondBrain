@@ -60,11 +60,14 @@ export function findings() {
       .replace(/\.(test\.)?(mjs|js|ts|tsx|d\.ts|py|css)$/, "");
     if (spanishWords(base).length) out.push(file);
     // Exported identifiers of the backend modules.
-    if (!/^(service|mcp|launcher)\//.test(file) || file.includes("/tests/"))
+    if (
+      !/^(service|mcp|launcher|dashboard\/src)\//.test(file) ||
+      file.includes("/tests/")
+    )
       continue;
     const text = readFileSync(path.join(root, file), "utf8");
     for (const m of text.matchAll(
-      /^export (?:async )?(?:function\*? |const |let |class )([A-Za-z_$][\w$]*)/gm,
+      /^export (?:async )?(?:function\*? |const |let |class |type |interface )([A-Za-z_$][\w$]*)/gm,
     ))
       if (spanishWords(m[1]).length) out.push(`${file}#${m[1]}`);
   }

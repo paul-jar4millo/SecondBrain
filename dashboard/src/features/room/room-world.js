@@ -119,7 +119,7 @@ function lineasDeTinta(mapa) {
   return lineas;
 }
 
-export function vestirMundo(scene, mapa, manifiesto, { quieto = false } = {}) {
+export function dressWorld(scene, mapa, manifiesto, { quieto = false } = {}) {
   const rampa = gradiente();
   const reemplazos = new Map();
   const propio = (original) => {

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  sesionesEscena,
+  sceneSessions,
   conciliarCopias,
 } from "../src/features/room/room-sessions";
 
 describe("sesiones observadas", () => {
   it("mantiene cuatro bases y crea una figura por sesión concurrente adicional", () => {
-    const estado = sesionesEscena([
+    const estado = sceneSessions([
       {
         id: "uno",
         motor: "codex",
@@ -52,7 +52,7 @@ describe("sesiones observadas", () => {
     ).toEqual({ crear: ["ambar#2"], retirar: ["lira#1"] });
   });
   it("no conserva copias de sesiones terminadas ni muestra texto ausente como actividad", () => {
-    const estado = sesionesEscena([
+    const estado = sceneSessions([
       { id: "x", motor: "agy", copia: 1, estado: "terminada" },
     ]);
     expect(estado.copias).toEqual([]);

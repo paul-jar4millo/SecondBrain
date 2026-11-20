@@ -1,6 +1,6 @@
 import path from "node:path";
 
-/** @import { AgyQuota, ClaudeStreamEvent, ClaudeUsageSnapshot, CodexUsageSnapshot, DeepSeekBalance, FetchBalance, GeminiStreamEvent, GeminiUsageGroup, MotorOptions, NormalizedAttachment, RawAttachment, RepoCapabilitiesInput, SessionCapabilitiesInput, StreamResult, ToolActivityEvent, UsageWindowId, UsageWindows } from "./engine-types.d.ts" */
+/** @import { AgyQuota, ClaudeStreamEvent, ClaudeUsageSnapshot, CodexUsageSnapshot, DeepSeekBalance, FetchBalance, GeminiStreamEvent, GeminiUsageGroup, EngineOptions, NormalizedAttachment, RawAttachment, RepoCapabilitiesInput, SessionCapabilitiesInput, StreamResult, ToolActivityEvent, UsageWindowId, UsageWindows } from "./engine-types.d.ts" */
 
 // Provider catalog and pure helpers: CLI arguments, child environments and
 // translation of each CLI's output into one shape. No processes start here.
@@ -8,7 +8,7 @@ import path from "node:path";
 /**
  * @param {string} motor
  * @param {string} texto
- * @param {MotorOptions} [options]
+ * @param {EngineOptions} [options]
  */
 export function engineCommand(
   motor,
@@ -81,7 +81,7 @@ export const PENSAMIENTO_DEEPSEEK = {
 /**
  * Model, effort and identity flags shared by the headless and interactive Claude Code.
  * @param {string} motor
- * @param {MotorOptions} [options]
+ * @param {EngineOptions} [options]
  */
 export function opcionesClaude(motor, { modelo, esfuerzo } = {}) {
   if (motor === "deepseek") return ["--append-system-prompt", IDENTIDAD_MARINA];

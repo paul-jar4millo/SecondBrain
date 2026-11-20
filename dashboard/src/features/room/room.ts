@@ -8,11 +8,11 @@ import {
   resetCamera,
 } from "./room-camera";
 import {
-  AGENTES,
+  AGENT_SPECS,
   JUGADOR,
-  MODELOS,
+  MODEL_NAMES,
   cargarTodos,
-  crearPersona,
+  createCharacter,
 } from "./room-characters.js";
 import {
   createNavigation,
@@ -25,25 +25,25 @@ import {
   zoneGuide,
   tourInstructions,
 } from "./room-life";
-import { FONDO, vestirMundo } from "./room-world.js";
-import { estadoPersonaje, etiquetaRoster } from "./team-panel.js";
+import { FONDO, dressWorld } from "./room-world.js";
+import { characterState, etiquetaRoster } from "./team-panel.js";
 import { cursorFor, pickTarget } from "./room-pick.js";
 import { createOverlayStack } from "./room-overlays.js";
 import { createWorldBoards } from "./room-boards.js";
 import {
-  sesionesEscena,
+  sceneSessions,
   conciliarCopias,
   type CopiaObservada,
 } from "./room-sessions";
 import {
-  equiposEscena,
+  sceneTeams,
   figurasEsperandoOk,
-  puestosEquipo,
-  relevosNuevos,
-  type AprobacionObservada,
-  type PuestoEquipo,
+  teamSeats,
+  newHandoffs,
+  type ObservedApproval,
+  type TeamSeat,
 } from "./room-teams";
-import { createHilos } from "./room-threads";
+import { createThreads } from "./room-threads";
 import {
   advanceTour,
   thumbAxis,
@@ -79,8 +79,8 @@ import type {
   TeamEvent,
 } from "../team/team-controller";
 import type { RoomSummary } from "./room-summary";
-type Spec = (typeof AGENTES)[number];
-type Person = Awaited<ReturnType<typeof crearPersona>>;
+type Spec = (typeof AGENT_SPECS)[number];
+type Person = Awaited<ReturnType<typeof createCharacter>>;
 interface Actor extends Person {
   route: Point[];
   speed: number;
@@ -248,7 +248,7 @@ export function montar(
     });
   let quality = detectQuality(savedQuality);
   const debug = new URLSearchParams(location.search).has("debug");
-  AGENTES.forEach((a) => {
+  AGENT_SPECS.forEach((a) => {
     cycles.set(a.id, 0);
   });
   root.classList.toggle("is-compact", compact);
@@ -307,7 +307,7 @@ export function montar(
   > | null = null;
   let blocked: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial> | null =
     null;
-  let world: ReturnType<typeof vestirMundo> | null = null;
+  let world: ReturnType<typeof dressWorld> | null = null;
   let worldBoards: ReturnType<typeof createWorldBoards> | null = null;
   let summary = datos?.();
   const updateRoomData = (event: Event) => {
@@ -329,14 +329,14 @@ export function montar(
     ((spec: Spec, x: number, z: number) => Promise<Actor | null>) | null = null;
   const copiasEnCreacion = new Set<string>();
   // Teams: seats around a table, light threads, real handoffs and pending OKs.
-  let puestosEq = new Map<string, PuestoEquipo>();
+  let puestosEq = new Map<string, TeamSeat>();
   let esperandoOk = new Set<string>();
-  let aprobacionesVivas: AprobacionObservada[] = [];
+  let aprobacionesVivas: ObservedApproval[] = [];
   let leyendoAprobaciones = false,
     ultimaLecturaAprobaciones = 0;
   const relevosVistos = new Set<string>();
   let relevosIniciados = false;
-  let hilos: ReturnType<typeof createHilos> | null = null;
+  let hilos: ReturnType<typeof createThreads> | null = null;
   let hilosDeseados: { de: string; a: string }[] = [];
   let teamState: TeamState = { flujos: [], eventos: [] };
   const labels: THREE.Sprite[] = [];
@@ -348,7 +348,7 @@ export function montar(
   });
 
   function sceneState(a: AgentState): SceneState {
-    const state = estadoPersonaje(a);
+    const state = characterState(a);
     const flow = waitingFlow(teamState.flujos, a.id);
     if (!a.ocupada && flow) {
       const s = flow.pasos[flow.indice];
@@ -426,7 +426,7 @@ export function montar(
         actor.raiz.add(actor.okTag);
       } else if (!wants) dropOk(actor);
     }
-    AGENTES.forEach((a) => paintStatus(a.id));
+    AGENT_SPECS.forEach((a) => paintStatus(a.id));
   }
   function syncAgents(d: AgentsState, e = teamState) {
     if (!alive) return;
@@ -436,7 +436,7 @@ export function montar(
       if (actor && !reducedMotion)
         actor.celebrateUntil = performance.now() + 1800;
       q("#room-completion").textContent =
-        `${AGENTES.find((a) => a.id === id)?.nombre || id} terminó su encargo`;
+        `${AGENT_SPECS.find((a) => a.id === id)?.nombre || id} terminó su encargo`;
       q("#room-completion").hidden = false;
       completionUntil = performance.now() + 5000;
       sound.play("complete");
@@ -499,7 +499,7 @@ export function montar(
     (document.activeElement as HTMLElement | null)?.isContentEditable ||
     false;
   const paintRoster = () => {
-    q("#room-roster").innerHTML = AGENTES.map(
+    q("#room-roster").innerHTML = AGENT_SPECS.map(
       (a) =>
         `<button class="team-agent" data-agent="${a.id}" aria-haspopup="dialog" style="--agent-color:${a.color}"><span class="agent-initial">${esc(a.nombre[0])}</span><span><b>${esc(a.nombre)}</b><small data-status="${a.id}">${esc(statusText(a.id))}</small></span><span class="agent-chevron" aria-hidden="true">${ICONS.chevron}</span></button>`,
     ).join("");
@@ -780,7 +780,7 @@ export function montar(
   document.addEventListener("visibilitychange", visibility);
   q("#map-zones").insertAdjacentHTML(
     "beforeend",
-    AGENTES.map(
+    AGENT_SPECS.map(
       (a) =>
         `<i class="map-agent" data-map-agent="${a.id}" style="--agent-color:${a.color}" role="img" aria-label="${esc(a.nombre)}"></i>`,
     ).join("") +
@@ -1130,7 +1130,7 @@ export function montar(
     }
     for (const id of crear) {
       const copia = copiasDeseadas.find((c) => c.id === id)!;
-      const original = AGENTES.find((a) => a.id === copia.baseId);
+      const original = AGENT_SPECS.find((a) => a.id === copia.baseId);
       if (!original) continue;
       const variar = (color: string) =>
         "#" +
@@ -1246,7 +1246,7 @@ export function montar(
       "plano",
       "datos",
       "fuentes",
-      ...MODELOS,
+      ...MODEL_NAMES,
     ]);
     let settled = false;
     // Parallel downloads keep reporting after one fails; never paint over the error.
@@ -1352,7 +1352,7 @@ export function montar(
           progress.update(nombre, done, total);
           report();
         }).then((models) => {
-          MODELOS.forEach((n) => progress.done(n));
+          MODEL_NAMES.forEach((n) => progress.done(n));
           report();
           return models;
         }),
@@ -1366,12 +1366,12 @@ export function montar(
       }
       mapObject = gltf.scene;
       scene.add(mapObject);
-      world = vestirMundo(scene, mapObject, manifest, {
+      world = dressWorld(scene, mapObject, manifest, {
         quieto: reducedMotion,
       });
       worldBoards = createWorldBoards(scene);
       worldBoards.update(summary);
-      hilos = createHilos(scene, reducedMotion);
+      hilos = createThreads(scene, reducedMotion);
       hilos.sincronizar(hilosDeseados);
       nav = createNavigation(
         manifest.width,
@@ -1400,7 +1400,7 @@ export function montar(
         x: number,
         z: number,
       ): Promise<Actor | null> => {
-        const person = await crearPersona(spec);
+        const person = await createCharacter(spec);
         if (!alive || attempt !== startAttempt) {
           person.liberar();
           return null;
@@ -1424,7 +1424,7 @@ export function montar(
       player = await make(JUGADOR, 1, 3);
       if (!player) return;
       const previousPlayerPosition = player.raiz.position.clone();
-      for (const spec of AGENTES) {
+      for (const spec of AGENT_SPECS) {
         const activity = activityFor(spec.id, orders[spec.id], 0);
         const actor = await make(spec, activity.x, activity.z);
         if (!actor) return;
@@ -1562,7 +1562,7 @@ export function montar(
             actor.remaining =
               actor.phase === "working"
                 ? 7
-                : 12 + AGENTES.findIndex((a) => a.id === actor.spec.id) * 3;
+                : 12 + AGENT_SPECS.findIndex((a) => a.id === actor.spec.id) * 3;
           }
           if (!walking && actor.phase === "working")
             actor.angle = actor.activity.angle ?? Math.PI;
@@ -1758,14 +1758,14 @@ export function montar(
   const syncTeam = () => {
     const snapshot = team.getSnapshot();
     const observadas =
-      snapshot.sessions === null ? null : sesionesEscena(snapshot.sessions);
+      snapshot.sessions === null ? null : sceneSessions(snapshot.sessions);
     copiasDeseadas = observadas?.copias || [];
-    const equipos = equiposEscena(snapshot.sessions || []);
-    puestosEq = puestosEquipo(equipos.grupos);
+    const equipos = sceneTeams(snapshot.sessions || []);
+    puestosEq = teamSeats(equipos.grupos);
     hilosDeseados = equipos.hilos;
     hilos?.sincronizar(hilosDeseados);
     // Handoffs come from what the launcher recorded; nothing is invented or fetched.
-    const reales = relevosNuevos(snapshot.sessions || [], relevosVistos);
+    const reales = newHandoffs(snapshot.sessions || [], relevosVistos);
     for (const id of reales.ids) relevosVistos.add(id);
     const ultimo = reales.nuevos.at(-1);
     if (ultimo && relevosIniciados)
@@ -1854,7 +1854,7 @@ export function montar(
     void aprobar()
       .then((lista) => {
         if (alive && Array.isArray(lista))
-          aprobacionesVivas = lista as AprobacionObservada[];
+          aprobacionesVivas = lista as ObservedApproval[];
       })
       .catch(() => {
         /* Keeps the last list; the panel reports the failure. */

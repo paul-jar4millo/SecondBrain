@@ -12,7 +12,7 @@ const FIJOS = [
 ];
 
 /** Lista de espacios a partir de los elementos del vault; los archivados van al final. */
-export function espaciosDe(
+export function workspacesOf(
   items: {
     id: string;
     kind: string;
