@@ -82,3 +82,21 @@ approvals, project dashboards, tools, conversations, workspaces) with
 synthetic data and fake CLIs. They use `BROWSER_EXECUTABLE` when set, then an
 installed Chrome or Edge, then Playwright's Chromium. A headless run does not
 measure a physical GPU or phone.
+
+## Threads (ADR 0010)
+
+`src/features/threads/` is the Threads tool (`/threads`, `/threads/:id`):
+
+- `thread-store.ts`: pure reducer from a snapshot plus stream messages
+  (events, deltas, live item snapshots); `groupTurns` folds each turn's work
+  ("Trabajó 42 s") apart from its messages.
+- `thread-stream.ts`: snapshot, then SSE (`/threads/flujo`, resumes with
+  `Last-Event-ID`); `snapshot-required` reloads; repeated failures fall back
+  to polling. The list follows `/threads/feed` from `globalSeq`.
+- `Timeline`, `items.tsx` (one renderer per item kind), `RequestCard`
+  (questions, approvals and forms inline), `Composer` (send, steer, queue,
+  stop; agent and model per message), `DiffView`, `dialogs.tsx` (new thread,
+  close by PR, merge or discard).
+- Types come from `contracts` as `import type`, so Zod never reaches the
+  bundle. Mobile: one column, the side panel is a bottom sheet, 44 px
+  targets. `ops/verify-threads.mjs` checks desktop and 375 px.

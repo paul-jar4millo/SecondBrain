@@ -261,6 +261,7 @@ export function Workspace() {
   );
   const tools: { path: string; label: string; glyph: GlyphName }[] = [
     { path: "/projects", label: t("tools.projects"), glyph: "proyectos" },
+    { path: "/threads", label: t("tools.threads"), glyph: "equipo" },
     { path: "/team", label: t("tools.team"), glyph: "equipo" },
     { path: "/tasks", label: t("tools.tasks"), glyph: "tareas" },
     { path: "/finance", label: t("tools.finance"), glyph: "finanzas" },
@@ -366,7 +367,7 @@ export function Workspace() {
             <Link
               to="/"
               className={inRoom ? "selected" : ""}
-              style={{ "--slot": -3 } as CSSProperties}
+              style={{ "--slot": -3.5 } as CSSProperties}
             >
               <HudGlyph name="sala" />
               <span>{t("tools.room")}</span>
@@ -375,7 +376,7 @@ export function Workspace() {
               <NavLink
                 key={path}
                 to={path}
-                style={{ "--slot": index - 2 } as CSSProperties}
+                style={{ "--slot": index - 2.5 } as CSSProperties}
               >
                 <HudGlyph name={glyph} />
                 <span>{label}</span>

@@ -71,6 +71,7 @@ const noOverflow = async (page) => {
 // Must match `tools` in src/app/Workspace.tsx.
 const TOOLS = [
   "Proyectos",
+  "Threads",
   "Equipo",
   "Tareas",
   "Finanzas",
