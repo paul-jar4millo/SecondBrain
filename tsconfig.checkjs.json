@@ -25,6 +25,7 @@
     "ops/homelab/*.mjs",
     "lanzador/lib/**/*.mjs",
     "service/lib/*.mjs",
+    "service/http/**/*.mjs",
     "ops/lanzador/*.mjs"
   ]
 }

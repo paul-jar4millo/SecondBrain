@@ -31,6 +31,9 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
   }
   await put("service/lib/shared.mjs", "export const shared = true;");
   await put("service/lib/notes.md", "private");
+  await put("service/http/context.mjs", "export const context = true;");
+  await put("service/http/routes/vault.mjs", "export const routes = true;");
+  await put("service/http/route-types.d.ts", "export {};");
   await put("dashboard/dist/index.html", "<main>synthetic</main>");
   await put("assets/reference-bank/references.json", "{}");
   await put("assets/reference-bank/auth.json", "secret");
@@ -57,6 +60,12 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
   assert.deepEqual(await readdir(path.join(target, "service/lib")), [
     "shared.mjs",
   ]);
+  assert.deepEqual(
+    (await readdir(path.join(target, "service/http"), { recursive: true }))
+      .map((file) => file.split(path.sep).join("/"))
+      .sort(),
+    ["context.mjs", "routes", "routes/vault.mjs"],
+  );
   assert.deepEqual((await readdir(path.join(target, "mcp"))).sort(), [
     "index.mjs",
     "package-lock.json",
