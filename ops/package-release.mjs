@@ -24,10 +24,37 @@ export const RELEASE_MODULES = /** @type {const} */ ([
 ]);
 
 /**
+ * Hosts installed before the English renaming run a compatibility helper
+ * (/usr/local/lib/secondbrain/launcher-compatible.mjs) that reads the session
+ * registry version from lanzador/registro-version.mjs as REGISTRO_VERSION.
+ * Without that file it keeps the previous launcher release. Ship the old marker
+ * next to the new one until every host runs the current helper.
+ * @param {string} root
+ * @param {string} target
+ */
+async function writeLegacyRegistryMarker(root, target) {
+  const marker = await readFile(
+    path.join(root, "launcher/version-registry.mjs"),
+    "utf8",
+  );
+  const version =
+    /^\s*export const SESSION_REGISTRY_VERSION = ([1-9]\d*);\s*$/m.exec(
+      marker,
+    )?.[1];
+  if (!version)
+    throw new Error("launcher/version-registry.mjs no declara la versión.");
+  await writeFile(
+    path.join(target, "lanzador/registro-version.mjs"),
+    `// Legacy marker for host helpers installed before v0.2.0.\nexport const REGISTRO_VERSION = ${version};\n`,
+  );
+}
+
+/**
  * Explicit inputs: never copy an entire checkout or runtime data directory.
  * @param {string} destination
  * @param {{ sourceRoot?: string }} [options]
  */
+
 export async function packageRelease(destination, { sourceRoot = root } = {}) {
   const root = path.resolve(sourceRoot);
   const target = path.resolve(destination);
@@ -98,6 +125,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
         }
     }
   }
+  await writeLegacyRegistryMarker(root, target);
   await mkdir(path.join(target, "lanzador/skills"));
   for (const skill of ["equipo-cuatro-fases", "resumen-matutino"])
     await cp(
