@@ -49,9 +49,9 @@ only this device's preferences in the browser.
 
 ## Implementation and checks
 
-Tokens and rules: `dashboard/src/styles/refugio.css` and
+Tokens and rules: `dashboard/src/styles/refuge.css` and
 `dashboard/src/styles/tools.css`. Camera: `dashboard/src/features/room/room-camera.ts`.
-Modeling: `dashboard/ops/sala-refugio.py`.
+Modeling: `dashboard/ops/room-refuge.py`.
 
 Never invent work states or deliverables. Reduced motion, disconnection and
 missing WebGL must keep access to the data.

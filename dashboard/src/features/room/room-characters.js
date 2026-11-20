@@ -1,5 +1,5 @@
 // Personajes de la sala: figuras adultas, vestidas y originales, modeladas en Blender
-// (ops/sala-modelos.py). Aquí se cargan los GLB, se tiñen y se animan.
+// (ops/room-models.py). Aquí se cargan los GLB, se tiñen y se animan.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as clonarFigura } from "three/addons/utils/SkeletonUtils.js";

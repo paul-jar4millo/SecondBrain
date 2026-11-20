@@ -1,4 +1,4 @@
-/* Functional surfaces of the blue refuge. World geometry and HUD stay in refugio.css. */
+/* Functional surfaces of the blue refuge. World geometry and HUD stay in refuge.css. */
 .tool-workspace[open] {
   display: flex;
   flex-direction: column;
