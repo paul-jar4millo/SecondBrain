@@ -3,6 +3,7 @@
 import path from "node:path";
 import { createProcessTools } from "../execution/process-tools.mjs";
 import { CONTROLLER_FACTORIES } from "../provider-controllers.mjs";
+import { createClosing } from "./engine/closing.ts";
 import { createScheduler } from "./engine/scheduler.ts";
 import { createThreadEngine } from "./engine/thread-engine.ts";
 import { createThreadWorkspaces } from "./engine/workspace.ts";
@@ -16,6 +17,7 @@ import { openStore } from "./store/event-log.ts";
  *   dataDir: string,
  *   projects: Record<string, string>,
  *   git: import("./engine/checkpoints.ts").GitRun,
+ *   gh?: import("./engine/checkpoints.ts").GitRun,
  *   maxActive: number,
  *   toolCatalog?: { getProfile(id: string): any } | null,
  *   controllers?: Record<string, () => import("./engine/thread-engine.ts").ProviderController>,
@@ -27,6 +29,7 @@ export function openThreads({
   dataDir,
   projects,
   git,
+  gh,
   maxActive,
   toolCatalog = null,
   controllers = /** @type {any} */ (CONTROLLER_FACTORIES),
@@ -56,6 +59,7 @@ export function openThreads({
         toolCatalog,
       }),
     controllers,
+    ...(gh ? { closing: createClosing({ git, gh }) } : {}),
   });
   engine.recover();
   const http = createThreadsHttp({ engine, store });
