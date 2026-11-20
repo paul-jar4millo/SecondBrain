@@ -33,15 +33,38 @@ flowchart LR
 
 ## `ci.yml` — verification
 
-| Job | What it does | Blocks merge |
-| --- | --- | --- |
-| `verify` | `npm run lint`, `format:check`, `typecheck`; ShellCheck on all shell scripts; `npm run coverage` (node test runner + Vitest with V8 coverage) and the operations tests; builds the dashboard and packages a release; writes a coverage summary to the job page | Yes |
-| `commits` | Validates every commit subject with `ops/check-commit.mjs` | Yes |
-| `audit` | `npm audit --omit=dev` per module, leaving a visible warning on high-severity advisories; dev dependencies are informational; also runs weekly | No (warns) |
+| Job       | What it does                                                                                                                                                                                                                                                        | Blocks merge |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| `verify`  | `npm run lint`, `format:check`, `typecheck`; ShellCheck on all shell scripts; `npm run coverage` (node test runner + Vitest with V8 coverage) and the operations tests; builds the dashboard and packages a release; writes a coverage summary to the job page      | Yes          |
+| `commits` | Validates every commit subject with `ops/check-commit.mjs`                                                                                                                                                                                                          | Yes          |
+| `audit`   | `npm audit --omit=dev` per module, leaving a visible warning on high-severity advisories; dev dependencies are informational; also runs weekly                                                                                                                      | No (warns)   |
 | `browser` | Playwright suites in four groups (refuge, approvals, project dashboards, tools, conversations, workspaces) with software WebGL, each retried once; runs for pull requests that touch `dashboard/` or `service/` and for manual runs; uploads screenshots on failure | No (reports) |
 
 Which checks gate a merge is decided by the branch protection rules; the
 recommended set is `verify` and `commits`.
+
+### Coverage floors
+
+`npm run coverage` fails when a module's line coverage drops below its floor
+in `ops/coverage.mjs`. Floors only go up: when a change raises coverage,
+raise the floor in the same pull request.
+
+| Module    | Baseline (2026-11-19, v0.1.2) | Floor |
+| --------- | ----------------------------- | ----- |
+| service   | 85.5%                         | 85%   |
+| lanzador  | 65.8%                         | 65%   |
+| dashboard | 40.3%                         | 40%   |
+| mcp       | 38.3%                         | 38%   |
+
+The dashboard figure only counts `.ts`/`.tsx` files (see
+`dashboard/vitest.config.ts`); the remaining `.js` files in
+`src/features/sala` and `src/features/mundo` are not measured until they are
+converted to TypeScript.
+
+`service/tests/route-smoke.test.mjs` calls every route declared in
+`service/routes.mjs` with a valid CSRF token and query, and fails if any of
+them is answered before reaching its handler (unknown route, CSRF, invalid
+query). It is the safety net for refactoring the HTTP layer.
 
 ## `deploy.yml` — continuous deployment
 

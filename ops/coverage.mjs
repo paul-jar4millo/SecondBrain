@@ -23,6 +23,17 @@ const linePercent = (file) => {
   return found ? ((hit / found) * 100).toFixed(1) : "0.0";
 };
 
+// Minimum line coverage per module. Raise a floor when coverage improves; never
+// lower it. Baseline measured on 2026-11-19 (v0.1.2).
+const floors = { service: 85, mcp: 38, lanzador: 65, dashboard: 40 };
+const failures = [];
+const check = (module) => {
+  const percent = linePercent(path.join(root, "coverage", module, "lcov.info"));
+  console.log(`${module}: ${percent}% lines (floor ${floors[module]}%)`);
+  if (Number(percent) < floors[module])
+    failures.push(`${module} ${percent}% < ${floors[module]}%`);
+};
+
 for (const module of ["service", "mcp", "lanzador"]) {
   const dir = path.join(root, module);
   const out = path.join(root, "coverage", module);
@@ -41,12 +52,17 @@ for (const module of ["service", "mcp", "lanzador"]) {
     `--test-reporter-destination=${path.join(out, "lcov.info")}`,
     ...tests,
   ]);
-  console.log(`${module}: ${linePercent(path.join(out, "lcov.info"))}% lines`);
+  check(module);
 }
 console.log("\n== dashboard");
-run(
-  path.join(root, "dashboard"),
-  "npx",
-  ["vitest", "run", "--coverage"],
-  process.platform === "win32",
-);
+// On Windows npx is a .cmd shim and needs a shell; pass one command string so
+// Node does not concatenate unescaped arguments (DEP0190).
+if (process.platform === "win32")
+  run(path.join(root, "dashboard"), "npx vitest run --coverage", [], true);
+else run(path.join(root, "dashboard"), "npx", ["vitest", "run", "--coverage"]);
+check("dashboard");
+
+if (failures.length) {
+  console.error(`\nCoverage below the floor: ${failures.join(", ")}`);
+  process.exit(1);
+}
