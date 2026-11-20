@@ -43,7 +43,7 @@ jobs:
             dashboard/package-lock.json
             service/package-lock.json
             mcp/package-lock.json
-            lanzador/package-lock.json
+            launcher/package-lock.json
       - run: npm run setup
       - name: Test
         run: |

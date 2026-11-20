@@ -23,7 +23,7 @@ export const SPANISH = new Set(
 
 // Folders whose source files follow the convention.
 const SOURCE =
-  /^(service|mcp|lanzador|ops|dashboard\/src|dashboard\/ops)\/.*\.(mjs|js|ts|tsx)$/;
+  /^(service|mcp|launcher|ops|dashboard\/src|dashboard\/ops)\/.*\.(mjs|js|ts|tsx)$/;
 const SKIP = /(^|\/)(node_modules|dist|fixtures)\/|^ops\/compat\//;
 
 /** @param {string} name */
@@ -60,7 +60,7 @@ export function findings() {
       .replace(/\.(test\.)?(mjs|js|ts|tsx|d\.ts)$/, "");
     if (spanishWords(base).length) out.push(file);
     // Exported identifiers of the backend modules.
-    if (!/^(service|mcp|lanzador)\//.test(file) || file.includes("/tests/"))
+    if (!/^(service|mcp|launcher)\//.test(file) || file.includes("/tests/"))
       continue;
     const text = readFileSync(path.join(root, file), "utf8");
     for (const m of text.matchAll(

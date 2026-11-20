@@ -63,7 +63,7 @@ flowchart TB
 | `dashboard` | Installable PWA: 3D refuge, tools (projects, tasks, finance, briefcase, team), demo mode, offline outbox                                                                                         | [module guide](../modules/dashboard.md) |
 | `service`   | The only writer of the vault. Authentication (password, TOTP, OAuth for remote MCP), hash-checked writes, journal and history, finance ledger, approvals, work orders, user requests and effects | [module guide](../modules/service.md)   |
 | `mcp`       | MCP server exposing the vault, finance, briefcase and team tools to agents; a `brain` CLI for isolated sessions                                                                                  | [module guide](../modules/mcp.md)       |
-| `lanzador`  | Starts, observes and cancels agent CLIs in isolated sessions; structured conversations, checkpoints, diffs, pull requests and teams                                                              | [module guide](../modules/lanzador.md)  |
+| `lanzador`  | Starts, observes and cancels agent CLIs in isolated sessions; structured conversations, checkpoints, diffs, pull requests and teams                                                              | [module guide](../modules/launcher.md)  |
 | `ops`       | Release packaging, container provisioning, systemd units, encrypted backups, deployment helper                                                                                                   | [deployment](../deployment.md)          |
 
 ## Key properties

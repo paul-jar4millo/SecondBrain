@@ -13,7 +13,7 @@ of each module you touch.
   and links, re-read on conflict. Structured finance changes only through
   `brain_finance_operation`. Never store secrets or conversation transcripts.
 - `service/` is the single writer (no SQL mirror); `mcp/` uses its API;
-  `dashboard/` is the interface; `lanzador/` runs agent CLIs in isolation;
+  `dashboard/` is the interface; `launcher/` runs agent CLIs in isolation;
   `ops/` packages and operates the system. CI/CD ships code, never knowledge.
 - Language: the UI is Spanish by default with English in
   `dashboard/src/i18n/`; identifiers, comments and docs are English.
@@ -28,5 +28,5 @@ of each module you touch.
   Tests use synthetic temporary directories; never mutate a real vault to
   verify code.
 - Architecture and limits: [docs/architecture](docs/architecture/README.md),
-  [MCP tools](docs/mcp-tools.md), [lanzador](docs/modules/lanzador.md),
+  [MCP tools](docs/mcp-tools.md), [lanzador](docs/modules/launcher.md),
   [deployment](docs/deployment.md).

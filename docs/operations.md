@@ -59,7 +59,7 @@ part of a software rollback.
 
 Before restarting the agent runner, the helper checks that the release
 `current` points to can read the stored session index
-(`lanzador/version-registry.mjs`). If active sessions exist, deployment
+(`launcher/version-registry.mjs`). If active sessions exist, deployment
 waits up to 15 minutes, then finishes the service update and keeps the
 previous runner, reporting it in the health endpoint.
 

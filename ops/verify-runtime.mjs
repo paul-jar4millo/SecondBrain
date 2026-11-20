@@ -18,11 +18,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { arrancar } from "../lanzador/index.mjs";
+import { arrancar } from "../launcher/index.mjs";
 import { createApplication } from "../service/index.mjs";
 /** @import { Server } from "node:http" */
-/** @import { ConversationReceipt } from "../lanzador/provider-conversation-types.mjs" */
-/** @import { LauncherSession } from "../lanzador/session-types.d.ts" */
+/** @import { ConversationReceipt } from "../launcher/provider-conversation-types.mjs" */
+/** @import { LauncherSession } from "../launcher/session-types.d.ts" */
 /** @import { ProductQuestionAnswer, RuntimeCatalog, RuntimeConversationSnapshot, RuntimeProductQuestion, RuntimeTurn, RuntimeVerificationReport, RuntimeWorkOrderDetail } from "./runtime-verification-types.d.ts" */
 
 const execFileAsync = promisify(execFile);
@@ -730,7 +730,7 @@ export async function runLiveVerification({
     if (withSkills || skillsOnly) {
       const skillFile = path.join(
         repoRoot,
-        "lanzador",
+        "launcher",
         "skills",
         "personal-context",
         "SKILL.md",

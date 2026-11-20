@@ -52,7 +52,7 @@ raise the floor in the same pull request.
 | Module    | Baseline (2026-11-19, v0.1.2) | Current | Floor |
 | --------- | ----------------------------- | ------- | ----- |
 | service   | 85.5%                         | 87.4%   | 87%   |
-| lanzador  | 65.8%                         | 68.2%   | 68%   |
+| launcher  | 65.8%                         | 68.2%   | 68%   |
 | dashboard | 40.3%                         | 40.3%   | 40%   |
 | mcp       | 38.3%                         | 41.7%   | 41%   |
 

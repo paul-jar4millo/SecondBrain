@@ -20,12 +20,12 @@ projects such as T3 Code already integrate several of them.
 ## Considered options
 
 1. Embed T3 Code as a component or run it as a parallel service.
-2. Write own adapters in `lanzador/`, using T3 Code only as a protocol reference.
+2. Write own adapters in `launcher/`, using T3 Code only as a protocol reference.
 
 ## Decision outcome
 
-Chosen option 2. `lanzador/provider-adapters.mjs` defines the capability
-contract and `lanzador/lib/providers/` holds one controller per protocol:
+Chosen option 2. `launcher/provider-adapters.mjs` defines the capability
+contract and `launcher/lib/providers/` holds one controller per protocol:
 `codex.mjs` (app-server JSON-RPC), `claude.mjs` (Claude Agent SDK, also used
 for DeepSeek with separate configuration) and `acp.mjs` (Antigravity over ACP).
 Conversations are persisted as normalized items by

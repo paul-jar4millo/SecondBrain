@@ -110,7 +110,7 @@ test("selecciona la release compatible retenida cuando current apunta a un rollb
 
 test("la marca real del lanzador cumple también el formato estricto de helpers ya instalados", async (t) => {
   const marker = await readFile(
-    new URL("../../lanzador/version-registry.mjs", import.meta.url),
+    new URL("../../launcher/version-registry.mjs", import.meta.url),
     "utf8",
   );
   // Helpers installed before 0.1.1 only accept a file made of the export line.
