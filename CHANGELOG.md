@@ -4,6 +4,42 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-20
+
+Agent work moves from sessions to threads (ADR 0009–0011). The session-era
+chat, teams and work orders are removed.
+
+### Added
+
+- Threads: one task per thread, with its own worktree and `sb/…` branch (or a
+  scratch folder), an SQLite event log in the launcher (`node:sqlite`) and a
+  resumable SSE stream. Send, steer, queue and stop; questions, approvals and
+  MCP forms answered inline; diff per thread and per turn; close by pull
+  request, local merge or discard.
+- `contracts/`: shared Zod schemas in native TypeScript.
+- Service: `/api/v1/threads…` and `/bandeja`, a capability per thread, and
+  the MCP tool `thread_ask_user`.
+- Dashboard: the Threads tool (`/threads`), desktop and mobile.
+- `ops/verify-runtime.mjs`: opt-in end-to-end check with a real agent.
+
+### Removed
+
+- Launcher sessions, terminal harness, hooks, teams, checkpoints, the
+  `sb-hilo` CLI and the `@xterm` dependencies.
+- Service routes `/agentes/sesiones/*` (the list answers `[]`),
+  `/agentes/conversacion/*`, `/agentes/terminal/*`, `/equipo/*` and
+  `/encargos*`; MCP tools `equipo_*`.
+
+### Changed
+
+- The morning summary opens a scratch thread with `POST /threads`.
+- The launcher needs only the control credential (`SB_HOOK_HASH_FILE` is
+  gone). After deploying, remove the session data on the host:
+  `sesiones.json`, `sesiones.json.d/`, `indices-checkpoint/`, `links/`,
+  `/usr/local/bin/sb-hilo` and the hook token.
+- The legacy Equipo panel stays until the dashboard cleanup and shows no
+  sessions.
+
 ## [0.3.1] - 2026-11-20
 
 ### Fixed
