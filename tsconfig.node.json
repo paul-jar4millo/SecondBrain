@@ -1,0 +1,29 @@
+{
+  // Native TypeScript for backend code (ADR 0011): Node strips types at load
+  // time, so only erasable syntax is allowed and imports keep .ts extensions.
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2024"],
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"],
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": false,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "contracts/**/*.ts",
+    "launcher/**/*.ts",
+    "service/**/*.ts",
+    "mcp/**/*.ts",
+    "discord/**/*.ts"
+  ],
+  "exclude": ["**/node_modules/**", "**/*.d.ts", "dashboard/**"]
+}

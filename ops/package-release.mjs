@@ -50,6 +50,55 @@ async function writeLegacyRegistryMarker(root, target) {
 }
 
 /**
+ * Runtime sources: .mjs and native TypeScript (ADR 0011), never declarations.
+ * @param {string} name
+ */
+const isSource = (name) =>
+  name.endsWith(".mjs") || (name.endsWith(".ts") && !name.endsWith(".d.ts"));
+
+/**
+ * Shared schemas (ADR 0011). contracts/ sits next to lanzador/ and service/,
+ * so their relative imports resolve. Zod has no dependencies and is copied as
+ * plain files into contracts/node_modules: the deploy helper on the host only
+ * installs service, mcp and lanzador and rejects symlinks in the archive.
+ * @param {string} root
+ * @param {string} target
+ */
+async function packageContracts(root, target) {
+  const manifest = path.join(root, "contracts/package.json");
+  const exists = await stat(manifest)
+    .then((s) => s.isFile())
+    .catch((e) => {
+      if (e.code === "ENOENT") return false;
+      throw e;
+    });
+  if (!exists) return;
+  const pkg = JSON.parse(await readFile(manifest, "utf8"));
+  if (!pkg.private)
+    throw new Error("Los módulos de SecondBrain deben ser privados.");
+  const extra = Object.keys(pkg.dependencies ?? {}).filter((d) => d !== "zod");
+  if (extra.length)
+    throw new Error(
+      `contracts solo puede depender de zod: ${extra.join(", ")}`,
+    );
+  await mkdir(path.join(target, "contracts"), { recursive: true });
+  await cp(manifest, path.join(target, "contracts/package.json"));
+  await cp(
+    path.join(root, "contracts/src"),
+    path.join(target, "contracts/src"),
+    {
+      recursive: true,
+      filter: (file) => !file.endsWith(".d.ts") && !file.includes("tests"),
+    },
+  );
+  await cp(
+    path.join(root, "node_modules/zod"),
+    path.join(target, "contracts/node_modules/zod"),
+    { recursive: true, dereference: true },
+  );
+}
+
+/**
  * Explicit inputs: never copy an entire checkout or runtime data directory.
  * @param {string} destination
  * @param {{ sourceRoot?: string }} [options]
@@ -84,7 +133,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
     })) {
       if (
         entry.isFile() &&
-        (entry.name.endsWith(".mjs") ||
+        (isSource(entry.name) ||
           (module === "launcher" && entry.name === "terminal.py") ||
           entry.name === "package.json")
       )
@@ -93,8 +142,14 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
           path.join(target, output, entry.name),
         );
     }
-    // Internal folders of a package, recursively: only .mjs sources.
-    for (const folder of ["lib", "http", "execution", "conversation"]) {
+    // Internal folders of a package, recursively: only .mjs and .ts sources.
+    for (const folder of [
+      "lib",
+      "http",
+      "execution",
+      "conversation",
+      "threads",
+    ]) {
       const lib = path.join(root, module, folder);
       const libEntries = await readdir(lib, {
         withFileTypes: true,
@@ -107,7 +162,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
         },
       );
       for (const entry of libEntries)
-        if (entry.isFile() && entry.name.endsWith(".mjs")) {
+        if (entry.isFile() && isSource(entry.name)) {
           const relative = path.relative(
             lib,
             path.join(entry.parentPath, entry.name),
@@ -126,6 +181,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
     }
   }
   await writeLegacyRegistryMarker(root, target);
+  await packageContracts(root, target);
   await mkdir(path.join(target, "lanzador/skills"));
   for (const skill of ["equipo-cuatro-fases", "resumen-matutino"])
     await cp(
