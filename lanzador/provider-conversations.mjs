@@ -903,6 +903,9 @@ export function createProviderConversations({
       mode = "send",
       attachments = [],
       online = true,
+      // The caller still holds the session: a turn this layer has already
+      // finished must not leave the message accepted but never delivered.
+      queueIfIdle = false,
     } = /** @type {any} */ ({}),
   ) {
     if (!clientMessageId || typeof clientMessageId !== "string") {
@@ -944,6 +947,7 @@ export function createProviderConversations({
     const job = running.get(id);
     if (
       !online ||
+      (!job && queueIfIdle) ||
       (job &&
         (mode === "queue" || mode === "send" || !job.control?.supportsSteer))
     ) {

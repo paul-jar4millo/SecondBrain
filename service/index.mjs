@@ -494,6 +494,9 @@ export async function createApplication(options = {}) {
   };
   const activeSessionBridges = new Map();
   const sessionWorkOrderLinks = new Map();
+  /** Sessions that received a message while their bridge was open. */
+  const followUpTurns = new Set();
+  let closed = false;
   const bridgeSessionToWorkOrder = (
     sessionId,
     workOrderId,
@@ -502,11 +505,15 @@ export async function createApplication(options = {}) {
     if (!sessionId || !workOrderId) return;
     sessionWorkOrderLinks.set(sessionId, { workOrderId, fallbackMemberId });
     if (activeSessionBridges.has(sessionId)) {
+      // A message sent during a turn starts another one when it ends: the
+      // open bridge must outlive the first "terminada" to record it.
+      followUpTurns.add(sessionId);
       return;
     }
     const controller = new AbortController();
     activeSessionBridges.set(sessionId, controller);
     const seen = new Set();
+    let awaitingTurn = null;
     void (async () => {
       try {
         const upstream = await lanzador.flujo(
@@ -597,10 +604,18 @@ export async function createApplication(options = {}) {
               }
             }
             if (
-              ["terminada", "cancelada", "interrumpida", "error"].includes(
+              !["terminada", "cancelada", "interrumpida", "error"].includes(
                 state.status,
               )
             ) {
+              clearTimeout(awaitingTurn);
+              awaitingTurn = null;
+            } else if (followUpTurns.delete(sessionId)) {
+              // Give the queued message time to start; a cancelled one
+              // never does.
+              awaitingTurn = setTimeout(() => controller.abort(), 60_000);
+              awaitingTurn.unref?.();
+            } else if (!awaitingTurn) {
               controller.abort();
               break;
             }
@@ -609,7 +624,11 @@ export async function createApplication(options = {}) {
       } catch {
         /* Bridge terminates silently when stream closes or is aborted. */
       } finally {
+        clearTimeout(awaitingTurn);
         activeSessionBridges.delete(sessionId);
+        // A message that arrived while this bridge was closing.
+        if (followUpTurns.delete(sessionId) && !closed)
+          bridgeSessionToWorkOrder(sessionId, workOrderId, fallbackMemberId);
       }
     })();
   };
@@ -1270,7 +1289,7 @@ export async function createApplication(options = {}) {
             const payload = await body(request);
             const sent = await lanzador.enviarMensajeConversacion(payload);
             const link = sessionWorkOrderLinks.get(payload.id);
-            if (link && !activeSessionBridges.has(payload.id)) {
+            if (link) {
               bridgeSessionToWorkOrder(
                 payload.id,
                 link.workOrderId,
@@ -2416,7 +2435,9 @@ export async function createApplication(options = {}) {
   }, 86400000);
   maintenance.unref();
   const close = async () => {
+    closed = true;
     clearInterval(maintenance);
+    followUpTurns.clear();
     for (const c of activeSessionBridges.values()) c.abort();
     activeSessionBridges.clear();
     await aprobaciones.cerrar();
