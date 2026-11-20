@@ -27,6 +27,7 @@ import {
   serveProviderConversation,
 } from "./provider-conversations.mjs";
 import { createToolCatalogStore } from "./tool-catalog.mjs";
+import { openThreads } from "./threads/runtime.mjs";
 
 /** @import { LauncherRequestBody, LauncherServerOptions } from "./launcher-server-types.d.ts" */
 /** @import { ExecutionRequest } from "./types.d.ts" */
@@ -134,6 +135,15 @@ export async function arrancar(env = process.env) {
       dataDir: dataDir,
       env,
     });
+    // Threads (ADR 0010) live next to the session-era chat until it is removed.
+    const threads = openThreads({
+      env,
+      dataDir,
+      projects,
+      git: gitExecutor.git,
+      maxActive: limits.maxActivos,
+      toolCatalog,
+    });
     const executor = createExecutor({
       registro: registry,
       equipos: teams,
@@ -173,9 +183,11 @@ export async function arrancar(env = process.env) {
       espacios: spaces,
       controlHash,
       hookHash,
+      threads,
     });
     server.once("close", () => {
       unsubscribeConversations();
+      void threads.close().catch(() => {});
       Promise.resolve(executor.cerrarTodo?.())
         .catch(() => {})
         .finally(() => {
@@ -240,6 +252,7 @@ export function createLauncherServer({
   espacios: spaces,
   controlHash,
   hookHash,
+  threads = null,
   registrar: register = (line) => console.error(line),
 }) {
   if (
@@ -275,6 +288,7 @@ export function createLauncherServer({
       )
         return send(401, { error: "No autorizado." });
       const ruta = new URL(url, "http://127.0.0.1");
+      if (threads && (await threads.http.handle(req, res, ruta))) return;
       const sessionAction =
         /^\/sesiones\/([a-f0-9-]{36})\/(diff|pr\/propuesta|revertir|pr\/redactar|pr)$/i.exec(
           ruta.pathname,

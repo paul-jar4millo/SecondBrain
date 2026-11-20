@@ -55,3 +55,24 @@ sb-hilo pr <id> --borrador
 
 `--wait` exits `0` on success, `1` on failure, `124` on timeout and `2` on
 incorrect usage.
+
+## Threads (ADR 0010)
+
+`launcher/threads/` replaces sessions step by step. A thread is one task:
+
+- `store/`: `threads.sqlite` (ADR 0009). The `events` log is the source of
+  truth; `items`, `turns`, `requests` and `inbox_view` are projections.
+- `engine/thread-engine.ts`: commands (create, send with `send|steer|queue`,
+  interrupt, answer) and the turn loop. Each repo thread gets a worktree on
+  its own branch `sb/<slug>-<id>`; scratch threads get a private folder.
+- `engine/event-mapper.ts`: provider callbacks and `ProviderEvent`s become
+  items; streamed text and command output are ephemeral deltas.
+- `engine/scheduler.ts`: `SB_MAX_ACTIVOS` slots, owner turns first; a
+  waiting turn shows "Esperando capacidad".
+- Autonomy `auto-worktree` approves plain command and file approvals inside
+  the worktree; questions and MCP forms always wait for the owner.
+- HTTP (loopback, control token): `GET|POST /threads`, `GET /threads/:id`,
+  `GET /threads/:id/stream` (SSE, resumes with `Last-Event-ID` or `?after=`),
+  `GET /threads/stream` (global feed by `globalSeq`), `POST
+/threads/:id/messages|interrupt|requests/:rid`, `GET /threads/:id/diff`,
+  `GET /threads/:id/turns/:tid/diff`, `GET /inbox`.

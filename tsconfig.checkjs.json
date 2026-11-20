@@ -7,6 +7,7 @@
     "types": ["node"],
     "typeRoots": ["./node_modules/@types"],
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "checkJs": true,
     "noEmit": true,
     "strict": true,
@@ -26,6 +27,7 @@
     "launcher/lib/**/*.mjs",
     "launcher/execution/*.mjs",
     "launcher/conversation/*.mjs",
+    "launcher/threads/*.mjs",
     "service/lib/*.mjs",
     "service/http/**/*.mjs",
     "ops/launcher/*.mjs"

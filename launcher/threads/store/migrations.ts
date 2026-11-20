@@ -114,6 +114,21 @@ export const MIGRATIONS: readonly string[] = [
       FROM threads t
      WHERE t.status IN ('needs-decision', 'ready-for-review', 'failed');
   `,
+  // 2: operational side tables (not projections; never rebuilt from the log).
+  `
+  CREATE TABLE thread_meta (
+    thread_id TEXT PRIMARY KEY,
+    data TEXT NOT NULL
+  ) WITHOUT ROWID;
+
+  CREATE TABLE checkpoints (
+    turn_id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    before_tree TEXT,
+    after_tree TEXT
+  );
+  CREATE INDEX checkpoints_thread ON checkpoints(thread_id);
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
