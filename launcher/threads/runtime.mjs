@@ -57,6 +57,7 @@ export function openThreads({
         sanitizeChildEnv: tools.sanitizeChildEnv,
         acpGeminiDirFor: tools.acpGeminiDirFor,
         toolCatalog,
+        tokenDir: path.join(dataDir, "threads", "tokens"),
       }),
     controllers,
     ...(gh ? { closing: createClosing({ git, gh }) } : {}),

@@ -2,7 +2,8 @@
 // environment, MCP servers, tool profile and a spawn that runs the CLI in
 // its own systemd scope (ADR 0003). Reuses the session-era helpers.
 import { spawn as nodeSpawn } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { effortEnvironment, environmentOf } from "../engines.mjs";
 import { PROVIDER_BY_ENGINE } from "../execution/process-tools.mjs";
 import { sessionCommand, stopSessionScope } from "../limits.mjs";
@@ -45,6 +46,7 @@ export function profileFor(profile, readOnly) {
  *   acpGeminiDirFor: (id: string) => string,
  *   toolCatalog?: { getProfile(id: string): ToolProfile | null | undefined } | null,
  *   spawn?: typeof nodeSpawn,
+ *   tokenDir?: string | null,
  * }} deps
  */
 export function createProviderContextFactory({
@@ -53,13 +55,26 @@ export function createProviderContextFactory({
   acpGeminiDirFor,
   toolCatalog = null,
   spawn = nodeSpawn,
+  tokenDir = null,
 }) {
+  const tokenFileOf = (/** @type {string} */ threadId) =>
+    tokenDir ? path.join(tokenDir, `${threadId}.token`) : null;
+  /** @param {string} threadId */
+  const existingTokenFile = async (threadId) => {
+    const file = tokenFileOf(threadId);
+    if (!file) return null;
+    return access(file).then(
+      () => file,
+      () => null,
+    );
+  };
   /**
    * @param {{ threadId: string, agent: { engine: string, model?: string, effort?: string }, cwd: string, readOnly: boolean }} input
    */
   async function buildAgentContext({ threadId, agent, cwd, readOnly }) {
     const scopeId = scopeIdOf(threadId);
     const engine = agent.engine;
+    const tokenFile = await existingTokenFile(threadId);
     const billingGranted =
       engine !== "deepseek" || env.SB_ALLOW_BILLED_DEEPSEEK === "1";
     const base =
@@ -78,7 +93,7 @@ export function createProviderContextFactory({
         SB_THREAD_ID: threadId,
       },
       profile,
-      null,
+      tokenFile,
       billingGranted,
       engine,
     );
@@ -87,7 +102,7 @@ export function createProviderContextFactory({
       env: { ...env, ...childBase },
       memberId: MCP_ACTOR[engine] || engine,
       sessionId: scopeId,
-      sessionTokenFile: null,
+      sessionTokenFile: tokenFile,
     });
     /** @type {NodeJS.ProcessEnv} */
     const childEnv = { ...childBase, ...mcp.envOverrides };
@@ -164,5 +179,22 @@ export function createProviderContextFactory({
   /** @param {string} threadId */
   const stopScope = (threadId) => stopSessionScope(scopeIdOf(threadId), env);
 
-  return { buildAgentContext, runSetup, stopScope };
+  /**
+   * @param {string} threadId
+   * @param {string} token
+   */
+  async function saveToken(threadId, token) {
+    const file = tokenFileOf(threadId);
+    if (!file) return;
+    await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+    await writeFile(file, token, { mode: 0o600 });
+  }
+
+  /** @param {string} threadId */
+  async function dropToken(threadId) {
+    const file = tokenFileOf(threadId);
+    if (file) await rm(file, { force: true });
+  }
+
+  return { buildAgentContext, runSetup, stopScope, saveToken, dropToken };
 }

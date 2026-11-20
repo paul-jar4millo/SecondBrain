@@ -49,3 +49,19 @@ never interleave.
 `service/tests/` covers auth, CSRF, OAuth, vault writes and recovery, finance,
 approvals, work orders, briefcase limits, packaging and the remote MCP. Helpers
 in `tests/helpers/` create synthetic vaults; tests never use real notes.
+
+## Threads (ADR 0010)
+
+`http/routes/threads.mjs` relays the owner's thread API to the launcher
+(`launcher-threads-client.mjs`): `GET|POST /threads`, `GET /threads/detalle`,
+`GET /threads/flujo` (SSE, resumes with `Last-Event-ID` or `?after=`),
+`GET /threads/feed`, `POST /threads/mensajes|interrumpir|responder|cerrar|archivar`,
+`GET /threads/diff`, `GET /bandeja`. Agents cannot use them.
+
+Each thread gets its own `sbcap_` credential (profile `ejecucion`, narrowed
+by operator policy), bound to the thread id; closing without a PR or
+archiving revokes it. With that credential the agent asks the owner through
+`POST /threads/agente/preguntar` (MCP `thread_ask_user`), and the existing
+`usuario_*` tools are routed to the thread: `/solicitudes/preguntar`,
+`/solicitudes/detalle` and `/solicitudes/esperar` accept `req_…` ids. An
+answer that arrives after the turn ended starts a new turn with it.

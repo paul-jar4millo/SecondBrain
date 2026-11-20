@@ -23,9 +23,13 @@ const validQuery = (schema) => {
   const query = {};
   for (const [key, field] of Object.entries(schema.shape ?? {})) {
     if (field.safeParse(undefined).success) continue;
-    const sample = [randomUUID(), "1", "x"].find(
-      (value) => field.safeParse(value).success,
-    );
+    const sample = [
+      randomUUID(),
+      "1",
+      "x",
+      "thr_sample01",
+      "req_sample01",
+    ].find((value) => field.safeParse(value).success);
     if (sample === undefined) throw new Error(`No sample for query "${key}"`);
     query[key] = sample;
   }

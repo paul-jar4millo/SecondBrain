@@ -302,6 +302,8 @@ export async function createContext(options) {
         return cap;
       case "POST /solicitudes/preguntar":
       case "POST /solicitudes/esperar":
+      case "POST /threads/agente/preguntar":
+      case "GET /threads/agente/solicitud":
         requireAny("user.ask");
         return cap;
       case "POST /solicitudes/aprobacion":

@@ -143,6 +143,24 @@ export function createThreadsHttp({
     ],
     [
       "POST",
+      new RegExp(`^/threads/${ID}/ask$`),
+      async (m, req, res) => {
+        send(res, 201, {
+          request: engine.askUser(m[1] as string, await readJson(req)),
+        });
+      },
+    ],
+    [
+      "GET",
+      new RegExp(`^/threads/${ID}/requests/(req_[0-9A-Za-z_-]{6,64})$`),
+      (m, _req, res) => {
+        send(res, 200, {
+          request: engine.request(m[1] as string, m[2] as string),
+        });
+      },
+    ],
+    [
+      "POST",
       new RegExp(`^/threads/${ID}/close$`),
       async (m, req, res) => {
         send(res, 200, {
@@ -199,6 +217,7 @@ export function createThreadsHttp({
       if (error instanceof EngineError)
         send(res, STATUS_BY_CODE[error.code] ?? 400, {
           error: error.message,
+          seguro: true,
           ...error.details,
         });
       else if ((error as { name?: string })?.name === "ZodError")
