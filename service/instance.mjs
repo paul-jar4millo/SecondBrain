@@ -1,6 +1,8 @@
 import { open, readFile, mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+
+/** @param {number} pid */
 async function processStart(pid) {
   if (process.platform !== "linux") return null;
   try {
@@ -18,6 +20,7 @@ async function processStart(pid) {
     throw error;
   }
 }
+/** @param {string} directory */
 export async function acquireInstance(directory) {
   await mkdir(directory, { recursive: true });
   const file = path.join(directory, "instance.lock"),

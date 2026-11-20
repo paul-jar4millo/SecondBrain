@@ -10,11 +10,28 @@ import path from "node:path";
 import net from "node:net";
 import { pathToFileURL } from "node:url";
 
+/**
+ * @typedef {object} DeploymentParameters
+ * @property {string} proxy
+ * @property {string} gateway
+ * @property {string} pc
+ * @property {string} broadcast
+ * @property {number} agentUid
+ * @property {string} mac
+ * @property {string} remoteWorkdir
+ */
+
+/** @param {DeploymentParameters} p */
 function validate(p) {
-  for (const key of ["proxy", "gateway", "pc", "broadcast"])
+  for (const key of /** @type {const} */ ([
+    "proxy",
+    "gateway",
+    "pc",
+    "broadcast",
+  ]))
     if (net.isIP(p[key]) !== 4)
       throw new Error("Invalid IPv4 parameter: " + key);
-  for (const key of ["agentUid"])
+  for (const key of /** @type {const} */ (["agentUid"]))
     if (!Number.isInteger(p[key]) || p[key] < 1 || p[key] > 65534)
       throw new Error("Invalid UID: " + key);
   if (!/^([a-f0-9]{2}:){5}[a-f0-9]{2}$/i.test(p.mac))
@@ -24,7 +41,9 @@ function validate(p) {
   )
     throw new Error("Invalid remote working directory");
 }
+/** @param {string} text */
 function canonicalUnit(text) {
+  /** @type {Record<string, Record<string, string[]>>} */
   const sections = {};
   let section = "";
   for (const raw of text.split(/\r?\n/)) {
@@ -51,6 +70,10 @@ function canonicalUnit(text) {
     ),
   );
 }
+/**
+ * @param {string} root
+ * @param {string} absolute
+ */
 async function safeDestination(root, absolute) {
   const candidate = path.join(root, ...absolute.split("/").filter(Boolean));
   const relative = path.relative(root, candidate);
@@ -68,6 +91,7 @@ async function safeDestination(root, absolute) {
   }
   return candidate;
 }
+/** @param {{ root?: string, release: string, parameters: DeploymentParameters, check?: boolean }} options */
 export async function configure({
   root = "/",
   release,
@@ -78,6 +102,7 @@ export async function configure({
   root = await realpath(root);
   release = await realpath(release);
   const p = parameters;
+  /** @param {string} text */
   const render = (text) =>
     text
       .replaceAll("@PROXY_IP@", p.proxy)
@@ -207,6 +232,7 @@ if (
 ) {
   try {
     const args = process.argv.slice(2);
+    /** @param {string} name */
     const value = (name) => {
       const at = args.indexOf(name);
       if (at < 0 || !args[at + 1]) throw new Error("Missing " + name);

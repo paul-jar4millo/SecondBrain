@@ -3,6 +3,7 @@ const object = z.object({}).passthrough();
 const entity = z
   .object({ id: z.string(), kind: z.string(), title: z.string() })
   .passthrough();
+/** @type {Partial<Record<string, z.ZodType>>} */
 const schemas = {
   "POST /auth/setup": z
     .object({
@@ -1277,4 +1278,8 @@ ROUTES.set("POST /efectos/conciliar", {
   query: anyQuery,
 });
 
+/**
+ * @param {string | undefined} method
+ * @param {string} route
+ */
 export const routePolicy = (method, route) => ROUTES.get(method + " " + route);

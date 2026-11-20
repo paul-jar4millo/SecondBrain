@@ -11,6 +11,7 @@ const STATES = new Set([
   "interrumpida",
 ]);
 
+/** @param {string} index */
 async function requiredVersion(index) {
   let sessions;
   try {
@@ -39,6 +40,10 @@ async function requiredVersion(index) {
   return sessions.some((s) => Object.hasOwn(s, "_detalle")) ? 2 : 1;
 }
 
+/**
+ * @param {string} release
+ * @param {number} required
+ */
 async function supports(release, required) {
   if (
     !release ||
@@ -61,6 +66,10 @@ async function supports(release, required) {
   return Number(version) >= required;
 }
 
+/**
+ * @param {string} index
+ * @param {string[]} candidates
+ */
 export async function selectLauncherRelease(index, candidates) {
   const required = await requiredVersion(index);
   for (const candidate of candidates)

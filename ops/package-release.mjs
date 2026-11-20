@@ -4,7 +4,11 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-// Explicit inputs: never copy an entire checkout or runtime data directory.
+/**
+ * Explicit inputs: never copy an entire checkout or runtime data directory.
+ * @param {string} destination
+ * @param {{ sourceRoot?: string }} [options]
+ */
 export async function packageRelease(destination, { sourceRoot = root } = {}) {
   const root = path.resolve(sourceRoot);
   const target = path.resolve(destination);
@@ -39,10 +43,13 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
     const libEntries = await readdir(lib, {
       withFileTypes: true,
       recursive: true,
-    }).catch((error) => {
-      if (error.code === "ENOENT") return [];
-      throw error;
-    });
+    }).catch(
+      /** @returns {import("node:fs").Dirent[]} */
+      (error) => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      },
+    );
     for (const entry of libEntries)
       if (entry.isFile() && entry.name.endsWith(".mjs")) {
         const relative = path.relative(

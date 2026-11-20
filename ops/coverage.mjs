@@ -7,12 +7,21 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+/**
+ * @param {string} cwd
+ * @param {string} command
+ * @param {string[]} args
+ * @param {boolean} [shell]
+ */
 const run = (cwd, command, args, shell = false) => {
   const result = spawnSync(command, args, { cwd, stdio: "inherit", shell });
   if (result.status !== 0) process.exit(result.status ?? 1);
 };
 
-/** Line coverage from an LCOV file: sum of LH over sum of LF. */
+/**
+ * Line coverage from an LCOV file: sum of LH over sum of LF.
+ * @param {string} file
+ */
 const linePercent = (file) => {
   let found = 0;
   let hit = 0;
@@ -26,7 +35,9 @@ const linePercent = (file) => {
 // Minimum line coverage per module. Raise a floor when coverage improves; never
 // lower it. Baseline measured on 2026-11-19 (v0.1.2).
 const floors = { service: 85, mcp: 38, lanzador: 65, dashboard: 40 };
+/** @type {string[]} */
 const failures = [];
+/** @param {keyof typeof floors} module */
 const check = (module) => {
   const percent = linePercent(path.join(root, "coverage", module, "lcov.info"));
   console.log(`${module}: ${percent}% lines (floor ${floors[module]}%)`);
@@ -34,7 +45,7 @@ const check = (module) => {
     failures.push(`${module} ${percent}% < ${floors[module]}%`);
 };
 
-for (const module of ["service", "mcp", "lanzador"]) {
+for (const module of /** @type {const} */ (["service", "mcp", "lanzador"])) {
   const dir = path.join(root, module);
   const out = path.join(root, "coverage", module);
   mkdirSync(out, { recursive: true });
