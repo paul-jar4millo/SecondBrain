@@ -1,21 +1,21 @@
 // Pure team logic for the refuge: who sits together, which threads join them,
 // which handoffs really happened and who is waiting for the owner's OK.
 import { PUESTOS } from "./room-life";
-import { figuraDeSesion, type SesionObservada } from "./room-sessions";
+import { sessionFigure, type ObservedSession } from "./room-sessions";
 
-export interface GrupoEquipo {
+export interface TeamGroup {
   equipoId: string;
   /** Figure ids, leader first. */
   miembros: string[];
 }
-export interface Hilo {
+export interface Thread {
   equipoId: string;
   /** Leader figure (or the parent figure) and child figure. */
   de: string;
   a: string;
   hijaSesionId: string;
 }
-export interface PuestoEquipo {
+export interface TeamSeat {
   x: number;
   z: number;
   angle: number;
@@ -27,7 +27,7 @@ export interface RelevoReal {
   de: string;
   para: string;
 }
-export interface AprobacionObservada {
+export interface ObservedApproval {
   actor: string;
   estado: string;
   vence: number;
@@ -38,23 +38,23 @@ const ACTIVA = new Set(["pendiente", "trabajando"]);
 const MESAS = ["revisar", "investigar", "programar", "planificar"];
 const RADIO = 2;
 
-const activas = (sesiones: SesionObservada[]) =>
-  sesiones.filter((s) => ACTIVA.has(s.estado) && figuraDeSesion(s));
+const activas = (sesiones: ObservedSession[]) =>
+  sesiones.filter((s) => ACTIVA.has(s.estado) && sessionFigure(s));
 
 /** Teams with at least two live figures, and one thread per live child. */
-export function equiposEscena(sesiones: SesionObservada[]): {
-  grupos: GrupoEquipo[];
-  hilos: Hilo[];
+export function sceneTeams(sesiones: ObservedSession[]): {
+  grupos: TeamGroup[];
+  hilos: Thread[];
 } {
   const vivas = activas(sesiones).filter((s) => s.equipoId);
-  const porEquipo = new Map<string, SesionObservada[]>();
+  const porEquipo = new Map<string, ObservedSession[]>();
   for (const s of vivas) {
     const lista = porEquipo.get(s.equipoId!) || [];
     lista.push(s);
     porEquipo.set(s.equipoId!, lista);
   }
-  const grupos: GrupoEquipo[] = [];
-  const hilos: Hilo[] = [];
+  const grupos: TeamGroup[] = [];
+  const hilos: Thread[] = [];
   for (const [equipoId, miembros] of porEquipo) {
     if (miembros.length < 2) continue;
     const orden = [
@@ -63,15 +63,15 @@ export function equiposEscena(sesiones: SesionObservada[]): {
     ];
     grupos.push({
       equipoId,
-      miembros: orden.map((s) => figuraDeSesion(s)!),
+      miembros: orden.map((s) => sessionFigure(s)!),
     });
     for (const hija of miembros) {
       const padre = miembros.find((s) => s.id === hija.padreId);
       if (padre)
         hilos.push({
           equipoId,
-          de: figuraDeSesion(padre)!,
-          a: figuraDeSesion(hija)!,
+          de: sessionFigure(padre)!,
+          a: sessionFigure(hija)!,
           hijaSesionId: hija.id,
         });
     }
@@ -82,8 +82,8 @@ export function equiposEscena(sesiones: SesionObservada[]): {
 const redondear = (n: number) => Math.round(n * 1000) / 1000;
 
 /** Seats every member of each team around one worktable, facing it. */
-export function puestosEquipo(grupos: GrupoEquipo[]) {
-  const puestos = new Map<string, PuestoEquipo>();
+export function teamSeats(grupos: TeamGroup[]) {
+  const puestos = new Map<string, TeamSeat>();
   grupos.forEach((grupo, i) => {
     const mesa = MESAS[i % MESAS.length];
     const centro = PUESTOS[mesa];
@@ -107,8 +107,8 @@ export function puestosEquipo(grupos: GrupoEquipo[]) {
  * Handoffs recorded by the launcher that the room has not played yet. Both
  * ends must be live figures; every id seen is returned so it is never replayed.
  */
-export function relevosNuevos(
-  sesiones: SesionObservada[],
+export function newHandoffs(
+  sesiones: ObservedSession[],
   vistos: ReadonlySet<string>,
 ): { nuevos: RelevoReal[]; ids: string[] } {
   const vivas = activas(sesiones);
@@ -125,8 +125,8 @@ export function relevosNuevos(
       nuevos.push({
         id: r.id,
         tipo: r.tipo,
-        de: figuraDeSesion(de)!,
-        para: figuraDeSesion(para)!,
+        de: sessionFigure(de)!,
+        para: sessionFigure(para)!,
       });
   }
   return { nuevos, ids };
@@ -134,7 +134,7 @@ export function relevosNuevos(
 
 /** Base figures whose agent has an approval still pending (not expired). */
 export function figurasEsperandoOk(
-  aprobaciones: AprobacionObservada[],
+  aprobaciones: ObservedApproval[],
   ahora: number,
 ) {
   const ids = new Set<string>();

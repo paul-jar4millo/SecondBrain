@@ -1,5 +1,5 @@
 export type AgentId = "ambar" | "menta" | "lira" | "marina";
-import { sesionesEscena, type SesionObservada } from "../room/room-sessions";
+import { sceneSessions, type ObservedSession } from "../room/room-sessions";
 export type TeamTab = "vivo";
 export interface AgentTarget {
   agentId: string;
@@ -90,7 +90,7 @@ export interface TeamSnapshot {
   loaded: boolean;
   error: string;
   pending: string[];
-  sessions: SesionObservada[] | null;
+  sessions: ObservedSession[] | null;
 }
 export type TeamTransport = (path: string, body?: unknown) => Promise<unknown>;
 
@@ -172,14 +172,14 @@ export function createTeamController(api: TeamTransport) {
         if (!Array.isArray(sessions))
           throw new Error("El lanzador no respondió.");
         publish({
-          agents: sesionesEscena(sessions as SesionObservada[]).base.map(
+          agents: sceneSessions(sessions as ObservedSession[]).base.map(
             (a) => ({
               id: a.id,
               ocupada: !!a.ocupada,
               ultimo: a.ultimo as TeamJob | null,
             }),
           ),
-          sessions: sessions as SesionObservada[],
+          sessions: sessions as ObservedSession[],
           connected: true,
           loaded: true,
           error: "",

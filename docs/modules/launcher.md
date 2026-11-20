@@ -1,4 +1,4 @@
-# lanzador
+# launcher
 
 The agent session runner. It starts, observes and cancels official agent CLIs
 as the unprivileged user `sb-agente`, behind a loopback HTTP API with a bearer

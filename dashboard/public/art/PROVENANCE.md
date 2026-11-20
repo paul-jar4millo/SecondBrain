@@ -1,7 +1,7 @@
 # Visual asset provenance
 
 The scene and characters are in `public/models/sala`. Their editable sources
-are `dashboard/ops/sala-refugio.py` and `sala-modelos.py`; the scene also keeps
+are `dashboard/ops/room-refuge.py` and `room-models.py`; the scene also keeps
 its Blender file. All of them were made for this project.
 
 Portraits in `public/portraits` are rendered from the models by

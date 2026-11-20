@@ -27,7 +27,7 @@ Chosen option 3.
 - Text shown to users and test titles stay in Spanish; the product is in
   Spanish.
 - `ops/tests/naming-convention.test.mjs` fails when a file name or an
-  exported backend identifier contains a common Spanish word
+  exported identifier (backend or dashboard) contains a common Spanish word
   (`ops/naming.mjs`). Existing names are listed in `ops/naming-legacy.json`;
   the list can only shrink, and the test fails when an entry no longer exists.
 

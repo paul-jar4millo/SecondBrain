@@ -20,7 +20,7 @@ npm --prefix dashboard run verify:browser     # Playwright suites
 | `src/i18n/`                                                               | Spanish and English dictionaries (`MessageKey` is checked at compile time)     |
 | `src/features/room/`                                                      | The 3D refuge: scene, camera, characters, boards, quality levels               |
 | `src/features/{projects,tasks,finance,files,team,settings,assist,mundo}/` | Tools                                                                          |
-| `src/styles/`                                                             | `refugio.css` (HUD) and `tools.css` (dialogs and forms)                        |
+| `src/styles/`                                                             | `refuge.css` (HUD) and `tools.css` (dialogs and forms)                         |
 | `ops/`                                                                    | Dev server, precache, Blender scene script, Playwright suites, demo smoke test |
 
 ## Behavior
@@ -47,12 +47,12 @@ worker and live events. `VITE_BASE` sets the public path. This is what
 
 ## The 3D scene
 
-`ops/sala-refugio.py` builds the refuge in Blender and exports
+`ops/room-refuge.py` builds the refuge in Blender and exports
 `public/models/sala/refugio.glb` and `refugio-nav.json` (walkable areas and
-obstacles); the editable file is `ops/sala-refugio.blend`:
+obstacles); the editable file is `ops/room-refuge.blend`:
 
 ```sh
-blender -b --factory-startup -P ops/sala-refugio.py   # from dashboard/
+blender -b --factory-startup -P ops/room-refuge.py   # from dashboard/
 ```
 
 `src/features/room/room-world.js` applies materials and movement. Keep the

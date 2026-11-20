@@ -1,11 +1,11 @@
 import { demoReferences as banco } from "./demo-references";
-import { apiAgentesDemo } from "./room-agents-demo.js";
+import { demoAgentsApi } from "./room-agents-demo.js";
 const demoKey = "sb-refugio-orders-v1";
 const boardKey = "sb-refugio-board-v1";
 export async function apiDemo(path: string, body?: unknown) {
   const orders = JSON.parse(localStorage.getItem(demoKey) || "{}");
   const boards = JSON.parse(localStorage.getItem(boardKey) || "{}");
-  if (path.startsWith("/agentes")) return apiAgentesDemo(path, body);
+  if (path.startsWith("/agentes")) return demoAgentsApi(path, body);
   // One synthetic request waiting for the owner's OK, so the bubble can be seen.
   if (path === "/aprobaciones")
     return [

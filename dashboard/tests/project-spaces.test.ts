@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { espaciosDe } from "../src/features/room/room-workspaces";
+import { workspacesOf } from "../src/features/room/room-workspaces";
 
 describe("project spaces", () => {
   it("uses the actual Mundo project identity instead of adding a second fixed project", () => {
-    const spaces = espaciosDe([
+    const spaces = workspacesOf([
       {
         id: "real-id",
         kind: "project",

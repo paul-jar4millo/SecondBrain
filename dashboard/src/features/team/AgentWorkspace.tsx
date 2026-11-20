@@ -10,7 +10,7 @@ import { Paperclip, RefreshCw, Square, Trash2 } from "lucide-react";
 import { useUI } from "../../components/ui";
 import { isDemo } from "../../core/store";
 import { subscribeChanges } from "../../core/events";
-import { espaciosDe } from "../room/room-workspaces";
+import { workspacesOf } from "../room/room-workspaces";
 import { characters } from "./characters";
 import { AgentPortrait } from "./TeamPrimitives";
 import { teamApi, useTeam } from "./team-store";
@@ -83,7 +83,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
     routeChat && routeChat !== "new"
       ? sessions.find((s) => s.id === routeChat)
       : undefined;
-  const spaces = espaciosDe(items);
+  const spaces = workspacesOf(items);
   const requested =
     params.get("project") ||
     routeSession?.espacioId ||

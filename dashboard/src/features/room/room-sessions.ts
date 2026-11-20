@@ -1,6 +1,6 @@
 import type { AgentState } from "./room-types";
 
-export interface SesionObservada {
+export interface ObservedSession {
   id: string;
   motor: "claude" | "codex" | "agy" | "deepseek";
   copia: number;
@@ -31,8 +31,8 @@ const personaje = {
   deepseek: "marina",
 } as const;
 /** Figure id of a session: the base character, or `<base>#<copy>`. */
-export function figuraDeSesion(
-  s: Pick<SesionObservada, "motor" | "copia">,
+export function sessionFigure(
+  s: Pick<ObservedSession, "motor" | "copia">,
 ): string | null {
   const base = personaje[s.motor];
   if (!base) return null;
@@ -52,7 +52,7 @@ export function conciliarCopias(actuales: string[], deseadas: string[]) {
     retirar: actuales.filter((id) => !deseadasSet.has(id)),
   };
 }
-export function sesionesEscena(sesiones: SesionObservada[]): {
+export function sceneSessions(sesiones: ObservedSession[]): {
   base: AgentState[];
   copias: CopiaObservada[];
 } {

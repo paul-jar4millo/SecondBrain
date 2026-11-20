@@ -2,7 +2,7 @@
 
 SecondBrain runs on one machine you control. There are two supported paths:
 
-| Path                                                       | Use it for                                           | Agents (`lanzador`) |
+| Path                                                       | Use it for                                           | Agents (`launcher`) |
 | ---------------------------------------------------------- | ---------------------------------------------------- | ------------------- |
 | [Docker Compose](#docker-compose)                          | Trying the app, a NAS, a small VPS                   | Not included        |
 | [Proxmox VE container](#proxmox-ve-container-full-install) | The full system with isolated agents, CD and backups | Included            |

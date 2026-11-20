@@ -51,8 +51,10 @@ squash or rebase merges.
 
 - User interface: Spanish by default, with English through `dashboard/src/i18n/`.
   Add every new user-facing string to both dictionaries.
-- Code identifiers, comments and documentation: English. Some module and
-  domain names (`lanzador`, `sala`, `encargos`) are Spanish and stay as they are.
+- Code identifiers, file names, comments and documentation: English
+  ([ADR 0007](docs/adr/0007-english-identifiers.md)). HTTP routes
+  (`/agentes/...`), MCP tools (`equipo_*`), env vars and host unit names keep
+  their Spanish names because they are contracts.
 
 ## Module rules
 
