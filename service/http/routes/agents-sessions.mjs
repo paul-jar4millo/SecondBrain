@@ -18,7 +18,7 @@ export const agentSessionRoutes = (ctx, req) => {
     runStoreOp,
     workOrders,
   } = ctx;
-  const { consulta, request, required, response } = req;
+  const { consulta: query, request, required, response } = req;
   /**
    * Relays the launcher stream of a session, as its terminal or as its conversation.
    * @param {boolean} conversation
@@ -26,12 +26,12 @@ export const agentSessionRoutes = (ctx, req) => {
   const streamSession = async (conversation) => {
     // The launcher's SSE goes through untouched: no buffering, and
     // either side closing ends the other. The browser retries.
-    const origen = new AbortController();
-    const cortar = () => origen.abort();
-    response.on("close", cortar);
+    const origin = new AbortController();
+    const cut = () => origin.abort();
+    response.on("close", cut);
     const upstream = await lanzador.flujo(
-      consulta.get("id"),
-      origen.signal,
+      query.get("id"),
+      origin.signal,
       conversation,
     );
     response.writeHead(200, {
@@ -42,10 +42,10 @@ export const agentSessionRoutes = (ctx, req) => {
     });
     response.flushHeaders?.();
     // A session that ends (logout, expiry) must not keep a stream open.
-    const vigilar = setInterval(() => {
-      if (!auth.authenticated(request)) origen.abort();
+    const watch = setInterval(() => {
+      if (!auth.authenticated(request)) origin.abort();
     }, 20000);
-    vigilar.unref();
+    watch.unref();
     try {
       for await (const chunk of upstream.body ?? []) {
         if (response.destroyed) break;
@@ -54,23 +54,23 @@ export const agentSessionRoutes = (ctx, req) => {
     } catch {
       /* either side closed */
     } finally {
-      clearInterval(vigilar);
-      response.off("close", cortar);
-      origen.abort();
+      clearInterval(watch);
+      response.off("close", cut);
+      origin.abort();
       response.end();
     }
   };
   return {
     "GET /agentes/sesiones": async () => {
-      const sesiones = await lanzador.leer();
+      const sessions = await lanzador.leer();
       // Long transcripts are only read when a conversation is open; the
       // scene and the lists ask for this light version every few seconds.
       return send(
         response,
         200,
-        consulta.has("resumen") && Array.isArray(sesiones)
-          ? sesiones.map(({ mensajes: _m, resultado: _r, ...s }) => s)
-          : sesiones,
+        query.has("resumen") && Array.isArray(sessions)
+          ? sessions.map(({ mensajes: _m, resultado: _r, ...s }) => s)
+          : sessions,
       );
     },
     "GET /agentes/espacios": async () =>
@@ -87,12 +87,12 @@ export const agentSessionRoutes = (ctx, req) => {
         200,
         await lanzador.diff({
           id: required("id"),
-          desde: consulta.get("desde") ?? undefined,
-          hasta: consulta.get("hasta") ?? undefined,
+          desde: query.get("desde") ?? undefined,
+          hasta: query.get("hasta") ?? undefined,
         }),
       ),
     "GET /agentes/sesiones/pr/propuesta": async () =>
-      send(response, 200, await lanzador.propuestaPr(consulta.get("id"))),
+      send(response, 200, await lanzador.propuestaPr(query.get("id"))),
     "POST /agentes/sesiones/revertir": async () =>
       send(response, 200, await lanzador.revertir(await body(request))),
     "POST /agentes/sesiones/pr": async () =>

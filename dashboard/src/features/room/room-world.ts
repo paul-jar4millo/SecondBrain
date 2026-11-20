@@ -14,7 +14,7 @@ function gradiente() {
   return textura;
 }
 
-function crearMar() {
+function createSea() {
   const geometria = new THREE.PlaneGeometry(300, 300, 110, 110);
   geometria.rotateX(-Math.PI / 2);
   const material = new THREE.ShaderMaterial({
@@ -83,10 +83,10 @@ interface Halo {
   wall?: "WallN" | "WallW";
 }
 
-function lineasDeTinta(mapa: THREE.Object3D) {
-  const grupos = new Map<string, ArrayLike<number>[]>();
-  mapa.updateMatrixWorld(true);
-  mapa.traverse((object) => {
+function inkLines(map: THREE.Object3D) {
+  const groups = new Map<string, ArrayLike<number>[]>();
+  map.updateMatrixWorld(true);
+  map.traverse((object) => {
     if (!(object as THREE.Mesh).isMesh) return;
     const o = object as WorldMesh;
     const nombre = o.name;
@@ -100,8 +100,8 @@ function lineasDeTinta(mapa: THREE.Object3D) {
     const grupo = nombre.startsWith("Wall") ? nombre.slice(0, 5) : "World";
     const aristas = new THREE.EdgesGeometry(o.geometry, 38);
     aristas.applyMatrix4(o.matrixWorld);
-    if (!grupos.has(grupo)) grupos.set(grupo, []);
-    grupos.get(grupo)?.push(aristas.attributes.position.array);
+    if (!groups.has(grupo)) groups.set(grupo, []);
+    groups.get(grupo)?.push(aristas.attributes.position.array);
     aristas.dispose();
   });
   const material = new THREE.LineBasicMaterial({
@@ -109,12 +109,12 @@ function lineasDeTinta(mapa: THREE.Object3D) {
     transparent: true,
     opacity: 0.5,
   });
-  const lineas = [];
-  for (const [grupo, partes] of grupos) {
-    const total = partes.reduce((n, p) => n + p.length, 0);
+  const lines = [];
+  for (const [grupo, parts] of groups) {
+    const total = parts.reduce((n, p) => n + p.length, 0);
     const posiciones = new Float32Array(total);
     let offset = 0;
-    for (const p of partes) {
+    for (const p of parts) {
       posiciones.set(p, offset);
       offset += p.length;
     }
@@ -123,18 +123,18 @@ function lineasDeTinta(mapa: THREE.Object3D) {
       "position",
       new THREE.BufferAttribute(posiciones, 3),
     );
-    const linea = new THREE.LineSegments(geometria, material);
-    linea.name = `${grupo}__tinta`;
-    linea.frustumCulled = false;
-    lineas.push(linea);
+    const line = new THREE.LineSegments(geometria, material);
+    line.name = `${grupo}__tinta`;
+    line.frustumCulled = false;
+    lines.push(line);
   }
-  return lineas;
+  return lines;
 }
 
 export function dressWorld(
   scene: THREE.Scene,
   mapa: THREE.Object3D,
-  manifiesto: { halos?: Halo[] },
+  manifest: { halos?: Halo[] },
   { quieto = false } = {},
 ) {
   const rampa = gradiente();
@@ -184,16 +184,16 @@ export function dressWorld(
     mapa.getObjectByName("World_floor") as WorldMesh | undefined
   )?.material;
   if (material?.map) material.map.anisotropy = 4;
-  const tinta = lineasDeTinta(mapa);
-  for (const linea of tinta) {
-    scene.add(linea);
-    if (linea.name.startsWith("WallN")) muros.WallN.push(linea);
-    if (linea.name.startsWith("WallW")) muros.WallW.push(linea);
+  const tinta = inkLines(mapa);
+  for (const line of tinta) {
+    scene.add(line);
+    if (line.name.startsWith("WallN")) muros.WallN.push(line);
+    if (line.name.startsWith("WallW")) muros.WallW.push(line);
   }
-  const mar = crearMar();
+  const mar = createSea();
   scene.add(mar);
   const halo = texturaHalo();
-  const halos = (manifiesto.halos || []).map((h) => {
+  const halos = (manifest.halos || []).map((h) => {
     const sprite = new THREE.Sprite(
       new THREE.SpriteMaterial({
         map: halo,

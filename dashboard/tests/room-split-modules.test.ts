@@ -28,9 +28,9 @@ const snapshot = (over: Partial<TeamSnapshot> = {}): TeamSnapshot => ({
 
 const actor = (over: Partial<Actor> = {}) => {
   const animations: string[] = [];
-  const raiz = new THREE.Group();
+  const root = new THREE.Group();
   const value = {
-    raiz,
+    raiz: root,
     spec: { id: "ambar" },
     animar: (_dt: number, action: string) => animations.push(action),
     liberar: () => {},

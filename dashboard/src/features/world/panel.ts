@@ -18,22 +18,22 @@ interface PanelOptions {
 /** A button or link that carries a data-action. */
 type Action = (b: HTMLElement) => unknown;
 
-export function montarPanel(
-  raiz: HTMLElement,
+export function mountPanel(
+  root: HTMLElement,
   { api: apiBase, confirm: confirmDecision = async () => false }: PanelOptions,
 ) {
   const control = new AbortController();
   const on = <E extends Event>(
-    objetivo: EventTarget,
-    tipo: string,
+    goal: EventTarget,
+    type: string,
     fn: (event: E) => unknown,
   ) =>
-    objetivo.addEventListener(tipo, fn as EventListener, {
+    goal.addEventListener(type, fn as EventListener, {
       signal: control.signal,
     });
   // WorldPage renders these nodes; most lookups are inputs or plain elements.
   const $ = <T extends HTMLElement = HTMLInputElement>(s: string) =>
-    raiz.querySelector<T>(s)!;
+    root.querySelector<T>(s)!;
   const dialog = () => $<HTMLDialogElement>("#dialog");
   const target = (event: Event) => event.target as HTMLInputElement;
   const message = (e: unknown) => (e as Error).message;
@@ -749,7 +749,7 @@ export function montarPanel(
   function hasUnsavedForm() {
     return !!$('#main form[data-dirty="true"]');
   }
-  on(raiz, "click", async (event: MouseEvent) => {
+  on(root, "click", async (event: MouseEvent) => {
     const b = target(event).closest<HTMLButtonElement>("[data-action]");
     if (b) {
       const action = actions[b.dataset.action!];
@@ -779,7 +779,7 @@ export function montarPanel(
       navigate(new URL(a.href).searchParams.get("view") ?? undefined);
     }
   });
-  on(raiz, "change", (event) => {
+  on(root, "change", (event) => {
     const field = target(event);
     if (field.dataset.filter) setFilter(field.dataset.filter, field.value);
     if (field.id === "hidden-videos")
@@ -798,7 +798,7 @@ export function montarPanel(
     const changed = field.closest("form");
     if (changed) changed.dataset.dirty = "true";
   });
-  on(raiz, "input", (event) => {
+  on(root, "input", (event) => {
     const field = target(event);
     const form = field.closest("form");
     if (form) form.dataset.dirty = "true";
@@ -806,7 +806,7 @@ export function montarPanel(
       $("#brief-slug").value = slugify(field.value);
     if (field.id === "brief-slug") field.dataset.edited = "true";
   });
-  on(raiz, "submit", async (event) => {
+  on(root, "submit", async (event) => {
     const form = event.target as HTMLFormElement;
     if (!["brief-form", "task-form", "agent-form"].includes(form.id)) return;
     event.preventDefault();

@@ -58,16 +58,16 @@ it("guarda la configuración en el navegador y la usa en el siguiente encargo", 
       esfuerzo: "low",
     }),
   ).toEqual({ modelo: "gemini-flash-ejemplo-medium", esfuerzo: "low" });
-  const agente = demoAgentsApi("/agentes/encargos", {
+  const agent = demoAgentsApi("/agentes/encargos", {
     id: "lira",
     brief: "hola",
   }) as { ultimo: Record<string, unknown>; historial: unknown[] };
-  expect(agente.ultimo).toMatchObject({
+  expect(agent.ultimo).toMatchObject({
     estado: "listo",
     brief: "hola",
     configuracion: { modelo: "gemini-flash-ejemplo-medium" },
   });
-  expect(agente.historial[0]).toBe(agente.ultimo);
+  expect(agent.historial[0]).toBe(agent.ultimo);
 });
 
 it("rechaza agentes desconocidos y acciones que necesitan el servicio real", () => {

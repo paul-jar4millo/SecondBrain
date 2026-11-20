@@ -35,44 +35,44 @@ const carta = (id, characterId, engine, model, coordinator = false) => ({
 
 test("un encargo de cuatro tarjetas delega por manifiesto, repite motor y se integra sin pisar archivos", async (t) => {
   const dir = await realpath(await mkdtemp(path.join(tmpdir(), "sb-mf-e2e-")));
-  const proyecto = path.join(dir, "proyecto");
-  await mkdir(proyecto, { recursive: true });
+  const project = path.join(dir, "proyecto");
+  await mkdir(project, { recursive: true });
   const vault = path.join(dir, "vault");
   await mkdir(path.join(vault, "00-Inbox"), { recursive: true });
   await writeFile(path.join(vault, "Home.md"), "# Sintético\n");
   const fake = path.join(dir, "fake.mjs");
   await writeFile(fake, "setInterval(() => {}, 1000)");
-  const registro = await openSessionRegistry(
+  const registry = await openSessionRegistry(
     path.join(dir, "state", "sesiones.json"),
   );
-  const equipos = await openTeams(path.join(dir, "state", "equipos"), {
+  const teams = await openTeams(path.join(dir, "state", "equipos"), {
     activo: (id) =>
-      registro
+      registry
         .leer()
         .some(
           (s) => s.id === id && ["pendiente", "trabajando"].includes(s.estado),
         ),
   });
-  const ejecutor = createExecutor({
-    registro,
-    equipos,
+  const executor = createExecutor({
+    registro: registry,
+    equipos: teams,
     env: { ...process.env, SB_LANZADOR_DATA_DIR: path.join(dir, "datos") },
-    proyectos: { prueba: proyecto },
+    proyectos: { prueba: project },
     comando: () => ({ bin: process.execPath, args: [fake] }),
     registrar: () => {},
   });
   const validados = [];
   const hash = (s) => createHash("sha256").update(s).digest("hex");
   const launcher = createLauncherServer({
-    registro,
-    equipos,
-    ejecutor,
+    registro: registry,
+    equipos: teams,
+    ejecutor: executor,
     controlHash: hash("control"),
     hookHash: hash("hook"),
     // Synthetic catalog: records what the launcher checked before starting.
     catalogo: {
-      validar: async (motor, modelo, esfuerzo) => {
-        validados.push([motor, modelo ?? null, esfuerzo ?? null]);
+      validar: async (engine, model, effort) => {
+        validados.push([engine, model ?? null, effort ?? null]);
       },
     },
   });
@@ -93,10 +93,10 @@ test("un encargo de cuatro tarjetas delega por manifiesto, repite motor y se int
   const clientes = [];
   t.after(async () => {
     for (const c of clientes) await c.close();
-    for (const s of registro.leer())
+    for (const s of registry.leer())
       if (["pendiente", "trabajando"].includes(s.estado))
-        await ejecutor.cancelar(s.id).catch(() => {});
-    await Promise.all(registro.leer().map((s) => ejecutor.esperar(s.id)));
+        await executor.cancelar(s.id).catch(() => {});
+    await Promise.all(registry.leer().map((s) => executor.esperar(s.id)));
     await app.close();
     await new Promise((resolve) => launcher.close(resolve));
     await rm(dir, { recursive: true, force: true });
@@ -113,17 +113,17 @@ test("un encargo de cuatro tarjetas delega por manifiesto, repite motor y se int
       .map((c) => c.split(";")[0])
       .join("; "),
   };
-  const pedir = async (ruta, cuerpo) => {
-    const r = await fetch(base + ruta, {
+  const request = async (path, cuerpo) => {
+    const r = await fetch(base + path, {
       method: "POST",
       headers: usuario,
       body: JSON.stringify(cuerpo),
     });
-    const datos = await r.json();
-    assert.ok(r.ok, JSON.stringify(datos));
-    return datos;
+    const data = await r.json();
+    assert.ok(r.ok, JSON.stringify(data));
+    return data;
   };
-  const { encargo } = await pedir("/encargos", {
+  const { encargo: task } = await request("/encargos", {
     title: "Cuatro tarjetas",
     objective: "Delegar respetando el manifiesto",
     acceptanceCriteria: [{ id: "c1", text: "Modelos elegidos" }],
@@ -134,17 +134,17 @@ test("un encargo de cuatro tarjetas delega por manifiesto, repite motor y se int
       carta("lira-1", "lira", "agy", "modelo-c"),
     ],
   });
-  await pedir("/encargos/iniciar", { workOrderId: encargo.id });
-  const lider = await pedir("/agentes/sesiones", {
+  await request("/encargos/iniciar", { workOrderId: task.id });
+  const lead = await request("/agentes/sesiones", {
     motor: "claude",
     origen: "sala",
     proyecto: "prueba",
     brief: "coordina",
-    workOrderId: encargo.id,
+    workOrderId: task.id,
     memberId: "coord",
   });
-  assert.equal(lider.memberId, "coord");
-  assert.equal(lider.modelo, "modelo-coord");
+  assert.equal(lead.memberId, "coord");
+  assert.equal(lead.modelo, "modelo-coord");
 
   async function cliente(actor, sessionId) {
     const server = createBrainMcp({
@@ -170,10 +170,10 @@ test("un encargo de cuatro tarjetas delega por manifiesto, repite motor y se int
     return JSON.parse(r.datos);
   };
 
-  const ambar = await cliente("ambar", lider.id);
+  const ambar = await cliente("ambar", lead.id);
   const herramientas = await ambar.listTools();
-  const encargar = herramientas.tools.find((h) => h.name === "equipo_encargar");
-  assert.equal(encargar.inputSchema.properties.billingAuthorized, undefined);
+  const delegate = herramientas.tools.find((h) => h.name === "equipo_encargar");
+  assert.equal(delegate.inputSchema.properties.billingAuthorized, undefined);
   assert.ok(herramientas.tools.some((h) => h.name === "equipo_integrar"));
 
   // Same engine twice: each card keeps its own model.
@@ -206,9 +206,7 @@ test("un encargo de cuatro tarjetas delega por manifiesto, repite motor y se int
   );
   assert.equal(new Set([h1, h2, h3].map((h) => h.workspacePath)).size, 3);
   assert.ok(
-    validados.some(
-      ([m, modelo]) => m === "claude" && modelo === "modelo-coord",
-    ),
+    validados.some(([m, model]) => m === "claude" && model === "modelo-coord"),
   );
 
   // The leader cannot add a fifth member nor swap a model.
@@ -241,22 +239,22 @@ test("un encargo de cuatro tarjetas delega por manifiesto, repite motor y se int
   });
   // Only the coordinator integrates.
   assert.equal((await llamar(menta1, "equipo_integrar")).error, true);
-  const integrado = await exito(ambar, "equipo_integrar");
-  assert.equal(integrado.estado, "integrado");
+  const integrated = await exito(ambar, "equipo_integrar");
+  assert.equal(integrated.estado, "integrado");
   assert.equal(
-    await readFile(path.join(proyecto, "salida/a.md"), "utf8"),
+    await readFile(path.join(project, "salida/a.md"), "utf8"),
     "A\n",
   );
   assert.equal(
-    await readFile(path.join(proyecto, "salida/b.md"), "utf8"),
+    await readFile(path.join(project, "salida/b.md"), "utf8"),
     "B\n",
   );
 
-  const detalle = await fetch(
-    `${base}/encargos/detalle?id=${encargo.id}&cursor=0`,
+  const detail = await fetch(
+    `${base}/encargos/detalle?id=${task.id}&cursor=0`,
     { headers: usuario },
   );
-  const texto = JSON.stringify(await detalle.json());
+  const texto = JSON.stringify(await detail.json());
   for (const id of ["menta-1", "menta-2", "lira-1"])
     assert.match(texto, new RegExp(id));
   assert.match(texto, /artifact\.published/);

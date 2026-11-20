@@ -31,19 +31,19 @@ test("reenvía consultas y encargos al lanzador autenticado sin exponer el token
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => server.close());
-  const cliente = createLauncherClient(Failure, {
+  const client = createLauncherClient(Failure, {
     url: `http://127.0.0.1:${server.address().port}`,
     token: "secreto",
   });
-  assert.deepEqual(await cliente.leer(), [{ id: "s" }]);
-  assert.deepEqual(await cliente.encargar({ motor: "codex", brief: "x" }), {
+  assert.deepEqual(await client.leer(), [{ id: "s" }]);
+  assert.deepEqual(await client.encargar({ motor: "codex", brief: "x" }), {
     id: "s",
   });
-  await cliente.cancelar("f1111111-1111-4111-8111-111111111111");
-  await cliente.eliminar("f1111111-1111-4111-8111-111111111111");
-  await cliente.espacios();
-  await cliente.espacios({ id: "p1", repositorio: null, revision: 0 });
-  await cliente.entrada({
+  await client.cancelar("f1111111-1111-4111-8111-111111111111");
+  await client.eliminar("f1111111-1111-4111-8111-111111111111");
+  await client.espacios();
+  await client.espacios({ id: "p1", repositorio: null, revision: 0 });
+  await client.entrada({
     id: "f1111111-1111-4111-8111-111111111111",
     raw: "x",
   });
@@ -61,9 +61,9 @@ test("reenvía consultas y encargos al lanzador autenticado sin exponer el token
   );
   assert.ok(requests.every((r) => r.auth === "Bearer secreto"));
   assert.ok(requests.every((r) => !r.body.includes("secreto")));
-  await assert.rejects(cliente.cancelar("../estado"));
-  await assert.rejects(cliente.eliminar("../estado"));
-  await assert.rejects(cliente.flujo("../estado"), { status: 400 });
+  await assert.rejects(client.cancelar("../estado"));
+  await assert.rejects(client.eliminar("../estado"));
+  await assert.rejects(client.flujo("../estado"), { status: 400 });
 });
 
 test("las rutas del lanzador mantienen CSRF y niegan la credencial de sala", async (t) => {
@@ -199,8 +199,8 @@ test("el stream de la terminal se reenvía sin buffer, exige UUID y se cierra en
   t.after(() => rm(dir, { recursive: true, force: true }));
   const abiertas = [];
   const requests = [];
-  let cierreUpstream;
-  const cerrado = new Promise((resolve) => (cierreUpstream = resolve));
+  let closeUpstream;
+  const cerrado = new Promise((resolve) => (closeUpstream = resolve));
   const runner = http.createServer((req, res) => {
     requests.push({ url: req.url, auth: req.headers.authorization });
     if (req.url === "/events") {
@@ -215,7 +215,7 @@ test("el stream de la terminal se reenvía sin buffer, exige UUID y se cierra en
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.write('event: snapshot\ndata: {"datos":"hola"}\n\n');
       abiertas.push(res);
-      res.on("close", cierreUpstream);
+      res.on("close", closeUpstream);
       return;
     }
     res.setHeader("content-type", "application/json");
@@ -261,19 +261,19 @@ test("el stream de la terminal se reenvía sin buffer, exige UUID y se cierra en
     400,
   );
   const controller = new AbortController();
-  const respuesta = await fetch(`${base}/agentes/terminal/stream?id=${id}`, {
+  const response = await fetch(`${base}/agentes/terminal/stream?id=${id}`, {
     signal: controller.signal,
   });
-  assert.equal(respuesta.status, 200);
-  assert.match(respuesta.headers.get("content-type"), /text\/event-stream/);
-  assert.match(respuesta.headers.get("cache-control"), /no-cache/);
-  const lector = respuesta.body.getReader();
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /text\/event-stream/);
+  assert.match(response.headers.get("cache-control"), /no-cache/);
+  const reader = response.body.getReader();
   // The first event arrives while the upstream connection is still open.
-  const primero = new TextDecoder().decode((await lector.read()).value);
+  const primero = new TextDecoder().decode((await reader.read()).value);
   assert.match(primero, /event: snapshot/);
   abiertas[0].write('event: salida\ndata: {"datos":"x","desde":1,"seq":1}\n\n');
   assert.match(
-    new TextDecoder().decode((await lector.read()).value),
+    new TextDecoder().decode((await reader.read()).value),
     /event: salida/,
   );
   const stream = requests.find((r) => r.url === `/sesiones/${id}/stream`);
@@ -282,11 +282,11 @@ test("el stream de la terminal se reenvía sin buffer, exige UUID y se cierra en
   controller.abort();
   await cerrado;
   // The launcher ending closes the browser's stream.
-  const segunda = await fetch(`${base}/agentes/terminal/stream?id=${id}`);
-  const lectorSegunda = segunda.body.getReader();
-  await lectorSegunda.read();
+  const second = await fetch(`${base}/agentes/terminal/stream?id=${id}`);
+  const secondReader = second.body.getReader();
+  await secondReader.read();
   abiertas.at(-1).end();
-  for (;;) if ((await lectorSegunda.read()).done) break;
+  for (;;) if ((await secondReader.read()).done) break;
 });
 
 test("diff, revertir, PR y capacidades: validan con zod, exigen CSRF, niegan la sala y reenvían el aviso del lanzador", async (t) => {
@@ -346,9 +346,9 @@ test("diff, revertir, PR y capacidades: validan con zod, exigen CSRF, niegan la 
       .map((c) => c.split(";")[0])
       .join("; "),
   };
-  const get = (ruta, extra = {}) => fetch(base + ruta, extra);
-  const post = (ruta, cuerpo, h = headers) =>
-    fetch(base + ruta, {
+  const get = (path, extra = {}) => fetch(base + path, extra);
+  const post = (path, cuerpo, h = headers) =>
+    fetch(base + path, {
       method: "POST",
       headers: h,
       body: JSON.stringify(cuerpo),
@@ -382,9 +382,10 @@ test("diff, revertir, PR y capacidades: validan con zod, exigen CSRF, niegan la 
   );
 
   // Writes need the CSRF token and a user session, never the room credential.
-  const sinCsrf = { "content-type": "application/json" };
+  const withoutCsrf = { "content-type": "application/json" };
   assert.equal(
-    (await post("/agentes/sesiones/revertir", { id, n: 1 }, sinCsrf)).status,
+    (await post("/agentes/sesiones/revertir", { id, n: 1 }, withoutCsrf))
+      .status,
     400,
   );
   for (const ruta of [
@@ -424,16 +425,13 @@ test("diff, revertir, PR y capacidades: validan con zod, exigen CSRF, niegan la 
     (await post("/agentes/sesiones/pr", { id, titulo: "" })).status,
     400,
   );
-  const revertir = await post("/agentes/sesiones/revertir", { id, n: 1 });
-  assert.equal(revertir.status, 409);
-  assert.equal(
-    (await revertir.json()).error,
-    "Detén el turno antes de revertir",
-  );
+  const revert = await post("/agentes/sesiones/revertir", { id, n: 1 });
+  assert.equal(revert.status, 409);
+  assert.equal((await revert.json()).error, "Detén el turno antes de revertir");
   // A message the launcher did not mark as safe never reaches the browser.
-  const redactar = await post("/agentes/sesiones/pr/redactar", { id });
-  assert.equal(redactar.status, 502);
-  assert.doesNotMatch(JSON.stringify(await redactar.json()), /secreta/);
+  const redact = await post("/agentes/sesiones/pr/redactar", { id });
+  assert.equal(redact.status, 502);
+  assert.doesNotMatch(JSON.stringify(await redact.json()), /secreta/);
   const pr = await post("/agentes/sesiones/pr", {
     id,
     titulo: "feat: x",

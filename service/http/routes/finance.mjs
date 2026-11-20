@@ -5,41 +5,48 @@ import { Failure } from "../../vault.mjs";
 
 /** @type {RouteModule} */
 export const financeRoutes = (ctx, req) => {
-  const { actorOf, aprobaciones, auth, change, finance, vault } = ctx;
+  const {
+    actorOf,
+    aprobaciones: approvals,
+    auth,
+    change,
+    finance,
+    vault,
+  } = ctx;
   const { request, response } = req;
   return {
     "GET /finance/overview": async () => {
       return send(response, 200, await finance.overview(mexicoDay()));
     },
     "POST /finance/ops": async () => {
-      const operacion = await body(request);
-      const previous = await finance.previous(operacion);
+      const operation = await body(request);
+      const previous = await finance.previous(operation);
       if (previous) return send(response, 200, previous);
-      await finance.validate(operacion, mexicoDay());
-      let aprobacionId;
+      await finance.validate(operation, mexicoDay());
+      let approvalId;
       if (auth.isRoomAgent(request)) {
-        const solicitud = await aprobaciones.solicitar({
+        const solicitud = await approvals.solicitar({
           actor: actorOf(request),
-          operacion,
+          operacion: operation,
         });
-        aprobacionId = solicitud.id;
+        approvalId = solicitud.id;
         if ((await solicitud.esperar) !== "aprobada")
           throw new Failure("La operación no fue aprobada.", 403);
       }
       let result;
       try {
-        result = await finance.run(operacion, mexicoDay());
+        result = await finance.run(operation, mexicoDay());
       } catch (error) {
-        if (aprobacionId)
-          await aprobaciones.finalizar(
-            aprobacionId,
+        if (approvalId)
+          await approvals.finalizar(
+            approvalId,
             "No aplicada: la operación no se pudo guardar.",
           );
         throw error;
       }
-      if (aprobacionId)
-        await aprobaciones.finalizar(
-          aprobacionId,
+      if (approvalId)
+        await approvals.finalizar(
+          approvalId,
           "Aplicada: la operación se guardó.",
         );
       change();

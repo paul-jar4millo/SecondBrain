@@ -24,7 +24,7 @@ export function HarnessChanges({
   id,
   agentName,
   checkpoints,
-  capacidades,
+  capacidades: capabilities,
   working,
   visible,
 }: {
@@ -82,12 +82,12 @@ export function HarnessChanges({
   }, [selection, turn]);
 
   const revertTarget = turn ? turn.n : checkpoints[0]?.n;
-  const revertBlocked = !capacidades?.revertirArchivos
+  const revertBlocked = !capabilities?.revertirArchivos
     ? "Revertir archivos requiere una carpeta con repositorio git."
     : working
       ? "Detén el turno antes de revertir."
       : "";
-  const prBlocked = !capacidades?.crearPr
+  const prBlocked = !capabilities?.crearPr
     ? "Crear un PR requiere un repositorio registrado con remoto en GitHub."
     : working
       ? "Detén el turno antes de crear el PR."
@@ -208,7 +208,7 @@ export function HarnessChanges({
         <PullRequestDialog
           id={id}
           agentName={agentName}
-          capacidades={capacidades}
+          capacidades={capabilities}
           onClose={() => setPrOpen(false)}
           onCreated={() => void load()}
         />

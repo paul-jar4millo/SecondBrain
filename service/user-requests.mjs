@@ -40,12 +40,12 @@ export const NATIVE_CALLBACK_STATUSES = new Set([
 export class UserRequestError extends DomainError {}
 
 export class UserRequestConflictError extends UserRequestError {
-  /** @param {UserRequestReceipt} recibo */
+  /** @param {UserRequestReceipt} receipt */
   constructor(
-    recibo,
+    receipt,
     message = "La solicitud ya fue resuelta con otra decisión.",
   ) {
-    super(message, 409, { recibo });
+    super(message, 409, { recibo: receipt });
   }
 }
 

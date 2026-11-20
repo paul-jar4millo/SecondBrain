@@ -425,17 +425,17 @@ test("rutas HTTP /agentes/herramientas/* respetan permisos de sala y bloquean bi
     dataDir: path.join(dir, "lanzador-data"),
     env: { AGENTES_BRAIN_TOKEN_FILE: path.join(dir, "token") },
   });
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
-  const ejecutor = createExecutor({
-    registro,
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const executor = createExecutor({
+    registro: registry,
     proyectos: { demo: dir },
     env: {},
     toolCatalog,
   });
   const h = (v) => createHash("sha256").update(v).digest("hex");
   const launcher = createLauncherServer({
-    registro,
-    ejecutor,
+    registro: registry,
+    ejecutor: executor,
     toolCatalog,
     controlHash: h("ctrl"),
     hookHash: h("hook"),

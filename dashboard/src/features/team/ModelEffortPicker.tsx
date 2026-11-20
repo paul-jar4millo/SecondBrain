@@ -21,19 +21,19 @@ export const EFFORT_LABELS: Record<string, string> = {
 };
 export const effortLabel = (effort: string) => EFFORT_LABELS[effort] ?? effort;
 
-const key = (motor: string) => `sb-modelo-${motor}`;
+const key = (engine: string) => `sb-modelo-${engine}`;
 
 /** The last choice per agent, on this device; older installs only kept the model. */
-export function loadChoice(motor: string): ModelChoice {
+export function loadChoice(engine: string): ModelChoice {
   try {
-    const stored = JSON.parse(localStorage.getItem(key(motor)) || "null");
+    const stored = JSON.parse(localStorage.getItem(key(engine)) || "null");
     if (stored)
       return {
         modelo: typeof stored.modelo === "string" ? stored.modelo : "",
         esfuerzo: typeof stored.esfuerzo === "string" ? stored.esfuerzo : "",
       };
     return {
-      modelo: localStorage.getItem(`sb-chat-model:${motor}`) || "",
+      modelo: localStorage.getItem(`sb-chat-model:${engine}`) || "",
       esfuerzo: "",
     };
   } catch {
@@ -41,9 +41,9 @@ export function loadChoice(motor: string): ModelChoice {
   }
 }
 
-export function saveChoice(motor: string, choice: ModelChoice) {
+export function saveChoice(engine: string, choice: ModelChoice) {
   try {
-    localStorage.setItem(key(motor), JSON.stringify(choice));
+    localStorage.setItem(key(engine), JSON.stringify(choice));
     return true;
   } catch {
     return false; // Private mode: the choice simply is not remembered.

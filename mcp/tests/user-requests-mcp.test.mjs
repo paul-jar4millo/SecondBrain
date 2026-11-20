@@ -53,7 +53,7 @@ test("herramientas MCP usuario_preguntar, usuario_consultar_respuesta y usuario_
 
   // Create work order from authenticated app side
   const appHeaders = await getCsrfHeaders(baseUrl);
-  const { encargo } = await fetch(`${baseUrl}/encargos`, {
+  const { encargo: task } = await fetch(`${baseUrl}/encargos`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -76,7 +76,7 @@ test("herramientas MCP usuario_preguntar, usuario_consultar_respuesta y usuario_
 
   // 1) Agent asks non-blocking persistent question linked to the WorkOrder
   const asked = await llamar("usuario_preguntar", {
-    workOrderId: encargo.id,
+    workOrderId: task.id,
     titulo: "Prioridad sintética",
     pregunta: "¿Qué ruta priorizamos primero?",
     opciones: ["Ruta A", "Ruta B"],
@@ -114,11 +114,11 @@ test("herramientas MCP usuario_preguntar, usuario_consultar_respuesta y usuario_
   assert.equal(waited.solicitud.response.answer, "Ruta B");
 
   // WorkOrder timeline has both user_request.created and user_request.resolved events
-  const detalle = await fetch(
-    `${baseUrl}/encargos/detalle?id=${encargo.id}&cursor=0`,
+  const detail = await fetch(
+    `${baseUrl}/encargos/detalle?id=${task.id}&cursor=0`,
   ).then((r) => r.json());
   assert.deepEqual(
-    detalle.events.map((e) => e.type),
+    detail.events.map((e) => e.type),
     ["user_request.created", "user_request.resolved"],
   );
 });

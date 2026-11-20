@@ -226,13 +226,13 @@ test("encargos garantizan idempotencia de comandos, cursor monotónico y visibil
   await mkdir(path.join(vault, "00-Inbox"), { recursive: true });
   await writeFile(path.join(vault, "Home.md"), "# Refugio Sintético\n");
 
-  const responderCalls = [];
+  const respondCalls = [];
   const launcher = http.createServer(async (req, res) => {
     const chunks = [];
     for await (const ch of req) chunks.push(ch);
     const bodyText = Buffer.concat(chunks).toString("utf8");
     if (req.url?.includes("/conversation/answer")) {
-      responderCalls.push(JSON.parse(bodyText));
+      respondCalls.push(JSON.parse(bodyText));
       res.setHeader("content-type", "application/json");
       return res.end(JSON.stringify({ ok: true }));
     }
@@ -271,22 +271,22 @@ test("encargos garantizan idempotencia de comandos, cursor monotónico y visibil
     }),
   });
   assert.equal(createRes.status, 201);
-  const { encargo } = await createRes.json();
+  const { encargo: task } = await createRes.json();
 
   // Room agent is denied (403) on user-only endpoints
-  const agentHeaders = (agente) => ({
+  const agentHeaders = (agent) => ({
     authorization: "Bearer room-secret",
     "content-type": "application/json",
-    "x-sb-agente": agente,
+    "x-sb-agente": agent,
   });
   for (const [route, payload] of [
     ["/encargos", {}],
-    ["/encargos/iniciar", { workOrderId: encargo.id }],
+    ["/encargos/iniciar", { workOrderId: task.id }],
     [
       "/encargos/mensajes",
-      { workOrderId: encargo.id, clientMessageId: "m-unauth", text: "hola" },
+      { workOrderId: task.id, clientMessageId: "m-unauth", text: "hola" },
     ],
-    ["/encargos/verificar", { workOrderId: encargo.id, complete: true }],
+    ["/encargos/verificar", { workOrderId: task.id, complete: true }],
   ]) {
     const r = await fetch(`${base}${route}`, {
       method: "POST",
@@ -300,12 +300,12 @@ test("encargos garantizan idempotencia de comandos, cursor monotónico y visibil
   const startRes = await fetch(`${base}/encargos/iniciar`, {
     method: "POST",
     headers: appHeaders,
-    body: JSON.stringify({ workOrderId: encargo.id }),
+    body: JSON.stringify({ workOrderId: task.id }),
   });
   assert.equal(startRes.status, 200);
 
   const msgPayload = {
-    workOrderId: encargo.id,
+    workOrderId: task.id,
     clientMessageId: "cmd-team-1",
     recipient: { scope: "equipo" },
     mode: "send",
@@ -330,7 +330,7 @@ test("encargos garantizan idempotencia de comandos, cursor monotónico y visibil
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
-      workOrderId: encargo.id,
+      workOrderId: task.id,
       clientMessageId: "cmd-direct-menta",
       recipient: { scope: "directo", memberId: "exec-menta" },
       mode: "queue",
@@ -341,7 +341,7 @@ test("encargos garantizan idempotencia de comandos, cursor monotónico y visibil
   // Server-side visibility filtering:
   // 1) Menta (matching agent) sees both team and direct message
   const mentaFeed = await fetch(
-    `${base}/encargos/detalle?id=${encargo.id}&cursor=0`,
+    `${base}/encargos/detalle?id=${task.id}&cursor=0`,
     { headers: agentHeaders("menta") },
   ).then((r) => r.json());
   assert.ok(
@@ -352,7 +352,7 @@ test("encargos garantizan idempotencia de comandos, cursor monotónico y visibil
 
   // 2) Ambar (or even attempting to spoof ?recipientScope=todos or ?memberId=exec-menta) MUST NOT see Menta's direct message
   const ambarSpoof = await fetch(
-    `${base}/encargos/detalle?id=${encargo.id}&recipientScope=todos&memberId=exec-menta`,
+    `${base}/encargos/detalle?id=${task.id}&recipientScope=todos&memberId=exec-menta`,
     { headers: agentHeaders("ambar") },
   ).then((r) => r.json());
   assert.equal(
@@ -373,13 +373,13 @@ test("encargos garantizan idempotencia de comandos, cursor monotónico y visibil
     method: "POST",
     headers: agentHeaders("menta"),
     body: JSON.stringify({
-      workOrderId: encargo.id,
+      workOrderId: task.id,
       type: "turn.completed",
       payload: { summary: "Completado paso 1" },
     }),
   });
   const tailFeed = await fetch(
-    `${base}/encargos/detalle?id=${encargo.id}&cursor=${cursor}`,
+    `${base}/encargos/detalle?id=${task.id}&cursor=${cursor}`,
     { headers: agentHeaders("menta") },
   ).then((r) => r.json());
   assert.equal(tailFeed.events.length, 1);
@@ -412,9 +412,9 @@ test("encargos garantizan idempotencia de comandos, cursor monotónico y visibil
     });
     assert.equal(r.status, 200);
   }
-  assert.equal(responderCalls.length, 3);
-  assert.deepEqual(responderCalls[1].answers.q1, ["opción A", "opción B"]);
-  assert.deepEqual(responderCalls[2].content, {
+  assert.equal(respondCalls.length, 3);
+  assert.deepEqual(respondCalls[1].answers.q1, ["opción A", "opción B"]);
+  assert.deepEqual(respondCalls[2].content, {
     entorno: "staging",
     reintentos: 3,
     confirmar: false,
@@ -429,7 +429,7 @@ test("encargos garantizan idempotencia de comandos, cursor monotónico y visibil
   base = `http://127.0.0.1:${app.server.address().port}/api/v1`;
 
   const rebuiltFeed = await fetch(
-    `${base}/encargos/detalle?id=${encargo.id}&cursor=0`,
+    `${base}/encargos/detalle?id=${task.id}&cursor=0`,
   ).then((r) => r.json());
   assert.equal(rebuiltFeed.snapshot.status, "verificando");
   assert.equal(rebuiltFeed.snapshot.commands.length, 2);
@@ -476,7 +476,7 @@ test("regresión P2 directos: getSnapshotAndFeed filtra commands directos ademá
       toolProfileId: "investigacion",
     },
   ];
-  const { encargo } = await fetch(`${base}/encargos`, {
+  const { encargo: task } = await fetch(`${base}/encargos`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -491,14 +491,14 @@ test("regresión P2 directos: getSnapshotAndFeed filtra commands directos ademá
   await fetch(`${base}/encargos/iniciar`, {
     method: "POST",
     headers: appHeaders,
-    body: JSON.stringify({ workOrderId: encargo.id }),
+    body: JSON.stringify({ workOrderId: task.id }),
   });
 
   await fetch(`${base}/encargos/mensajes`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
-      workOrderId: encargo.id,
+      workOrderId: task.id,
       clientMessageId: "c-team",
       recipient: { scope: "equipo" },
       text: "Aviso general equipo",
@@ -508,7 +508,7 @@ test("regresión P2 directos: getSnapshotAndFeed filtra commands directos ademá
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
-      workOrderId: encargo.id,
+      workOrderId: task.id,
       clientMessageId: "c-direct-a",
       recipient: { scope: "directo", memberId: "coord-ambar" },
       text: "Confidencial solo A",
@@ -518,7 +518,7 @@ test("regresión P2 directos: getSnapshotAndFeed filtra commands directos ademá
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
-      workOrderId: encargo.id,
+      workOrderId: task.id,
       clientMessageId: "c-direct-b",
       recipient: { scope: "directo", memberId: "exec-menta" },
       text: "Confidencial solo B",
@@ -526,7 +526,7 @@ test("regresión P2 directos: getSnapshotAndFeed filtra commands directos ademá
   });
 
   // 1) Store projection directly: B must not see A's direct command or event
-  const feedBStore = app.workOrders.getSnapshotAndFeed(encargo.id, {
+  const feedBStore = app.workOrders.getSnapshotAndFeed(task.id, {
     cursor: 0,
     memberId: "exec-menta",
   });
@@ -544,7 +544,7 @@ test("regresión P2 directos: getSnapshotAndFeed filtra commands directos ademá
   );
 
   // 2) Store projection for third member Lira: only team command & team events, ZERO directs
-  const feedLiraStore = app.workOrders.getSnapshotAndFeed(encargo.id, {
+  const feedLiraStore = app.workOrders.getSnapshotAndFeed(task.id, {
     cursor: 0,
     memberId: "inv-lira",
   });
@@ -558,18 +558,18 @@ test("regresión P2 directos: getSnapshotAndFeed filtra commands directos ademá
   );
 
   // 3) Store projection for team scope hides ALL direct commands
-  const feedEquipo = app.workOrders.getSnapshotAndFeed(encargo.id, {
+  const teamFeed = app.workOrders.getSnapshotAndFeed(task.id, {
     cursor: 0,
     recipientScope: "equipo",
   });
   assert.deepEqual(
-    feedEquipo.snapshot.commands.map((c) => c.text),
+    teamFeed.snapshot.commands.map((c) => c.text),
     ["Aviso general equipo"],
   );
 
   // 4) HTTP projections: normal Menta sees own direct + team, NOT A; spoofing A yields team only
   const httpMenta = await fetch(
-    `${base}/encargos/detalle?id=${encargo.id}&cursor=0`,
+    `${base}/encargos/detalle?id=${task.id}&cursor=0`,
     {
       headers: {
         authorization: "Bearer room-secret",
@@ -582,7 +582,7 @@ test("regresión P2 directos: getSnapshotAndFeed filtra commands directos ademá
     ["Aviso general equipo", "Confidencial solo B"],
   );
   const httpMentaSpoof = await fetch(
-    `${base}/encargos/detalle?id=${encargo.id}&cursor=0&recipientScope=todos&memberId=coord-ambar`,
+    `${base}/encargos/detalle?id=${task.id}&cursor=0&recipientScope=todos&memberId=coord-ambar`,
     {
       headers: {
         authorization: "Bearer room-secret",
@@ -597,7 +597,7 @@ test("regresión P2 directos: getSnapshotAndFeed filtra commands directos ademá
 
   // 4) Authorized owner keeps full visibility without altering commands
   const httpOwner = await fetch(
-    `${base}/encargos/detalle?id=${encargo.id}&cursor=0`,
+    `${base}/encargos/detalle?id=${task.id}&cursor=0`,
   ).then((r) => r.json());
   assert.equal(httpOwner.snapshot.commands.length, 3);
   assert.ok(

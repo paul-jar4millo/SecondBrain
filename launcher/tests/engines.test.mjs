@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   engineCommand,
-  entornoDe,
-  entornoEsfuerzo,
-  IDENTIDAD_MARINA,
+  environmentOf,
+  effortEnvironment,
+  MARINA_IDENTITY,
   economyModel,
   deepSeekBalance,
   validateEngineAttachments,
@@ -26,7 +26,7 @@ test("prepara los cuatro motores headless sin imponer modelo ni herramientas", (
   assert.deepEqual(engineCommand("deepseek", "x").args, [
     ...engineCommand("claude", "x").args,
     "--append-system-prompt",
-    IDENTIDAD_MARINA,
+    MARINA_IDENTITY,
   ]);
   const codex = engineCommand("codex", "x").args;
   assert.deepEqual(codex, [
@@ -49,9 +49,9 @@ test("prepara los cuatro motores headless sin imponer modelo ni herramientas", (
 });
 
 test("consulta saldo USD sin registrar la clave y rechaza respuestas no fiables", async () => {
-  let solicitud;
+  let request;
   const fetchFn = async (url, options) => {
-    solicitud = { url, options };
+    request = { url, options };
     return {
       ok: true,
       json: async () => ({
@@ -64,8 +64,8 @@ test("consulta saldo USD sin registrar la clave y rechaza respuestas no fiables"
     };
   };
   assert.equal(await deepSeekBalance("test-key", fetchFn), 0.19);
-  assert.equal(solicitud.url, "https://api.deepseek.com/user/balance");
-  assert.equal(solicitud.options.headers.Authorization, "Bearer test-key");
+  assert.equal(request.url, "https://api.deepseek.com/user/balance");
+  assert.equal(request.options.headers.Authorization, "Bearer test-key");
   await assert.rejects(
     deepSeekBalance("test-key", async () => ({
       ok: true,
@@ -82,8 +82,8 @@ test("las credenciales de proveedores no se mezclan", () => {
     DEEPSEEK_API_KEY: "deepseek-secret",
     AGENTES_DEEPSEEK_DIR: "/deepseek",
   };
-  const claude = entornoDe("claude", env);
-  const deepseek = entornoDe("deepseek", env);
+  const claude = environmentOf("claude", env);
+  const deepseek = environmentOf("deepseek", env);
   assert.equal(claude.CLAUDE_CODE_OAUTH_TOKEN, "claude-secret");
   assert.equal(claude.ANTHROPIC_AUTH_TOKEN, undefined);
   assert.equal(deepseek.ANTHROPIC_AUTH_TOKEN, "deepseek-secret");
@@ -97,8 +97,8 @@ test("las credenciales de proveedores no se mezclan", () => {
 });
 
 test("un encargo que empieza con guion no se interpreta como opción del CLI", () => {
-  for (const motor of ["claude", "codex", "agy", "deepseek"]) {
-    const args = engineCommand(motor, "---\nname: x\n---\nhola").args;
+  for (const engine of ["claude", "codex", "agy", "deepseek"]) {
+    const args = engineCommand(engine, "---\nname: x\n---\nhola").args;
     assert.ok(args.includes("Instrucciones:\n---\nname: x\n---\nhola"));
     assert.ok(!args.some((a) => a.startsWith("---")));
   }
@@ -114,11 +114,11 @@ test("Claude recibe --effort y DeepSeek lo traduce a presupuesto de pensamiento"
   );
   const marina = engineCommand("deepseek", "x", { esfuerzo: "high" }).args;
   assert.ok(!marina.includes("--effort"));
-  assert.deepEqual(entornoEsfuerzo("deepseek", "high"), {
+  assert.deepEqual(effortEnvironment("deepseek", "high"), {
     MAX_THINKING_TOKENS: "32000",
   });
-  assert.deepEqual(entornoEsfuerzo("deepseek", "rm -rf"), {});
-  assert.deepEqual(entornoEsfuerzo("claude", "high"), {});
+  assert.deepEqual(effortEnvironment("deepseek", "rm -rf"), {});
+  assert.deepEqual(effortEnvironment("claude", "high"), {});
 });
 
 test("economyModel reconoce -luna en Codex y validateEngineAttachments acota capacidades", () => {

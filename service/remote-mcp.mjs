@@ -3,7 +3,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { atenderMcp } from "../mcp/http.mjs";
+import { handleMcp } from "../mcp/http.mjs";
 
 /** @import { OutgoingHttpHeaders, ServerResponse } from "node:http" */
 /** @import { HttpRequest } from "./types.d.ts" */
@@ -21,7 +21,7 @@ const CODE_MS = 600_000;
 const esc = (v) =>
   String(v).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 /** @param {string} u */
-const redirectSeguro = (u) => {
+const safeRedirect = (u) => {
   try {
     const url = new URL(u);
     if (url.hash) return false;
@@ -75,16 +75,16 @@ export async function createRemoteMcp({
     return serial;
   };
   /**
-   * @param {string} clave
+   * @param {string} key
    * @param {number} max
    */
-  function limite(clave, max, ventana = 60_000) {
+  function limit(key, max, window = 60_000) {
     const t = now();
-    const lista = (rates.get(clave) || []).filter((x) => x > t - ventana);
-    if (lista.length >= max)
+    const list = (rates.get(key) || []).filter((x) => x > t - window);
+    if (list.length >= max)
       throw new Failure("Demasiadas peticiones. Espera un minuto.", 429);
-    lista.push(t);
-    rates.set(clave, lista);
+    list.push(t);
+    rates.set(key, list);
   }
   /** @param {HttpRequest} request */
   const issuer = (request) =>
@@ -105,35 +105,35 @@ export async function createRemoteMcp({
     return true;
   }
   /** @param {HttpRequest} request */
-  async function leer(request, limiteBytes = 65536) {
+  async function read(request, limitBytes = 65536) {
     /** @type {Buffer[]} */
-    const partes = [];
+    const parts = [];
     let total = 0;
-    for await (const parte of request) {
-      total += parte.length;
-      if (total > limiteBytes)
+    for await (const part of request) {
+      total += part.length;
+      if (total > limitBytes)
         throw new Failure("Petición demasiado grande.", 413);
-      partes.push(parte);
+      parts.push(part);
     }
-    return Buffer.concat(partes).toString("utf8");
+    return Buffer.concat(parts).toString("utf8");
   }
   /** @param {HttpRequest} request */
   const formulario = async (request) =>
-    Object.fromEntries(new URLSearchParams(await leer(request)));
-  /** @param {string} clienteId */
-  function emitir(clienteId) {
+    Object.fromEntries(new URLSearchParams(await read(request)));
+  /** @param {string} clientId */
+  function emit(clientId) {
     const acceso = randomBytes(32).toString("hex");
     const refresco = randomBytes(32).toString("hex");
     const t = now();
     for (const [k, v] of Object.entries(state.tokens))
       if (v.expira < t) delete state.tokens[k];
     state.tokens[digest(acceso)] = {
-      clienteId,
+      clienteId: clientId,
       tipo: "access",
       expira: t + ACCESS_MS,
     };
     state.tokens[digest(refresco)] = {
-      clienteId,
+      clienteId: clientId,
       tipo: "refresh",
       expira: t + REFRESH_MS,
     };
@@ -145,16 +145,16 @@ export async function createRemoteMcp({
     };
   }
   /** @param {HttpRequest} request */
-  function cliente(request) {
-    const cabecera = request.headers.authorization || "";
-    if (!cabecera.startsWith("Bearer ")) return null;
-    const token = state.tokens[digest(cabecera.slice(7))];
+  function client(request) {
+    const header = request.headers.authorization || "";
+    if (!header.startsWith("Bearer ")) return null;
+    const token = state.tokens[digest(header.slice(7))];
     if (!token || token.tipo !== "access" || token.expira < now()) return null;
     const c = state.clients[token.clienteId];
     return c ? { id: token.clienteId, ...c } : null;
   }
   /** @param {Record<string, string>} p */
-  function paginaLogin(p, error = "", pedirCodigo = false) {
+  function loginPage(p, error = "", requestCode = false) {
     const ocultos = ["client_id", "redirect_uri", "state", "code_challenge"]
       .map(
         (n) => `<input type="hidden" name="${n}" value="${esc(p[n] || "")}">`,
@@ -164,26 +164,26 @@ export async function createRemoteMcp({
 <style>body{font:16px system-ui;max-width:380px;margin:12vh auto;padding:0 16px}input,button{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:10px;font:inherit}.e{color:#b00020}</style>
 <h1>Conectar SecondBrain</h1><p><b>${esc(p.cliente_nombre || "Un cliente MCP")}</b> pide acceso a tu vault.</p>${error ? `<p class="e" role="alert">${esc(error)}</p>` : ""}
 <form method="post" action="/oauth/authorize">${ocultos}<input name="username" autocomplete="username" placeholder="Usuario" required>
-<input name="password" type="password" autocomplete="current-password" placeholder="Contraseña" required>${pedirCodigo ? '<input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Código de verificación" required>' : ""}
+<input name="password" type="password" autocomplete="current-password" placeholder="Contraseña" required>${requestCode ? '<input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Código de verificación" required>' : ""}
 <button>Permitir acceso</button></form></html>`;
   }
   /**
    * @param {ServerResponse} response
    * @param {number} status
-   * @param {string} contenido
+   * @param {string} content
    */
-  function html(response, status, contenido) {
+  function html(response, status, content) {
     response.writeHead(status, {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
       "Content-Security-Policy":
         "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https: http://localhost:* http://127.0.0.1:*; frame-ancestors 'none'",
     });
-    response.end(contenido);
+    response.end(content);
     return true;
   }
   /** @param {Record<string, string>} p */
-  function validarAutorizacion(p) {
+  function validateAuthorization(p) {
     const c = state.clients[p.client_id];
     if (!c) throw new Failure("Cliente desconocido.", 400);
     if (!c.redirect_uris.includes(p.redirect_uri))
@@ -199,7 +199,7 @@ export async function createRemoteMcp({
    * @param {string} uri
    * @param {Record<string, string>} params
    */
-  function redirigir(response, uri, params) {
+  function redirect(response, uri, params) {
     const url = new URL(uri);
     for (const [k, v] of Object.entries(params))
       if (v) url.searchParams.set(k, v);
@@ -243,30 +243,30 @@ export async function createRemoteMcp({
           token_endpoint_auth_methods_supported: ["none"],
         });
       if (pathname === "/oauth/register" && metodo === "POST") {
-        limite("registro:" + auth.client(request), 10);
-        let datos;
+        limit("registro:" + auth.client(request), 10);
+        let data;
         try {
-          datos = JSON.parse(await leer(request));
+          data = JSON.parse(await read(request));
         } catch {
           throw new Failure("JSON inválido.", 400);
         }
-        const uris = datos?.redirect_uris;
+        const uris = data?.redirect_uris;
         if (
           !Array.isArray(uris) ||
           !uris.length ||
           uris.length > 5 ||
-          !uris.every((u) => typeof u === "string" && redirectSeguro(u))
+          !uris.every((u) => typeof u === "string" && safeRedirect(u))
         )
           return json(response, 400, { error: "invalid_redirect_uri" });
         if (Object.keys(state.clients).length >= 25)
           throw new Failure("Demasiados clientes registrados.", 429);
         const id = randomBytes(16).toString("hex");
-        const nombre =
-          String(datos.client_name || "Cliente MCP")
+        const name =
+          String(data.client_name || "Cliente MCP")
             .replace(/[^\p{L}\p{N} ._-]/gu, "")
             .slice(0, 40) || "Cliente MCP";
         state.clients[id] = {
-          nombre,
+          nombre: name,
           redirect_uris: uris,
           creado: new Date(now()).toISOString(),
         };
@@ -274,7 +274,7 @@ export async function createRemoteMcp({
         onChange();
         return json(response, 201, {
           client_id: id,
-          client_name: nombre,
+          client_name: name,
           redirect_uris: uris,
           token_endpoint_auth_method: "none",
           grant_types: ["authorization_code", "refresh_token"],
@@ -285,34 +285,30 @@ export async function createRemoteMcp({
         const p = Object.fromEntries(
           new URL(request.url ?? "/", "http://x").searchParams,
         );
-        const c = validarAutorizacion(p);
+        const c = validateAuthorization(p);
         return html(
           response,
           200,
-          paginaLogin({ ...p, cliente_nombre: c.nombre }),
+          loginPage({ ...p, cliente_nombre: c.nombre }),
         );
       }
       if (pathname === "/oauth/authorize" && metodo === "POST") {
         const p = await formulario(request);
-        const c = validarAutorizacion(p);
-        const contexto = { ...p, cliente_nombre: c.nombre };
-        let resultado;
+        const c = validateAuthorization(p);
+        const context = { ...p, cliente_nombre: c.nombre };
+        let result;
         try {
-          resultado = await auth.verifyCredentials(
+          result = await auth.verifyCredentials(
             { username: p.username, password: p.password, code: p.code },
             request,
           );
         } catch (e) {
           if (e.status === 401 || e.statusCode === 401)
-            return html(
-              response,
-              401,
-              paginaLogin(contexto, e.message, !!p.code),
-            );
+            return html(response, 401, loginPage(context, e.message, !!p.code));
           throw e;
         }
-        if (resultado.requiresCode)
-          return html(response, 200, paginaLogin(contexto, "", true));
+        if (result.requiresCode)
+          return html(response, 200, loginPage(context, "", true));
         const codigo = randomBytes(32).toString("hex");
         codes.set(digest(codigo), {
           clienteId: p.client_id,
@@ -320,39 +316,39 @@ export async function createRemoteMcp({
           challenge: p.code_challenge,
           expira: now() + CODE_MS,
         });
-        return redirigir(response, p.redirect_uri, {
+        return redirect(response, p.redirect_uri, {
           code: codigo,
           state: p.state,
         });
       }
       if (pathname === "/oauth/token" && metodo === "POST") {
-        limite("token:" + auth.client(request), 30);
+        limit("token:" + auth.client(request), 30);
         const p = await formulario(request);
         if (!state.clients[p.client_id])
           return json(response, 401, { error: "invalid_client" });
         if (p.grant_type === "authorization_code") {
-          const clave = digest(p.code || "");
-          const entrada = codes.get(clave);
-          codes.delete(clave);
+          const key = digest(p.code || "");
+          const entry = codes.get(key);
+          codes.delete(key);
           if (
-            !entrada ||
-            entrada.expira < now() ||
-            entrada.clienteId !== p.client_id ||
-            entrada.redirect_uri !== p.redirect_uri
+            !entry ||
+            entry.expira < now() ||
+            entry.clienteId !== p.client_id ||
+            entry.redirect_uri !== p.redirect_uri
           )
             return json(response, 400, { error: "invalid_grant" });
-          const calculado = createHash("sha256")
+          const computed = createHash("sha256")
             .update(p.code_verifier || "")
             .digest("base64url");
           if (
-            calculado.length !== entrada.challenge.length ||
+            computed.length !== entry.challenge.length ||
             !timingSafeEqual(
-              Buffer.from(calculado),
-              Buffer.from(entrada.challenge),
+              Buffer.from(computed),
+              Buffer.from(entry.challenge),
             )
           )
             return json(response, 400, { error: "invalid_grant" });
-          const tokens = emitir(p.client_id);
+          const tokens = emit(p.client_id);
           await persist();
           return json(response, 200, tokens);
         }
@@ -367,7 +363,7 @@ export async function createRemoteMcp({
           )
             return json(response, 400, { error: "invalid_grant" });
           delete state.tokens[clave];
-          const tokens = emitir(p.client_id);
+          const tokens = emit(p.client_id);
           await persist();
           return json(response, 200, tokens);
         }
@@ -383,7 +379,7 @@ export async function createRemoteMcp({
         return json(response, 200, {});
       }
       if (pathname === "/mcp") {
-        const c = cliente(request);
+        const c = client(request);
         if (!c)
           return json(
             response,
@@ -393,27 +389,27 @@ export async function createRemoteMcp({
               "WWW-Authenticate": `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`,
             },
           );
-        limite("mcp:" + c.id, 120);
+        limit("mcp:" + c.id, 120);
         if (!["POST", "GET", "DELETE"].includes(metodo ?? ""))
           throw new Failure("Método no permitido.", 405);
-        let cuerpo;
+        let body;
         if (metodo === "POST") {
           try {
-            cuerpo = JSON.parse(await leer(request, 4 * 1024 * 1024));
+            body = JSON.parse(await read(request, 4 * 1024 * 1024));
           } catch {
             throw new Failure("JSON inválido.", 400);
           }
         }
-        const etiqueta =
+        const label =
           c.nombre
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, "-")
             .replace(/^-|-$/g, "")
             .slice(0, 30) || "remoto";
-        await atenderMcp(request, response, cuerpo, {
+        await handleMcp(request, response, body, {
           baseUrl: baseUrl(),
           token: auth.agentToken,
-          cliente: etiqueta,
+          cliente: label,
         });
         return true;
       }

@@ -11,13 +11,13 @@ export const requestRoutes = (ctx, req) => {
     runStoreOp,
     userRequests,
   } = ctx;
-  const { callerCap, consulta, request, response } = req;
+  const { callerCap, consulta: query, request, response } = req;
   return {
     "GET /solicitudes": async () => {
       const items = userRequests.list({
-        workOrderId: consulta.get("workOrderId") || undefined,
-        kind: consulta.get("kind") || undefined,
-        status: consulta.get("status") || undefined,
+        workOrderId: query.get("workOrderId") || undefined,
+        kind: query.get("kind") || undefined,
+        status: query.get("status") || undefined,
       });
       return send(response, 200, {
         solicitudes: auth.isAgent(request)
@@ -26,7 +26,7 @@ export const requestRoutes = (ctx, req) => {
       });
     },
     "GET /solicitudes/detalle": async () => {
-      const solicitud = userRequests.get(consulta.get("id"));
+      const solicitud = userRequests.get(query.get("id"));
       if (!solicitud) throw new Failure("Solicitud no encontrada.", 404);
       if (
         auth.isAgent(request) &&
@@ -49,7 +49,7 @@ export const requestRoutes = (ctx, req) => {
       ) {
         throw new Failure("Encargo fuera de alcance de tu credencial.", 403);
       }
-      const resultado = await runStoreOp(() =>
+      const result = await runStoreOp(() =>
         userRequests.createRequest({
           id: data.id,
           createRequestId: data.requestId,
@@ -68,7 +68,7 @@ export const requestRoutes = (ctx, req) => {
           kind: "question",
         }),
       );
-      return send(response, 200, { ok: true, ...resultado });
+      return send(response, 200, { ok: true, ...result });
     },
     "POST /solicitudes/esperar": async () => {
       const { id, timeout = 240_000 } = await body(request);
@@ -95,7 +95,7 @@ export const requestRoutes = (ctx, req) => {
       ) {
         throw new Failure("Encargo fuera de alcance de tu credencial.", 403);
       }
-      const resultado = await runStoreOp(() =>
+      const result = await runStoreOp(() =>
         userRequests.createRequest({
           ...data,
           createRequestId: data.requestId,
@@ -106,32 +106,30 @@ export const requestRoutes = (ctx, req) => {
           kind: "approval",
         }),
       );
-      return send(response, 200, { ok: true, ...resultado });
+      return send(response, 200, { ok: true, ...result });
     },
     "POST /solicitudes/responder": async () => {
       const data = await body(request);
-      const resultado = await runStoreOp(() =>
+      const result = await runStoreOp(() =>
         userRequests.respond(data.id, {
           ...data,
           by: auth.state?.username || actorOf(request),
           origin: data.origin || "app",
         }),
       );
-      return send(response, 200, { ok: true, ...resultado });
+      return send(response, 200, { ok: true, ...result });
     },
     "POST /solicitudes/cerrar-turno": async () => {
       const data = await body(request);
-      const resultado = await runStoreOp(() =>
-        userRequests.markTurnClosed(data),
-      );
-      return send(response, 200, { ok: true, ...resultado });
+      const result = await runStoreOp(() => userRequests.markTurnClosed(data));
+      return send(response, 200, { ok: true, ...result });
     },
     "POST /solicitudes/verificar-ejecucion": async () => {
       const data = await body(request);
-      const resultado = await runStoreOp(() =>
+      const result = await runStoreOp(() =>
         userRequests.verifyApprovalBeforeExecute(data.id, data),
       );
-      return send(response, 200, { ok: true, ...resultado });
+      return send(response, 200, { ok: true, ...result });
     },
     "POST /solicitudes/entrega": async () => {
       const data = await body(request);

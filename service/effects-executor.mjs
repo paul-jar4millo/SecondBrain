@@ -506,30 +506,31 @@ export async function createEffectsExecutor(
           updatedAt: nowIso,
         };
 
-        const { solicitud, repetido } = await userRequests.createRequest({
-          kind: "approval",
-          requestId: prepareRequestId ?? undefined,
-          workOrderId: baseEffect.workOrderId,
-          sessionId: baseEffect.sessionId,
-          memberId: baseEffect.memberId,
-          title:
-            input.title || `Aprobar ${category}: ${action} -> ${recipient}`,
-          prompt:
-            input.prompt ||
-            `Autorizar ${action} hacia «${recipient}» (costo: ${cost}, alcance: ${scope}).`,
-          content: exactContent,
-          ...opFields,
-          nativeRequestId: input.nativeRequestId ?? null,
-          nativeSessionId: input.nativeSessionId ?? null,
-          nativeTurnId: input.nativeTurnId ?? null,
-          ttlMs: input.ttlMs,
-        });
+        const { solicitud: request, repetido: repeated } =
+          await userRequests.createRequest({
+            kind: "approval",
+            requestId: prepareRequestId ?? undefined,
+            workOrderId: baseEffect.workOrderId,
+            sessionId: baseEffect.sessionId,
+            memberId: baseEffect.memberId,
+            title:
+              input.title || `Aprobar ${category}: ${action} -> ${recipient}`,
+            prompt:
+              input.prompt ||
+              `Autorizar ${action} hacia «${recipient}» (costo: ${cost}, alcance: ${scope}).`,
+            content: exactContent,
+            ...opFields,
+            nativeRequestId: input.nativeRequestId ?? null,
+            nativeSessionId: input.nativeSessionId ?? null,
+            nativeTurnId: input.nativeTurnId ?? null,
+            ttlMs: input.ttlMs,
+          });
 
-        const boundEffectId = effectsByApprovalId.get(solicitud.id);
+        const boundEffectId = effectsByApprovalId.get(request.id);
         if (
           (boundEffectId && boundEffectId !== baseEffect.id) ||
-          solicitud.kind !== "approval" ||
-          solicitud.operationFingerprint !== baseEffect.operationFingerprint
+          request.kind !== "approval" ||
+          request.operationFingerprint !== baseEffect.operationFingerprint
         ) {
           throw new EffectExecutorError(
             "La solicitud de aprobación ya pertenece a otra operación diferente.",
@@ -537,13 +538,13 @@ export async function createEffectsExecutor(
           );
         }
 
-        baseEffect.approvalId = solicitud.id;
+        baseEffect.approvalId = request.id;
         await saveEffect(baseEffect);
 
         return {
           operacion: toPublicEffect(baseEffect),
-          solicitud,
-          repetido: Boolean(repetido),
+          solicitud: request,
+          repetido: Boolean(repeated),
         };
       });
     },

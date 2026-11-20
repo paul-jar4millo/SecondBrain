@@ -40,7 +40,7 @@ it("carga solicitudes, permite rechazarlas y vuelve a consultar", async () => {
 });
 
 it("reintenta con el mismo requestId tras un fallo de red y muestra el recibo", async () => {
-  const recibo = {
+  const receipt = {
     requestId: "11111111-1111-4111-8111-111111111111",
     aprobacionId: "a",
     decision: "aprobada",
@@ -48,7 +48,7 @@ it("reintenta con el mismo requestId tras un fallo de red y muestra el recibo", 
     ts: Date.now(),
     resultado: "Aprobada: la operación continúa.",
   };
-  const pendiente = {
+  const pending = {
     id: "a",
     actor: "agente:menta",
     estado: "pendiente",
@@ -60,11 +60,18 @@ it("reintenta con el mismo requestId tras un fallo de red y muestra el recibo", 
     async (path: string, body?: { requestId: string }) => {
       if (path === "/aprobaciones")
         return enviados.length
-          ? [{ ...pendiente, estado: "aprobada", recibo, resuelta: Date.now() }]
-          : [pendiente];
+          ? [
+              {
+                ...pending,
+                estado: "aprobada",
+                recibo: receipt,
+                resuelta: Date.now(),
+              },
+            ]
+          : [pending];
       enviados.push(body!.requestId);
       if (enviados.length === 1) throw new Error("Failed to fetch");
-      return { ok: true, recibo, repetido: false };
+      return { ok: true, recibo: receipt, repetido: false };
     },
   );
   const user = userEvent.setup();
@@ -80,7 +87,7 @@ it("reintenta con el mismo requestId tras un fallo de red y muestra el recibo", 
 });
 
 it("ante un 409 con recibo informa quién resolvió la solicitud sin reintentar", async () => {
-  const recibo = {
+  const receipt = {
     requestId: "22222222-2222-4222-8222-222222222222",
     aprobacionId: "a",
     decision: "rechazada",
@@ -105,7 +112,7 @@ it("ante un 409 con recibo informa quién resolvió la solicitud sin reintentar"
       new Error("La solicitud ya fue resuelta con otra decisión."),
       {
         status: 409,
-        recibo,
+        recibo: receipt,
       },
     );
   });

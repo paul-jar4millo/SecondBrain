@@ -1,6 +1,6 @@
 // Runs a turn in an interactive harness over a pty, for engines without a
 // structured protocol, and relays its terminal.
-import { entornoDe, entornoEsfuerzo } from "../engines.mjs";
+import { environmentOf, effortEnvironment } from "../engines.mjs";
 import { remoteCommand } from "../remote.mjs";
 import { sessionCommand } from "../limits.mjs";
 import { prepareAgy, prepareClaude } from "../claude-config.mjs";
@@ -14,7 +14,7 @@ import { PROVIDER_BY_ENGINE } from "./process-tools.mjs";
 /** @import { ExecutionState } from "./state.mjs" */
 
 // Bound the terminal replay kept in each session's detail file.
-const PERSISTIDO = 500;
+const PERSISTED = 500;
 
 /**
  * @param {ExecutorConfig} config
@@ -23,19 +23,30 @@ const PERSISTIDO = 500;
  *   Pick<ReturnType<typeof import("./process-tools.mjs").createProcessTools>, "diagnosticar" | "margenDiagnostico" | "senalar">} deps
  */
 export function createRemoteRunner(config, state, deps) {
-  const { comandoInteractivo, env, lanzarPty, registro } = config;
-  const { terminales } = state;
-  const { activeJob, diagnosticar, margenDiagnostico, senalar, vigilar } = deps;
+  const {
+    comandoInteractivo: interactiveCommand,
+    env,
+    lanzarPty: launchPty,
+    registro: registry,
+  } = config;
+  const { terminales: terminals } = state;
+  const {
+    activeJob,
+    diagnosticar: diagnose,
+    margenDiagnostico: diagnosticMargin,
+    senalar: signal,
+    vigilar: watch,
+  } = deps;
   /**
    * @param {LauncherSession} sesion
    * @param {string} brief
    * @param {string} cwd
    */
-  async function correrRemoto(sesion, brief, cwd) {
+  async function runRemote(sesion, brief, cwd) {
     /** @type {Record<string, string | undefined>} */
     const childEnv = {
-      ...entornoDe(PROVIDER_BY_ENGINE[sesion.motor] || sesion.motor, env),
-      ...entornoEsfuerzo(sesion.motor, sesion.esfuerzo),
+      ...environmentOf(PROVIDER_BY_ENGINE[sesion.motor] || sesion.motor, env),
+      ...effortEnvironment(sesion.motor, sesion.esfuerzo),
       SB_SESSION_ID: sesion.id,
       TERM: "xterm-256color",
       ...(sesion.motor === "agy" ? { SB_INITIAL_PROMPT: brief } : {}),
@@ -50,7 +61,7 @@ export function createRemoteRunner(config, state, deps) {
         : {}),
     };
     const nativeSpec = sesion.harness
-      ? comandoInteractivo(sesion, brief, childEnv)
+      ? interactiveCommand(sesion, brief, childEnv)
       : remoteCommand(sesion, brief);
     const spec = sessionCommand(nativeSpec, sesion.id, env);
     if (sesion.harness && ["claude", "deepseek"].includes(sesion.motor))
@@ -61,7 +72,7 @@ export function createRemoteRunner(config, state, deps) {
       }).catch(() => {}); // a first-run dialog is still answerable in the terminal
     if (sesion.motor === "agy")
       await prepareAgy(childEnv.HOME, cwd).catch(() => {});
-    const hijo = lanzarPty(
+    const child = launchPty(
       "python3",
       [
         fileURLToPath(new URL("../terminal.py", import.meta.url)),
@@ -71,13 +82,13 @@ export function createRemoteRunner(config, state, deps) {
       { cwd, env: childEnv, detached: true, stdio: ["pipe", "pipe", "pipe"] },
     );
     const job = activeJob(sesion.id);
-    job.hijo = hijo;
+    job.hijo = child;
     job.nativo = true;
-    if (job.cancelada) senalar(hijo, "SIGTERM");
+    if (job.cancelada) signal(child, "SIGTERM");
     const terminal = /** @type {LiveTerminal} */ (createTerminal());
     terminal.generacion = randomUUID();
     if (sesion.terminal) terminal.append(sesion.terminal + "\r\n");
-    terminales.set(sesion.id, terminal);
+    terminals.set(sesion.id, terminal);
     // Every reader is attached before the first await: output that arrives in
     // between would otherwise reach only the watchdog, and a fast exit would
     // never be seen.
@@ -86,21 +97,21 @@ export function createRemoteRunner(config, state, deps) {
     let changes = Promise.resolve();
     // Persisting the replay is not news: telling every client each 10 s would
     // make phones refetch the session list for nothing.
-    let guardada = -1;
+    let saved = -1;
     const checkpoint = setInterval(() => {
-      if (terminal.seq === guardada) return;
-      guardada = terminal.seq;
+      if (terminal.seq === saved) return;
+      saved = terminal.seq;
       changes = changes.then(() =>
-        registro.actualizar(
+        registry.actualizar(
           sesion.id,
-          { terminal: terminal.serializar(PERSISTIDO) },
+          { terminal: terminal.serializar(PERSISTED) },
           { silencioso: true },
         ),
       );
     }, 10000);
     checkpoint.unref();
-    hijo.stdout.setEncoding("utf8");
-    hijo.stdout.on("data", (chunk) => {
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
       terminal.append(chunk);
       pending = (pending + chunk).slice(-32000);
       const url =
@@ -111,32 +122,32 @@ export function createRemoteRunner(config, state, deps) {
       if (url && url !== sesion.remotoUrl) {
         sesion.remotoUrl = url;
         changes = changes.then(() =>
-          registro.actualizar(sesion.id, { remotoUrl: url }),
+          registry.actualizar(sesion.id, { remotoUrl: url }),
         );
       }
       const providerId = /codex resume ([a-f0-9-]{36})/i.exec(pending)?.[1];
       if (providerId && !sesion.conversacionId) {
         sesion.conversacionId = providerId;
         changes = changes.then(() =>
-          registro.actualizar(sesion.id, { conversacionId: providerId }),
+          registry.actualizar(sesion.id, { conversacionId: providerId }),
         );
       }
     });
     // terminal.py's own failures land here; the PTY's output goes to stdout. Without
     // this trail a crash only showed up as an empty terminal.
-    let fallo = "";
-    hijo.stderr.setEncoding("utf8");
-    hijo.stderr.on("data", (chunk) => {
-      fallo = (fallo + chunk.toString()).slice(-margenDiagnostico(brief));
+    let failure = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      failure = (failure + chunk.toString()).slice(-diagnosticMargin(brief));
     });
     const cierre = new Promise((resolve, reject) => {
-      hijo.once("error", reject);
-      hijo.once("close", resolve);
+      child.once("error", reject);
+      child.once("close", resolve);
     });
     cierre.catch(() => {});
-    const detenerVigilante = vigilar(sesion, hijo);
+    const stopWatcher = watch(sesion, child);
     try {
-      await registro.actualizar(sesion.id, {
+      await registry.actualizar(sesion.id, {
         interactiva: true,
         ...(["claude", "deepseek"].includes(sesion.motor)
           ? { conversacionId: sesion.conversacionId || sesion.id }
@@ -144,9 +155,9 @@ export function createRemoteRunner(config, state, deps) {
       });
       const codigo = await cierre;
       if (codigo && !job.cancelada)
-        diagnosticar(sesion, brief, { codigo, diagnostico: fallo });
+        diagnose(sesion, brief, { codigo, diagnostico: failure });
       await changes;
-      await registro.actualizar(sesion.id, {
+      await registry.actualizar(sesion.id, {
         terminal: (await terminal.snapshot()).datos,
         interactiva: false,
         estado: job.cancelada
@@ -163,21 +174,21 @@ export function createRemoteRunner(config, state, deps) {
             : {}),
       });
     } catch (error) {
-      diagnosticar(sesion, brief, {
+      diagnose(sesion, brief, {
         mensaje: error?.message,
         pila: error?.stack,
       });
-      await registro.actualizar(sesion.id, {
+      await registry.actualizar(sesion.id, {
         interactiva: false,
         estado: "error",
         error: "No se pudo abrir la sesión interactiva.",
       });
     } finally {
       clearInterval(checkpoint);
-      detenerVigilante();
+      stopWatcher();
     }
   }
   return {
-    correrRemoto,
+    correrRemoto: runRemote,
   };
 }

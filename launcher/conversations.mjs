@@ -21,92 +21,92 @@ import path from "node:path";
 
 const UUID = /^[a-f0-9-]{36}$/i;
 /** @param {string} home */
-const dirInternas = (home) => path.join(home, "estado/lanzador/internas");
+const dirInternal = (home) => path.join(home, "estado/lanzador/internas");
 
 /**
  * Marks a provider conversation as an internal run, never shown as a chat.
  * @param {NodeJS.ProcessEnv} env
- * @param {string} [nativo]
+ * @param {string} [native]
  */
-export async function marcarInterna(env, nativo) {
-  if (!env?.HOME || !nativo || !UUID.test(nativo)) return;
-  await mkdir(dirInternas(env.HOME), { recursive: true, mode: 0o700 });
-  await writeFile(path.join(dirInternas(env.HOME), nativo + ".json"), "{}", {
+export async function markInternal(env, native) {
+  if (!env?.HOME || !native || !UUID.test(native)) return;
+  await mkdir(dirInternal(env.HOME), { recursive: true, mode: 0o700 });
+  await writeFile(path.join(dirInternal(env.HOME), native + ".json"), "{}", {
     mode: 0o600,
   });
 }
 /**
  * @param {NodeJS.ProcessEnv} env
- * @param {string} [nativo]
+ * @param {string} [native]
  */
-const esInterna = (env, nativo) =>
-  env.HOME !== undefined && UUID.test(nativo ?? "")
-    ? stat(path.join(dirInternas(env.HOME), nativo + ".json")).then(
+const isInternal = (env, native) =>
+  env.HOME !== undefined && UUID.test(native ?? "")
+    ? stat(path.join(dirInternal(env.HOME), native + ".json")).then(
         () => true,
         () => false,
       )
     : Promise.resolve(false);
 
-export const LIMITE_CONTEXTO = 400_000;
+export const CONTEXT_LIMIT = 400_000;
 
 /**
  * Last request's context, never the accumulated token bill.
- * @param {string} motor
- * @param {string} texto
+ * @param {string} engine
+ * @param {string} text
  */
-export function readContextUsage(motor, texto) {
-  let usados = null;
-  for (const linea of texto.split("\n")) {
+export function readContextUsage(engine, text) {
+  let used = null;
+  for (const line of text.split("\n")) {
     /** @type {TranscriptRecord} */
     let e;
     try {
-      e = JSON.parse(linea);
+      e = JSON.parse(line);
     } catch {
       continue;
     }
     if (
-      ["claude", "deepseek"].includes(motor) &&
+      ["claude", "deepseek"].includes(engine) &&
       e.type === "assistant" &&
       !e.isSidechain &&
       e.message?.usage
     ) {
       const u = e.message.usage;
-      usados =
+      used =
         (u.input_tokens || 0) +
         (u.cache_read_input_tokens || 0) +
         (u.cache_creation_input_tokens || 0) +
         (u.output_tokens || 0);
     } else if (
-      motor === "codex" &&
+      engine === "codex" &&
       e.type === "event_msg" &&
       e.payload?.type === "token_count"
     ) {
       const u = e.payload.info?.last_token_usage;
-      if (u) usados = (u.input_tokens || 0) + (u.output_tokens || 0);
+      if (u) used = (u.input_tokens || 0) + (u.output_tokens || 0);
     } else if (
-      motor === "agy" &&
+      engine === "agy" &&
       e.step_update?.step_type === "agent_response" &&
       e.step_update?.usage
     ) {
       const u = e.step_update.usage;
-      usados =
+      used =
         (u.input_tokens || 0) +
         (u.cache_read_tokens || 0) +
         (u.output_tokens || 0);
     }
   }
-  return usados !== null && Number.isFinite(usados) && usados > 0
-    ? { usados, limite: LIMITE_CONTEXTO }
+  return used !== null && Number.isFinite(used) && used > 0
+    ? { usados: used, limite: CONTEXT_LIMIT }
     : null;
 }
 
 /**
- * @param {string} motor
+ * @param {string} engine
  * @param {string} texto
  */
-export function readConversation(motor, texto) {
+export function readConversation(engine, texto) {
   /** @type {SessionMessage[]} */
-  const mensajes = [];
+  const messages = [];
   for (const line of texto.split("\n")) {
     /** @type {TranscriptRecord} */
     let e;
@@ -116,7 +116,7 @@ export function readConversation(motor, texto) {
       continue;
     }
     let rol, contenido;
-    if (["claude", "deepseek"].includes(motor) && !e.isSidechain) {
+    if (["claude", "deepseek"].includes(engine) && !e.isSidechain) {
       if (["user", "assistant"].includes(e.type ?? "")) {
         rol = e.type;
         const c = e.message?.content;
@@ -131,7 +131,7 @@ export function readConversation(motor, texto) {
               : "";
       }
     } else if (
-      motor === "codex" &&
+      engine === "codex" &&
       e.type === "response_item" &&
       e.payload?.type === "message" &&
       ["user", "assistant"].includes(e.payload.role ?? "")
@@ -141,7 +141,7 @@ export function readConversation(motor, texto) {
         ?.filter((c) => ["input_text", "output_text"].includes(c.type))
         .map((c) => c.text)
         .join("\n");
-    } else if (motor === "agy") {
+    } else if (engine === "agy") {
       if (e.type === "USER_INPUT") {
         rol = "user";
         contenido =
@@ -154,9 +154,9 @@ export function readConversation(motor, texto) {
       }
     }
     if (rol && typeof contenido === "string" && contenido.trim())
-      mensajes.push({ rol, texto: contenido.trim().slice(0, 100000) });
+      messages.push({ rol, texto: contenido.trim().slice(0, 100000) });
   }
-  return mensajes.slice(-100);
+  return messages.slice(-100);
 }
 
 // Only provider-owned operational transcripts; never scan the vault or project files.
@@ -164,22 +164,22 @@ export function readConversation(motor, texto) {
  * @param {{ registro: Pick<SessionRegistry, "leer" | "actualizar" | "crear">, env: NodeJS.ProcessEnv, proyectos: Readonly<Record<string, string>>, intervalo?: number }} options
  */
 export function watchConversations({
-  registro,
+  registro: registry,
   env,
   proyectos,
-  intervalo = 2000,
+  intervalo: interval = 2000,
 }) {
   /** @type {Map<string, string>} */
-  const vistos = new Map();
-  let ocupado = false;
-  let detenido = false;
-  async function actualizar() {
+  const seen = new Map();
+  let busy = false;
+  let stopped = false;
+  async function update() {
     const home = env.HOME;
-    if (ocupado || detenido || home === undefined) return;
-    ocupado = true;
+    if (busy || stopped || home === undefined) return;
+    busy = true;
     try {
       /** @type {TranscriptSource[]} */
-      const fuentes = [];
+      const sources = [];
       const codex = path.join(
         env.CODEX_HOME || path.join(home, ".codex"),
         "sessions",
@@ -194,11 +194,11 @@ export function watchConversations({
           const full = path.join(dir, entry.name);
           if (entry.isDirectory()) await scan(full, depth + 1);
           else if (entry.isFile() && /^rollout-.*\.jsonl$/.test(entry.name))
-            fuentes.push({ motor: "codex", archivo: full });
+            sources.push({ motor: "codex", archivo: full });
         }
       }
       await scan(codex);
-      for (const [motor, configDir] of /** @type {const} */ ([
+      for (const [engine, configDir] of /** @type {const} */ ([
         ["claude", env.AGENTES_CLAUDE_DIR || path.join(home, "claude")],
         ["deepseek", env.AGENTES_DEEPSEEK_DIR],
       ])) {
@@ -212,8 +212,8 @@ export function watchConversations({
             /** @returns {string[]} */ () => [],
           ))
             if (/^[a-f0-9-]{36}\.jsonl$/i.test(file))
-              fuentes.push({
-                motor,
+              sources.push({
+                motor: engine,
                 id: file.slice(0, -6),
                 archivo: path.join(folder, dir.name, file),
               });
@@ -224,7 +224,7 @@ export function watchConversations({
         /** @returns {Dirent[]} */ () => [],
       ))
         if (dir.isDirectory() && /^[a-f0-9-]{36}$/i.test(dir.name))
-          fuentes.push({
+          sources.push({
             motor: "agy",
             id: dir.name,
             archivo: path.join(
@@ -233,12 +233,12 @@ export function watchConversations({
               ".system_generated/logs/transcript.jsonl",
             ),
           });
-      for (const fuente of fuentes) {
+      for (const source of sources) {
         try {
-          if (await esInterna(env, fuente.id)) continue;
-          const s = await stat(fuente.archivo);
+          if (await isInternal(env, source.id)) continue;
+          const s = await stat(source.archivo);
           const link = await readFile(
-            path.join(home, "estado/lanzador/links", fuente.id + ".json"),
+            path.join(home, "estado/lanzador/links", source.id + ".json"),
             "utf8",
           )
             .then(/** @returns {TranscriptLink} */ (value) => JSON.parse(value))
@@ -246,17 +246,17 @@ export function watchConversations({
           const revision = s.mtimeMs + ":" + (link?.estado || "");
           if (
             s.size > 16 * 1024 * 1024 ||
-            vistos.get(fuente.archivo) === revision
+            seen.get(source.archivo) === revision
           )
             continue;
-          const texto = await readFile(fuente.archivo, "utf8");
-          const mensajes = readConversation(fuente.motor, texto);
-          if (!mensajes.length) continue;
-          const contexto = readContextUsage(fuente.motor, texto);
-          if (fuente.motor === "codex") {
+          const text = await readFile(source.archivo, "utf8");
+          const messages = readConversation(source.motor, text);
+          if (!messages.length) continue;
+          const context = readContextUsage(source.motor, text);
+          if (source.motor === "codex") {
             /** @type {TranscriptRecord["payload"]} */
             let meta;
-            for (const line of texto.split("\n")) {
+            for (const line of text.split("\n")) {
               try {
                 const e = /** @type {TranscriptRecord} */ (JSON.parse(line));
                 if (e.type === "session_meta") {
@@ -265,13 +265,13 @@ export function watchConversations({
                 }
               } catch {}
             }
-            const session = registro
+            const session = registry
               .leer()
               .find(
                 (x) =>
                   x.motor === "codex" &&
                   (x.conversacionId === meta?.id ||
-                    mensajes.some(
+                    messages.some(
                       (m) =>
                         m.rol === "user" &&
                         m.texto.includes(
@@ -284,36 +284,36 @@ export function watchConversations({
               session.structured ||
               !meta?.id ||
               !UUID.test(meta.id) ||
-              (await esInterna(env, meta.id))
+              (await isInternal(env, meta.id))
             )
               continue;
-            await registro.actualizar(session.id, {
+            await registry.actualizar(session.id, {
               conversacionId: meta.id,
-              mensajes,
-              ...(contexto ? { contexto } : {}),
+              mensajes: messages,
+              ...(context ? { contexto: context } : {}),
               resultado:
-                mensajes.filter((m) => m.rol === "assistant").at(-1)?.texto ||
+                messages.filter((m) => m.rol === "assistant").at(-1)?.texto ||
                 "",
             });
-            vistos.set(fuente.archivo, revision);
+            seen.set(source.archivo, revision);
             continue;
           }
-          let sesion = registro
+          let sesion = registry
             .leer()
             .find(
               (x) =>
-                x.motor === fuente.motor &&
-                (x.conversacionId === fuente.id || x.id === link?.id),
+                x.motor === source.motor &&
+                (x.conversacionId === source.id || x.id === link?.id),
             );
           if (!sesion) {
             // Expired tombstones must not revive as old provider transcripts.
             if (s.mtimeMs < Date.now() - 90 * 86400000) continue;
             if (
-              registro
+              registry
                 .leer()
                 .some(
                   (x) =>
-                    x.motor === fuente.motor &&
+                    x.motor === source.motor &&
                     x.estado === "trabajando" &&
                     !x.conversacionId,
                 )
@@ -321,49 +321,49 @@ export function watchConversations({
               continue;
             /** @type {string | undefined} */
             let cwd;
-            if (["claude", "deepseek"].includes(fuente.motor)) {
-              for (const l of texto.split("\n")) {
+            if (["claude", "deepseek"].includes(source.motor)) {
+              for (const l of text.split("\n")) {
                 try {
                   cwd = /** @type {TranscriptRecord} */ (JSON.parse(l)).cwd;
                   if (cwd) break;
                 } catch {}
               }
             }
-            const proyecto =
+            const project =
               Object.entries(proyectos).find(([, p]) => p === cwd)?.[0] ?? null;
-            sesion = await registro.crear({
-              motor: fuente.motor,
+            sesion = await registry.crear({
+              motor: source.motor,
               origen: "remote",
-              proyecto,
-              encargo: mensajes.find((m) => m.rol === "user")?.texto,
+              proyecto: project,
+              encargo: messages.find((m) => m.rol === "user")?.texto,
             });
           }
           if (sesion.structured) continue;
-          await registro.actualizar(sesion.id, {
-            conversacionId: fuente.id,
-            mensajes,
-            ...(contexto ? { contexto } : {}),
+          await registry.actualizar(sesion.id, {
+            conversacionId: source.id,
+            mensajes: messages,
+            ...(context ? { contexto: context } : {}),
             resultado:
-              mensajes.filter((m) => m.rol === "assistant").at(-1)?.texto || "",
+              messages.filter((m) => m.rol === "assistant").at(-1)?.texto || "",
             ...(sesion.origen === "remote" ? { estado: "terminada" } : {}),
             ...(link?.id === sesion.id && sesion.interactiva
               ? { estado: link.estado }
               : {}),
           });
-          vistos.set(fuente.archivo, revision);
+          seen.set(source.archivo, revision);
         } catch {
           /* A provider may still be writing its transcript. Retry next tick. */
         }
       }
     } finally {
-      ocupado = false;
+      busy = false;
     }
   }
-  const timer = setInterval(() => void actualizar(), intervalo);
+  const timer = setInterval(() => void update(), interval);
   timer.unref();
-  void actualizar();
+  void update();
   return () => {
-    detenido = true;
+    stopped = true;
     clearInterval(timer);
   };
 }

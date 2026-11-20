@@ -4,13 +4,15 @@ import { render } from "@testing-library/react";
 import {
   Markdown,
   escapeCurrencyDollars,
-  sinWikilinks,
+  withoutWikilinks,
 } from "../src/components/Markdown";
 
 describe("Markdown de las agentes", () => {
   it("convierte enlaces del vault en su título", () => {
     expect(
-      sinWikilinks("Ver [[Prioridades-2026]] y [[02-Areas/Estudio|Estudio]]"),
+      withoutWikilinks(
+        "Ver [[Prioridades-2026]] y [[02-Areas/Estudio|Estudio]]",
+      ),
     ).toBe("Ver Prioridades 2026 y Estudio");
   });
   it("muestra negritas, tablas y código, sin frontmatter ni HTML crudo", () => {

@@ -4,38 +4,38 @@ import { once } from "node:events";
 import { createLauncherServer } from "../index.mjs";
 
 test("control y hooks usan credenciales distintas y las rutas modifican solo la sesión solicitada", async (t) => {
-  let estado = [
+  let state = [
     { id: "a1111111-1111-4111-8111-111111111111", estado: "trabajando" },
   ];
-  const registro = {
-    leer: () => estado,
-    actualizar: async (id, cambios) => {
-      estado = estado.map((s) => (s.id === id ? { ...s, ...cambios } : s));
+  const registry = {
+    leer: () => state,
+    actualizar: async (id, changes) => {
+      state = state.map((s) => (s.id === id ? { ...s, ...changes } : s));
     },
     subscribe: () => () => {},
   };
-  const ejecutor = {
+  const executor = {
     encargar: async (x) => ({ id: "s2", ...x }),
     cancelar: async (id) => {
       assert.equal(id, "a1111111-1111-4111-8111-111111111111");
     },
     eliminar: async (id) => {
-      estado = estado.map((s) => (s.id === id ? { ...s, eliminada: true } : s));
+      state = state.map((s) => (s.id === id ? { ...s, eliminada: true } : s));
       return { id };
     },
   };
   const server = createLauncherServer({
-    registro,
-    ejecutor,
-    controlHash: huella("control"),
-    hookHash: huella("hook"),
+    registro: registry,
+    ejecutor: executor,
+    controlHash: fingerprint("control"),
+    hookHash: fingerprint("hook"),
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => server.close());
   const url = `http://127.0.0.1:${server.address().port}`;
-  const req = (ruta, token, body) =>
-    fetch(url + ruta, {
+  const req = (path, token, body) =>
+    fetch(url + path, {
       method: body ? "POST" : "GET",
       headers: {
         authorization: `Bearer ${token}`,
@@ -63,8 +63,8 @@ test("control y hooks usan credenciales distintas y las rutas modifican solo la 
     ).status,
     204,
   );
-  assert.equal(estado[0].fase, "investigar");
-  assert.equal(JSON.stringify(estado).includes("secreto"), false);
+  assert.equal(state[0].fase, "investigar");
+  assert.equal(JSON.stringify(state).includes("secreto"), false);
   assert.equal(
     (await req("/eventos", "hook", { id: "otra", herramienta: "Read" })).status,
     404,
@@ -83,7 +83,7 @@ test("control y hooks usan credenciales distintas y las rutas modifican solo la 
     (await req("/sesiones", "control", { motor: "claude", brief: "x" })).status,
     202,
   );
-  assert.deepEqual(await (await req("/estado", "control")).json(), estado);
+  assert.deepEqual(await (await req("/estado", "control")).json(), state);
   assert.equal(
     (
       await req(
@@ -108,35 +108,39 @@ test("control y hooks usan credenciales distintas y las rutas modifican solo la 
 });
 
 import { createHash } from "node:crypto";
-function huella(value) {
+function fingerprint(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
 test("las rutas de equipo exigen control y enlazan mensajes al miembro activo", async (t) => {
-  const registro = {
+  const registry = {
     leer: () => [{ id: "s1", motor: "codex", estado: "trabajando" }],
     subscribe: () => () => {},
   };
-  const equipos = {
+  const teams = {
     estado: (id) => ({ lider: id }),
     bandeja: (id) => [{ para: id }],
-    mensaje: async (de, para, texto) => ({ de, para, texto }),
-    entregar: async (de, titulo, contenido) => ({ de, titulo, contenido }),
+    mensaje: async (de, para, text) => ({ de, para, texto: text }),
+    entregar: async (de, title, content) => ({
+      de,
+      titulo: title,
+      contenido: content,
+    }),
   };
-  const ejecutor = {
-    encargarHija: async (id, datos) => {
-      if (datos.motor === "deepseek")
+  const executor = {
+    encargarHija: async (id, data) => {
+      if (data.motor === "deepseek")
         throw new Error("Saldo DeepSeek insuficiente");
-      return { id: "hija", padreId: id, ...datos };
+      return { id: "hija", padreId: id, ...data };
     },
     esperarHija: async () => ({ estado: "terminada" }),
   };
   const server = createLauncherServer({
-    registro,
-    ejecutor,
-    equipos,
-    controlHash: huella("control"),
-    hookHash: huella("hook"),
+    registro: registry,
+    ejecutor: executor,
+    equipos: teams,
+    controlHash: fingerprint("control"),
+    hookHash: fingerprint("hook"),
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -205,11 +209,11 @@ test("las rutas de equipo exigen control y enlazan mensajes al miembro activo", 
     ).status,
     200,
   );
-  const saldo = await post("/equipo/encargar", "control", {
+  const balance = await post("/equipo/encargar", "control", {
     sesion: "s1",
     actor: "menta",
     motor: "deepseek",
     brief: "consulta",
   });
-  assert.equal((await saldo.json()).error, "Saldo DeepSeek insuficiente");
+  assert.equal((await balance.json()).error, "Saldo DeepSeek insuficiente");
 });

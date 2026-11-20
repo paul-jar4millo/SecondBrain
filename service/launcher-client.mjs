@@ -28,7 +28,7 @@ export function createLauncherClient(
       throw new Error("El lanzador debe estar en loopback.");
   }
   const base = url?.replace(/\/$/, "");
-  async function secreto() {
+  async function secret() {
     // The constructor requires either token or tokenFile.
     return (
       token ??
@@ -39,7 +39,7 @@ export function createLauncherClient(
    * Follows the launcher's SSE stream; every event only asks the app to re-read.
    * @param {() => void} listener
    */
-  function suscribir(listener) {
+  function subscribe(listener) {
     let stopped = false;
     /** @type {AbortController | undefined} */
     let controller;
@@ -49,7 +49,7 @@ export function createLauncherClient(
       controller = new AbortController();
       try {
         const response = await fetch(base + "/events", {
-          headers: { authorization: `Bearer ${await secreto()}` },
+          headers: { authorization: `Bearer ${await secret()}` },
           signal: controller.signal,
           redirect: "error",
         });
@@ -78,18 +78,18 @@ export function createLauncherClient(
     };
   }
   /**
-   * @param {string} ruta
+   * @param {string} path
    * @param {unknown} [data]
    */
-  async function pedir(ruta, data, timeout = 10000) {
+  async function request(path, data, timeout = 10000) {
     if (!base) throw new Failure("El lanzador no está instalado.", 503);
-    let respuesta;
+    let response;
     try {
-      const clave = await secreto();
-      respuesta = await fetch(base + ruta, {
+      const key = await secret();
+      response = await fetch(base + path, {
         method: data === undefined ? "GET" : "POST",
         headers: {
-          authorization: `Bearer ${clave}`,
+          authorization: `Bearer ${key}`,
           "content-type": "application/json",
         },
         ...(data === undefined ? {} : { body: JSON.stringify(data) }),
@@ -99,8 +99,8 @@ export function createLauncherClient(
     } catch {
       throw new Failure("El lanzador no responde.", 503);
     }
-    const contenido = await respuesta.json().catch(() => ({}));
-    const conocidas = new Set([
+    const contenido = await response.json().catch(() => ({}));
+    const known = new Set([
       "Conflicto de vínculos; actualiza e inténtalo de nuevo",
       "Modelo no disponible",
       "Saldo DeepSeek insuficiente",
@@ -121,12 +121,12 @@ export function createLauncherClient(
       "Manifiesto del encargo desactualizado; recarga el equipo.",
       "DeepSeek bloqueado por la política de gasto sin autorización explícita de gasto.",
     ]);
-    if (!respuesta.ok)
+    if (!response.ok)
       throw new Failure(
-        conocidas.has(contenido.error) || contenido.seguro === true
+        known.has(contenido.error) || contenido.seguro === true
           ? contenido.error
           : "El lanzador rechazó la petición.",
-        respuesta.status,
+        response.status,
       );
     return contenido;
   }
@@ -138,14 +138,14 @@ export function createLauncherClient(
   };
   return {
     /** @param {() => void} listener */
-    subscribe: (listener) => (base ? suscribir(listener) : () => {}),
+    subscribe: (listener) => (base ? subscribe(listener) : () => {}),
     /** @returns {Promise<LauncherSessionSummary[] | { sesiones: LauncherSessionSummary[] }>} */
-    leer: () => pedir("/estado"),
-    proyectos: () => pedir("/proyectos"),
-    modelos: () => pedir("/modelos", undefined, 30000),
-    uso: () => pedir("/uso"),
-    /** @param {unknown} [datos] Omitted to list; an object to create one. */
-    espacios: (datos) => pedir("/espacios", datos),
+    leer: () => request("/estado"),
+    proyectos: () => request("/proyectos"),
+    modelos: () => request("/modelos", undefined, 30000),
+    uso: () => request("/uso"),
+    /** @param {unknown} [data] Omitted to list; an object to create one. */
+    espacios: (data) => request("/espacios", data),
     /**
      * Opens the launcher's SSE stream of one harness and returns the raw
      * response; the caller pipes its body without buffering and aborts it.
@@ -156,13 +156,13 @@ export function createLauncherClient(
       if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id))
         throw new Failure("Sesión inválida.", 400);
       if (!base) throw new Failure("El lanzador no está instalado.", 503);
-      let respuesta;
+      let response;
       try {
-        respuesta = await fetch(
+        response = await fetch(
           `${base}/sesiones/${id}/${structured ? "conversation" : "stream"}`,
           {
             headers: {
-              authorization: `Bearer ${await secreto()}`,
+              authorization: `Bearer ${await secret()}`,
               accept: "text/event-stream",
             },
             signal,
@@ -172,59 +172,59 @@ export function createLauncherClient(
       } catch {
         throw new Failure("El lanzador no responde.", 503);
       }
-      if (!respuesta.ok || !respuesta.body) {
-        const contenido = await respuesta.json().catch(() => ({}));
-        await respuesta.body?.cancel().catch(() => {});
+      if (!response.ok || !response.body) {
+        const content = await response.json().catch(() => ({}));
+        await response.body?.cancel().catch(() => {});
         throw new Failure(
-          contenido.error === "Terminal no disponible"
-            ? contenido.error
+          content.error === "Terminal no disponible"
+            ? content.error
             : "El lanzador rechazó la petición.",
-          respuesta.status,
+          response.status,
         );
       }
-      return respuesta;
+      return response;
     },
     /** @param {{ id: string } & Record<string, unknown>} input */
-    entrada: ({ id, ...datos }) => pedir(`/sesiones/${id}/terminal`, datos),
+    entrada: ({ id, ...data }) => request(`/sesiones/${id}/terminal`, data),
     /** @param {{ id: string } & Record<string, unknown>} input */
-    responder: ({ id, ...datos }) =>
-      pedir(`/sesiones/${sesion(id)}/conversation/answer`, datos),
-    /** @param {unknown} datos */
-    encargar: (datos) => pedir("/sesiones", datos, 45000),
+    responder: ({ id, ...data }) =>
+      request(`/sesiones/${sesion(id)}/conversation/answer`, data),
+    /** @param {unknown} data */
+    encargar: (data) => request("/sesiones", data, 45000),
     /**
-     * @param {string} accion
-     * @param {string} sesion
+     * @param {string} action
+     * @param {string} session
      * @param {string | undefined} actor
-     * @param {object} datos
+     * @param {object} data
      */
-    equipo: (accion, sesion, actor, datos) =>
-      pedir(
-        "/equipo/" + accion,
-        { ...datos, sesion, actor },
-        accion === "esperar" ? 1810000 : 10000,
+    equipo: (action, session, actor, data) =>
+      request(
+        "/equipo/" + action,
+        { ...data, sesion: session, actor },
+        action === "esperar" ? 1810000 : 10000,
       ),
-    capacidades: () => pedir("/capacidades"),
+    capacidades: () => request("/capacidades"),
     catalogoHerramientas: (params = {}) => {
       const q = new URLSearchParams();
       for (const [k, v] of Object.entries(params)) {
         if (v !== undefined && v !== null) q.set(k, String(v));
       }
-      return pedir(`/herramientas/catalogo${q.size ? "?" + q : ""}`);
+      return request(`/herramientas/catalogo${q.size ? "?" + q : ""}`);
     },
-    /** @param {unknown} datos */
-    actualizarPerfilHerramientas: (datos) =>
-      pedir("/herramientas/perfiles", datos),
-    /** @param {unknown} datos */
-    resolverSkills: (datos) => pedir("/herramientas/skills/resolver", datos),
+    /** @param {unknown} data */
+    actualizarPerfilHerramientas: (data) =>
+      request("/herramientas/perfiles", data),
+    /** @param {unknown} data */
+    resolverSkills: (data) => request("/herramientas/skills/resolver", data),
     /** @param {{ id: string } & Record<string, unknown>} input */
-    enviarMensajeConversacion: ({ id, ...datos }) =>
-      pedir(`/sesiones/${sesion(id)}/conversation/messages`, datos),
+    enviarMensajeConversacion: ({ id, ...data }) =>
+      request(`/sesiones/${sesion(id)}/conversation/messages`, data),
     /** @param {unknown} id */
     colaConversacion: (id) =>
-      pedir(`/sesiones/${sesion(id)}/conversation/queue`),
+      request(`/sesiones/${sesion(id)}/conversation/queue`),
     /** @param {{ id: string, clientMessageId: string }} input */
     cancelarColaConversacion: ({ id, clientMessageId }) =>
-      pedir(`/sesiones/${sesion(id)}/conversation/queue/cancel`, {
+      request(`/sesiones/${sesion(id)}/conversation/queue/cancel`, {
         clientMessageId,
       }),
     /**
@@ -238,12 +238,12 @@ export function createLauncherClient(
       )
         throw new Failure("Artefacto inválido.", 400);
       if (!base) throw new Failure("El lanzador no está instalado.", 503);
-      let respuesta;
+      let response;
       try {
-        respuesta = await fetch(
+        response = await fetch(
           `${base}/sesiones/${sesion(id)}/conversation/artifacts/${artifactId}`,
           {
-            headers: { authorization: `Bearer ${await secreto()}` },
+            headers: { authorization: `Bearer ${await secret()}` },
             signal: AbortSignal.timeout(30000),
             redirect: "error",
           },
@@ -251,51 +251,51 @@ export function createLauncherClient(
       } catch {
         throw new Failure("El lanzador no responde.", 503);
       }
-      if (!respuesta.ok) {
-        const contenido = await respuesta.json().catch(() => ({}));
+      if (!response.ok) {
+        const content = await response.json().catch(() => ({}));
         throw new Failure(
-          contenido.seguro === true
-            ? contenido.error
+          content.seguro === true
+            ? content.error
             : "No se pudo descargar el artefacto.",
-          respuesta.status,
+          response.status,
         );
       }
-      return respuesta;
+      return response;
     },
     /** @param {{ id: string, desde?: string, hasta?: string }} input */
-    diff: ({ id, desde, hasta }) => {
-      const consulta = new URLSearchParams();
-      if (desde !== undefined) consulta.set("desde", desde);
-      if (hasta !== undefined) consulta.set("hasta", hasta);
-      return pedir(
-        `/sesiones/${sesion(id)}/diff${consulta.size ? "?" + consulta : ""}`,
+    diff: ({ id, desde: from, hasta: until }) => {
+      const query = new URLSearchParams();
+      if (from !== undefined) query.set("desde", from);
+      if (until !== undefined) query.set("hasta", until);
+      return request(
+        `/sesiones/${sesion(id)}/diff${query.size ? "?" + query : ""}`,
         undefined,
         60000,
       );
     },
     /** @param {unknown} id */
     propuestaPr: (id) =>
-      pedir(`/sesiones/${sesion(id)}/pr/propuesta`, undefined, 60000),
+      request(`/sesiones/${sesion(id)}/pr/propuesta`, undefined, 60000),
     /** @param {{ id: string, n?: number }} input */
     revertir: ({ id, n }) =>
-      pedir(`/sesiones/${sesion(id)}/revertir`, { n }, 120000),
+      request(`/sesiones/${sesion(id)}/revertir`, { n }, 120000),
     /** @param {{ id: string } & Record<string, unknown>} input */
-    pr: ({ id, ...datos }) =>
-      pedir(`/sesiones/${sesion(id)}/pr`, datos, 300000),
+    pr: ({ id, ...data }) =>
+      request(`/sesiones/${sesion(id)}/pr`, data, 300000),
     /** @param {unknown} id */
     redactarPr: (id) =>
-      pedir(`/sesiones/${sesion(id)}/pr/redactar`, {}, 150000),
+      request(`/sesiones/${sesion(id)}/pr/redactar`, {}, 150000),
     /** @param {unknown} id */
     cancelar: async (id) => {
       if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id))
         throw new Failure("Sesión inválida.", 400);
-      return pedir(`/sesiones/${id}/cancelar`, {});
+      return request(`/sesiones/${id}/cancelar`, {});
     },
     /** @param {unknown} id */
     eliminar: async (id) => {
       if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id))
         throw new Failure("Sesión inválida.", 400);
-      return pedir(`/sesiones/${id}/eliminar`, {});
+      return request(`/sesiones/${id}/eliminar`, {});
     },
   };
 }

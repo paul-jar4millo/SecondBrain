@@ -117,14 +117,14 @@ export function createControllerRegistry({
     return items;
   }
 
-  /** @param {string} idOrMotor */
-  function capabilities(idOrMotor) {
-    const entry = controllers.get(idOrMotor);
+  /** @param {string} idOrEngine */
+  function capabilities(idOrEngine) {
+    const entry = controllers.get(idOrEngine);
     if (entry?.controller?.capabilities) {
       return entry.controller.capabilities();
     }
-    if (adapters[idOrMotor]?.createController) {
-      const tmp = adapters[idOrMotor].createController();
+    if (adapters[idOrEngine]?.createController) {
+      const tmp = adapters[idOrEngine].createController();
       return tmp.capabilities?.() || {};
     }
     return {

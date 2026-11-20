@@ -6,64 +6,68 @@ import { spawn } from "node:child_process";
 
 /** @import { ExecutorOptions } from "../types.d.ts" */
 
-const SESION_MAX_MIN = 240;
+const SESSION_MAX_MIN = 240;
 
 /**
- * @param {unknown} valor
+ * @param {unknown} value
  * @param {number} predeterminado
  */
-function minutosConfigurados(valor, predeterminado) {
-  const minutos = Number(valor);
+function configuredMinutes(value, predeterminado) {
+  const minutes = Number(value);
   return (
-    (Number.isFinite(minutos) && minutos > 0 ? minutos : predeterminado) * 60000
+    (Number.isFinite(minutes) && minutes > 0 ? minutes : predeterminado) * 60000
   );
 }
 
 /** @param {ExecutorOptions} options */
 export function resolveExecutorOptions({
-  registro,
-  equipos,
-  proyectos,
-  espacios,
+  registro: registry,
+  equipos: teams,
+  proyectos: projects,
+  espacios: spaces,
   env = process.env,
-  comando = engineCommand,
-  comandoInteractivo = comandoHarness,
-  maxActivos = 6,
-  lanzarPty = spawn,
-  seguimiento = null,
+  comando: command = engineCommand,
+  comandoInteractivo: interactiveCommand = comandoHarness,
+  maxActivos: maxActive = 6,
+  lanzarPty: launchPty = spawn,
+  seguimiento: tracking = null,
   conversations = null,
   toolCatalog = null,
-  consultarSaldo = () => deepSeekBalance(env.DEEPSEEK_API_KEY ?? null),
+  consultarSaldo: queryBalance = () =>
+    deepSeekBalance(env.DEEPSEEK_API_KEY ?? null),
   // A silent CLI must not hold a slot forever, including interactive harnesses.
-  limiteMs = minutosConfigurados(env.SB_SESION_MAX_MIN, SESION_MAX_MIN),
-  inactividadMs = minutosConfigurados(env.SB_SESION_INACTIVIDAD_MIN, 15),
+  limiteMs: limitMs = configuredMinutes(env.SB_SESION_MAX_MIN, SESSION_MAX_MIN),
+  inactividadMs: inactivityMs = configuredMinutes(
+    env.SB_SESION_INACTIVIDAD_MIN,
+    15,
+  ),
   idleControllerMs = Number(env.SB_CONTROLADOR_OCIOSO_MIN || 0) > 0
-    ? minutosConfigurados(env.SB_CONTROLADOR_OCIOSO_MIN, 30)
+    ? configuredMinutes(env.SB_CONTROLADOR_OCIOSO_MIN, 30)
     : 0,
-  programar = setTimeout,
-  cancelarTemporizador = clearTimeout,
-  registrar = (linea) => console.error(linea),
+  programar: schedule = setTimeout,
+  cancelarTemporizador: cancelTimer = clearTimeout,
+  registrar: register = (line) => console.error(line),
 }) {
   return {
-    registro,
-    equipos,
-    proyectos,
-    espacios,
+    registro: registry,
+    equipos: teams,
+    proyectos: projects,
+    espacios: spaces,
     env,
-    comando,
-    comandoInteractivo,
-    maxActivos,
-    lanzarPty,
-    seguimiento,
+    comando: command,
+    comandoInteractivo: interactiveCommand,
+    maxActivos: maxActive,
+    lanzarPty: launchPty,
+    seguimiento: tracking,
     conversations,
     toolCatalog,
-    consultarSaldo,
-    limiteMs,
-    inactividadMs,
+    consultarSaldo: queryBalance,
+    limiteMs: limitMs,
+    inactividadMs: inactivityMs,
     idleControllerMs,
-    programar,
-    cancelarTemporizador,
-    registrar,
+    programar: schedule,
+    cancelarTemporizador: cancelTimer,
+    registrar: register,
   };
 }
 

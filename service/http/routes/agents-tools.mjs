@@ -4,11 +4,11 @@ import { Failure } from "../../vault.mjs";
 
 /** @type {RouteModule} */
 export const agentToolRoutes = (ctx, req) => {
-  const { auth, lanzador, resolveServerProfile } = ctx;
-  const { callerCap, consulta, request, response } = req;
+  const { auth, lanzador: launcher, resolveServerProfile } = ctx;
+  const { callerCap, consulta: query, request, response } = req;
   return {
     "GET /agentes/capacidades": async () =>
-      send(response, 200, await lanzador.capacidades()),
+      send(response, 200, await launcher.capacidades()),
     "GET /agentes/mi-capacidad": async () => {
       if (callerCap) {
         const { digest: _d, ...publicCap } = callerCap;
@@ -61,25 +61,25 @@ export const agentToolRoutes = (ctx, req) => {
       send(
         response,
         200,
-        await lanzador.catalogoHerramientas({
-          motor: consulta.get("motor") ?? undefined,
-          profileId: consulta.get("profileId") ?? undefined,
-          parentProfileId: consulta.get("parentProfileId") ?? undefined,
-          memberId: consulta.get("memberId") ?? undefined,
-          sessionId: consulta.get("sessionId") ?? undefined,
-          probe: consulta.get("probe") === "true" ? "true" : undefined,
+        await launcher.catalogoHerramientas({
+          motor: query.get("motor") ?? undefined,
+          profileId: query.get("profileId") ?? undefined,
+          parentProfileId: query.get("parentProfileId") ?? undefined,
+          memberId: query.get("memberId") ?? undefined,
+          sessionId: query.get("sessionId") ?? undefined,
+          probe: query.get("probe") === "true" ? "true" : undefined,
         }),
       ),
     "POST /agentes/herramientas/perfiles": async () =>
       send(
         response,
         200,
-        await lanzador.actualizarPerfilHerramientas(await body(request)),
+        await launcher.actualizarPerfilHerramientas(await body(request)),
       ),
     "POST /agentes/herramientas/skills/resolver": async () => {
       const payload = await body(request);
       const { billingAuthorized: _ignored, ...safePayload } = payload;
-      return send(response, 200, await lanzador.resolverSkills(safePayload));
+      return send(response, 200, await launcher.resolverSkills(safePayload));
     },
   };
 };

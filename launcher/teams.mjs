@@ -7,7 +7,7 @@ import { sha256Hex as hashBytes } from "./lib/hash.mjs";
 
 /** @import { ApprovedCandidate, DeliveryInput, IntegratedFile, IntegrationCandidate, IntegrationConflict, IntegrationOptions, IntegrationRecord, IntegrationResolution, IntegrationResult, ManifestCard, ManifestInput, MemberUpdate, Team, TeamManifest, TeamMember, TeamMetadata, TextDeliverySummary } from "./team-types.d.ts" */
 
-const MOTORES = new Set(["claude", "codex", "agy", "deepseek"]);
+const ENGINES = new Set(["claude", "codex", "agy", "deepseek"]);
 
 /**
  * Content hash of a string, or of the JSON form of any other value.
@@ -17,7 +17,7 @@ const sha256Hex = (value) =>
   hashBytes(typeof value === "string" ? value : JSON.stringify(value));
 
 /** @param {unknown} raw */
-function normalizarRutaRelativa(raw) {
+function normalizeRelativePath(raw) {
   if (typeof raw !== "string")
     throw new LauncherError("Ruta de entregable inválida", 400);
   const unix = raw.trim().replaceAll("\\", "/").replace(/^\.\//, "");
@@ -41,13 +41,13 @@ function normalizarRutaRelativa(raw) {
  * @param {ManifestInput} manifest
  * @returns {TeamManifest | null}
  */
-function normalizarManifiesto(manifest) {
+function normalizeManifest(manifest) {
   if (!manifest || typeof manifest !== "object") return null;
   if (!Array.isArray(manifest.team) || manifest.team.length === 0)
     throw new LauncherError("Manifiesto de equipo inválido", 400);
   const team = manifest.team.map((card, index) => {
     const motor = card.motor ?? card.engine;
-    if (!motor || !MOTORES.has(motor))
+    if (!motor || !ENGINES.has(motor))
       throw new LauncherError("Motor inválido en manifiesto", 400);
     return {
       id: String(card.id || `${manifest.workOrderId || "wo"}-m-${index + 1}`),
@@ -77,29 +77,29 @@ function normalizarManifiesto(manifest) {
 }
 
 /**
- * @param {string} solicitadoId
- * @param {string} limiteId
+ * @param {string} requestedId
+ * @param {string} limitId
  */
-function esPerfilMasAmplio(solicitadoId, limiteId) {
-  if (!solicitadoId || !limiteId || solicitadoId === limiteId) return false;
-  const solicitado =
+function isWiderProfile(requestedId, limitId) {
+  if (!requestedId || !limitId || requestedId === limitId) return false;
+  const requested =
     TOOL_PROFILES_BASE[
-      /** @type {keyof typeof TOOL_PROFILES_BASE} */ (solicitadoId)
+      /** @type {keyof typeof TOOL_PROFILES_BASE} */ (requestedId)
     ];
-  const limite =
+  const limit =
     TOOL_PROFILES_BASE[
-      /** @type {keyof typeof TOOL_PROFILES_BASE} */ (limiteId)
+      /** @type {keyof typeof TOOL_PROFILES_BASE} */ (limitId)
     ];
-  if (!solicitado || !limite) return false;
-  const mcpLim = new Set(limite.allowedMcps || []);
-  const opLim = new Set(limite.allowedOperations || []);
-  const effLim = new Set(limite.allowedEffectCategories || []);
-  if ((solicitado.allowedMcps || []).some((m) => !mcpLim.has(m))) return true;
-  if ((solicitado.allowedOperations || []).some((o) => !opLim.has(o)))
+  if (!requested || !limit) return false;
+  const mcpLim = new Set(limit.allowedMcps || []);
+  const opLim = new Set(limit.allowedOperations || []);
+  const effLim = new Set(limit.allowedEffectCategories || []);
+  if ((requested.allowedMcps || []).some((m) => !mcpLim.has(m))) return true;
+  if ((requested.allowedOperations || []).some((o) => !opLim.has(o)))
     return true;
-  if ((solicitado.allowedEffectCategories || []).some((e) => !effLim.has(e)))
+  if ((requested.allowedEffectCategories || []).some((e) => !effLim.has(e)))
     return true;
-  if (solicitado.allowBilledApi && !limite.allowBilledApi) return true;
+  if (requested.allowBilledApi && !limit.allowBilledApi) return true;
   return false;
 }
 
@@ -109,64 +109,67 @@ function esPerfilMasAmplio(solicitadoId, limiteId) {
  */
 export async function openTeams(
   dir,
-  { maxMiembros = 4, activo = () => true, onChange = () => {} } = {},
+  {
+    maxMiembros: maxMembers = 4,
+    activo: active = () => true,
+    onChange = () => {},
+  } = {},
 ) {
   const archivo = path.join(dir, "equipos.json");
   /** @type {Team[]} */
-  let equipos;
+  let teams;
   try {
-    equipos = JSON.parse(await readFile(archivo, "utf8"));
-    if (!Array.isArray(equipos))
-      throw new Error("Registro de equipos inválido");
+    teams = JSON.parse(await readFile(archivo, "utf8"));
+    if (!Array.isArray(teams)) throw new Error("Registro de equipos inválido");
   } catch (e) {
     if (e.code !== "ENOENT") throw e;
-    equipos = [];
+    teams = [];
   }
   /** @type {Promise<unknown>} */
-  let cola = Promise.resolve();
-  /** @param {string} sesion */
-  const buscar = (sesion) =>
-    equipos.find((equipo) => equipo.miembros.some((m) => m.id === sesion));
-  /** @param {string} sesion */
-  const requerir = (sesion) => {
-    const equipo = buscar(sesion);
-    if (!equipo) throw new Error("Sesión sin equipo");
-    return equipo;
+  let queue = Promise.resolve();
+  /** @param {string} session */
+  const buscar = (session) =>
+    teams.find((team) => team.miembros.some((m) => m.id === session));
+  /** @param {string} session */
+  const require = (session) => {
+    const team = buscar(session);
+    if (!team) throw new Error("Sesión sin equipo");
+    return team;
   };
   /**
-   * @param {unknown} valor
+   * @param {unknown} value
    * @param {number} max
    */
-  const textoValido = (valor, max) =>
-    typeof valor === "string" && valor.trim() && valor.length <= max;
+  const validText = (value, max) =>
+    typeof value === "string" && value.trim() && value.length <= max;
   /**
-   * @param {Team} equipo
-   * @param {string} ruta
+   * @param {Team} team
+   * @param {string} path
    */
-  const latestIntegratedHash = (equipo, ruta) => {
-    for (let i = (equipo.integraciones?.length || 0) - 1; i >= 0; i--) {
-      const integ = equipo.integraciones?.[i];
-      const hit = integ?.archivos?.find((a) => a.ruta === ruta);
+  const latestIntegratedHash = (team, path) => {
+    for (let i = (team.integraciones?.length || 0) - 1; i >= 0; i--) {
+      const integ = team.integraciones?.[i];
+      const hit = integ?.archivos?.find((a) => a.ruta === path);
       if (hit) return hit.sha256;
     }
     return null;
   };
   /**
    * @param {Team} equipo
-   * @param {string} padre
-   * @param {string} motor
+   * @param {string} parent
+   * @param {string} engine
    * @param {TeamMetadata} [meta]
    */
-  function comprobar(equipo, padre, motor, meta = {}) {
-    const p = equipo.miembros.find((m) => m.id === padre);
+  function check(equipo, parent, engine, meta = {}) {
+    const p = equipo.miembros.find((m) => m.id === parent);
     if (!p) throw new Error("Miembro inválido");
     if (p.profundidad >= 2) throw new Error("Profundidad máxima alcanzada");
-    if (!motor || !MOTORES.has(motor)) throw new Error("Motor inválido");
+    if (!engine || !ENGINES.has(engine)) throw new Error("Motor inválido");
 
     // The manifest frozen with the team wins over one sent with the call.
     const mf =
       equipo.manifest ||
-      (meta.manifest ? normalizarManifiesto(meta.manifest) : null);
+      (meta.manifest ? normalizeManifest(meta.manifest) : null);
     if (
       (meta.manifestSha256 || meta.manifest?.sha256) &&
       equipo.manifestSha256 &&
@@ -194,7 +197,7 @@ export async function openTeams(
         const alreadyActive = equipo.miembros.some(
           (m) =>
             m.memberId === meta.memberId &&
-            activo(m.id) &&
+            active(m.id) &&
             (!meta.requestId || m.requestId !== meta.requestId),
         );
         if (alreadyActive) {
@@ -205,18 +208,18 @@ export async function openTeams(
         }
       } else {
         const candidates = assignedCards.filter(
-          (c) => !c.coordinator && c.motor === motor,
+          (c) => !c.coordinator && c.motor === engine,
         );
         const free = candidates.find(
           (c) =>
-            !equipo.miembros.some((m) => m.memberId === c.id && activo(m.id)),
+            !equipo.miembros.some((m) => m.memberId === c.id && active(m.id)),
         );
         if (free) {
           card = free;
         } else if (candidates.length > 0) {
           if (
-            equipo.miembros.filter((m) => activo(m.id)).length >=
-            Math.min(maxMiembros, Math.max(1, assignedCards.length))
+            equipo.miembros.filter((m) => active(m.id)).length >=
+            Math.min(maxMembers, Math.max(1, assignedCards.length))
           ) {
             throw new Error("Límite del equipo alcanzado");
           }
@@ -231,27 +234,27 @@ export async function openTeams(
           );
         }
       }
-      if (card.motor !== motor) {
+      if (card.motor !== engine) {
         throw new LauncherError(
           "El manifiesto del encargo no permite cambiar el motor de esta integrante.",
           409,
         );
       }
-      const reqModelo =
+      const reqModel =
         typeof meta.modelo === "string" && meta.modelo.trim()
           ? meta.modelo.trim()
           : null;
-      if (card.model && reqModelo && reqModelo !== card.model) {
+      if (card.model && reqModel && reqModel !== card.model) {
         throw new LauncherError(
           "El manifiesto del encargo fija el modelo de esta integrante y no permite cambiarlo sin editar el equipo.",
           409,
         );
       }
-      const reqEsfuerzo =
+      const reqEffort =
         typeof meta.esfuerzo === "string" && meta.esfuerzo.trim()
           ? meta.esfuerzo.trim()
           : null;
-      if (card.effort && reqEsfuerzo && reqEsfuerzo !== card.effort) {
+      if (card.effort && reqEffort && reqEffort !== card.effort) {
         throw new LauncherError(
           "El manifiesto del encargo fija el esfuerzo de esta integrante y no permite cambiarlo sin editar el equipo.",
           409,
@@ -261,7 +264,7 @@ export async function openTeams(
         meta.toolProfileId &&
         card.toolProfileId &&
         meta.toolProfileId !== card.toolProfileId &&
-        esPerfilMasAmplio(meta.toolProfileId, card.toolProfileId)
+        isWiderProfile(meta.toolProfileId, card.toolProfileId)
       ) {
         throw new LauncherError(
           "No puedes ampliar el perfil de herramientas respecto al manifiesto aprobado.",
@@ -276,7 +279,7 @@ export async function openTeams(
           meta.toolProfileId === "ejecucion");
       if (
         !coordWorkerAllowed &&
-        esPerfilMasAmplio(meta.toolProfileId, p.toolProfileId)
+        isWiderProfile(meta.toolProfileId, p.toolProfileId)
       ) {
         throw new LauncherError(
           "La integrante hija no puede ampliar permisos más allá del perfil autorizado.",
@@ -287,18 +290,18 @@ export async function openTeams(
 
     const effectiveLimit = mf
       ? Math.min(
-          maxMiembros,
+          maxMembers,
           Math.max(1, mf.team.filter((c) => c.assigned !== false).length),
         )
-      : maxMiembros;
-    if (equipo.miembros.filter((m) => activo(m.id)).length >= effectiveLimit)
+      : maxMembers;
+    if (equipo.miembros.filter((m) => active(m.id)).length >= effectiveLimit)
       throw new Error("Límite del equipo alcanzado");
 
-    const resolvedModelo =
+    const resolvedModel =
       typeof meta.modelo === "string" && meta.modelo.trim()
         ? meta.modelo.trim()
         : card?.model || null;
-    const resolvedEsfuerzo =
+    const resolvedEffort =
       typeof meta.esfuerzo === "string" && meta.esfuerzo.trim()
         ? meta.esfuerzo.trim()
         : card?.effort || null;
@@ -310,12 +313,12 @@ export async function openTeams(
       manifest: mf,
       card,
       resolved: {
-        motor,
+        motor: engine,
         memberId: meta.memberId || card?.id || null,
         role: meta.role || card?.role || null,
         responsibility: meta.responsibility || card?.responsibility || null,
-        modelo: resolvedModelo,
-        esfuerzo: resolvedEsfuerzo,
+        modelo: resolvedModel,
+        esfuerzo: resolvedEffort,
         toolProfileId: resolvedProfile,
         manifestSha256:
           mf?.sha256 || equipo.manifestSha256 || meta.manifestSha256 || null,
@@ -326,14 +329,14 @@ export async function openTeams(
    * @template Result
    * @param {() => Result} fn
    */
-  function transaccion(fn) {
-    const siguiente = cola.then(async () => {
-      const previo = structuredClone(equipos);
+  function transaction(fn) {
+    const next = queue.then(async () => {
+      const previous = structuredClone(teams);
       try {
         const result = fn();
         await mkdir(dir, { recursive: true, mode: 0o700 });
         const tmp = archivo + ".tmp";
-        await writeFile(tmp, JSON.stringify(equipos, null, 2), { mode: 0o600 });
+        await writeFile(tmp, JSON.stringify(teams, null, 2), { mode: 0o600 });
         await rename(tmp, archivo);
         try {
           onChange();
@@ -342,24 +345,24 @@ export async function openTeams(
         }
         return structuredClone(result);
       } catch (error) {
-        equipos = previo;
+        teams = previous;
         throw error;
       }
     });
-    cola = siguiente.catch(() => {});
-    return siguiente;
+    queue = next.catch(() => {});
+    return next;
   }
   return {
     /**
-     * @param {string} lider
+     * @param {string} lead
      * @param {TeamMetadata} [meta]
      */
-    crear(lider, meta = {}) {
-      return transaccion(() => {
-        if (!textoValido(lider, 100) || buscar(lider))
+    crear(lead, meta = {}) {
+      return transaction(() => {
+        if (!validText(lead, 100) || buscar(lead))
           throw new Error("Líder inválido o ya asignado");
         const manifest = meta.manifest
-          ? normalizarManifiesto(meta.manifest)
+          ? normalizeManifest(meta.manifest)
           : null;
         if (
           manifest &&
@@ -414,7 +417,7 @@ export async function openTeams(
         }
         /** @type {TeamMember} */
         const memberMeta = {
-          id: lider,
+          id: lead,
           padreId: null,
           profundidad: 0,
           ...(meta.motor || coordCard?.motor
@@ -447,7 +450,7 @@ export async function openTeams(
         /** @type {Team} */
         const equipo = {
           id: randomUUID(),
-          lider,
+          lider: lead,
           miembros: [memberMeta],
           mensajes: [],
           entregables: [],
@@ -464,48 +467,48 @@ export async function openTeams(
             ? { directorioIntegracion: meta.directorioIntegracion }
             : {}),
         };
-        equipos.push(equipo);
+        teams.push(equipo);
         return equipo;
       });
     },
     /**
      * @param {string} id
-     * @param {string} padre
-     * @param {string} hijo
-     * @param {string} motor
+     * @param {string} parent
+     * @param {string} child
+     * @param {string} engine
      * @param {TeamMetadata} [meta]
      */
-    agregar(id, padre, hijo, motor, meta = {}) {
-      return transaccion(() => {
-        const equipo = requerir(padre);
-        if (equipo.id !== id || !textoValido(hijo, 100))
+    agregar(id, parent, child, engine, meta = {}) {
+      return transaction(() => {
+        const team = require(parent);
+        if (team.id !== id || !validText(child, 100))
           throw new Error("Miembro inválido");
         if (meta.requestId) {
-          const existente = equipo.miembros.find(
-            (m) => m.requestId === meta.requestId && m.padreId === padre,
+          const existing = team.miembros.find(
+            (m) => m.requestId === meta.requestId && m.padreId === parent,
           );
-          if (existente) return { ...existente, repetido: true };
+          if (existing) return { ...existing, repetido: true };
         }
-        if (buscar(hijo)) throw new Error("Miembro inválido");
+        if (buscar(child)) throw new Error("Miembro inválido");
         const {
           padre: p,
           manifest: mf,
           resolved,
-        } = comprobar(equipo, padre, motor, meta);
-        if (mf && !equipo.manifest) {
-          equipo.manifest = mf;
-          equipo.manifestSha256 = mf.sha256;
+        } = check(team, parent, engine, meta);
+        if (mf && !team.manifest) {
+          team.manifest = mf;
+          team.manifestSha256 = mf.sha256;
         }
-        if (meta.workOrderId && !equipo.workOrderId) {
-          equipo.workOrderId = meta.workOrderId;
+        if (meta.workOrderId && !team.workOrderId) {
+          team.workOrderId = meta.workOrderId;
         }
-        if (meta.directorioIntegracion && !equipo.directorioIntegracion) {
-          equipo.directorioIntegracion = meta.directorioIntegracion;
+        if (meta.directorioIntegracion && !team.directorioIntegracion) {
+          team.directorioIntegracion = meta.directorioIntegracion;
         }
-        const miembro = {
-          id: hijo,
-          padreId: padre,
-          motor,
+        const member = {
+          id: child,
+          padreId: parent,
+          motor: engine,
           profundidad: p.profundidad + 1,
           ...(resolved.memberId ? { memberId: resolved.memberId } : {}),
           ...(resolved.role ? { role: resolved.role } : {}),
@@ -517,8 +520,8 @@ export async function openTeams(
           ...(resolved.toolProfileId
             ? { toolProfileId: resolved.toolProfileId }
             : {}),
-          ...(meta.workOrderId || equipo.workOrderId
-            ? { workOrderId: meta.workOrderId || equipo.workOrderId }
+          ...(meta.workOrderId || team.workOrderId
+            ? { workOrderId: meta.workOrderId || team.workOrderId }
             : {}),
           ...(resolved.manifestSha256
             ? { manifestSha256: resolved.manifestSha256 }
@@ -527,21 +530,21 @@ export async function openTeams(
           ...(meta.workspacePath ? { workspacePath: meta.workspacePath } : {}),
           ...(meta.workspaceKind ? { workspaceKind: meta.workspaceKind } : {}),
         };
-        equipo.miembros.push(miembro);
-        return miembro;
+        team.miembros.push(member);
+        return member;
       });
     },
     /**
-     * @param {string} sesionId
-     * @param {MemberUpdate} [cambios]
+     * @param {string} sessionId
+     * @param {MemberUpdate} [changes]
      */
-    actualizarMiembro(sesionId, cambios = {}) {
-      return transaccion(() => {
-        const equipo = buscar(sesionId);
-        if (!equipo) return null;
-        const miembro = equipo.miembros.find((m) => m.id === sesionId);
-        if (!miembro) return null;
-        for (const campo of /** @type {const} */ ([
+    actualizarMiembro(sessionId, changes = {}) {
+      return transaction(() => {
+        const team = buscar(sessionId);
+        if (!team) return null;
+        const member = team.miembros.find((m) => m.id === sessionId);
+        if (!member) return null;
+        for (const field of /** @type {const} */ ([
           "workspacePath",
           "workspaceKind",
           "modelo",
@@ -551,94 +554,94 @@ export async function openTeams(
           "responsibility",
           "estado",
         ])) {
-          if (cambios[campo] !== undefined) miembro[campo] = cambios[campo];
+          if (changes[field] !== undefined) member[field] = changes[field];
         }
-        return miembro;
+        return member;
       });
     },
     /**
-     * @param {string} padre
+     * @param {string} parent
      * @param {unknown} requestId
      */
-    buscarPorRequestId(padre, requestId) {
+    buscarPorRequestId(parent, requestId) {
       if (!requestId || typeof requestId !== "string") return null;
-      const equipo = buscar(padre);
-      if (!equipo) return null;
-      const hit = equipo.miembros.find(
-        (m) => m.requestId === requestId && m.padreId === padre,
+      const team = buscar(parent);
+      if (!team) return null;
+      const hit = team.miembros.find(
+        (m) => m.requestId === requestId && m.padreId === parent,
       );
       return hit ? structuredClone(hit) : null;
     },
     /**
-     * @param {string} padre
-     * @param {string} motor
+     * @param {string} parent
+     * @param {string} engine
      * @param {TeamMetadata} [meta]
      */
-    comprobar(padre, motor, meta = {}) {
-      return comprobar(requerir(padre), padre, motor, meta);
+    comprobar(parent, engine, meta = {}) {
+      return check(require(parent), parent, engine, meta);
     },
     /**
      * @param {string} de
      * @param {string} para
-     * @param {string} texto
+     * @param {string} text
      */
-    mensaje(de, para, texto) {
-      return transaccion(() => {
-        const equipo = requerir(de);
+    mensaje(de, para, text) {
+      return transaction(() => {
+        const team = require(de);
         if (
-          !equipo.miembros.some((m) => m.id === para) ||
-          !textoValido(texto, 10000)
+          !team.miembros.some((m) => m.id === para) ||
+          !validText(text, 10000)
         )
           throw new Error("Mensaje inválido");
-        const mensaje = {
+        const message = {
           id: randomUUID(),
           de,
           para,
-          texto,
+          texto: text,
           fecha: new Date().toISOString(),
         };
-        equipo.mensajes.push(mensaje);
-        return mensaje;
+        team.mensajes.push(message);
+        return message;
       });
     },
     /**
      * @param {string} de
-     * @param {string | DeliveryInput} tituloOInput
-     * @param {string} [contenidoLegacy]
+     * @param {string | DeliveryInput} titleOrInput
+     * @param {string} [contentLegacy]
      */
-    entregar(de, tituloOInput, contenidoLegacy) {
-      return transaccion(() => {
-        const equipo = requerir(de);
+    entregar(de, titleOrInput, contentLegacy) {
+      return transaction(() => {
+        const team = require(de);
         /** @type {DeliveryInput} */
         const payload =
-          tituloOInput && typeof tituloOInput === "object"
-            ? tituloOInput
+          titleOrInput && typeof titleOrInput === "object"
+            ? titleOrInput
             : {
-                titulo: /** @type {string} */ (tituloOInput),
-                contenido: contenidoLegacy,
+                titulo: /** @type {string} */ (titleOrInput),
+                contenido: contentLegacy,
               };
-        const titulo = payload.titulo;
-        const contenido = payload.contenido;
-        const ruta = payload.ruta ? normalizarRutaRelativa(payload.ruta) : null;
+        const title = payload.titulo;
+        const content = payload.contenido;
+        const path = payload.ruta ? normalizeRelativePath(payload.ruta) : null;
         const baseSha256 =
           typeof payload.baseSha256 === "string" && payload.baseSha256.trim()
             ? payload.baseSha256.trim()
             : null;
-        let archivosNormalizados = null;
+        let normalizedFiles = null;
         if (Array.isArray(payload.archivos) && payload.archivos.length > 0) {
           let totalBytes = 0;
-          const vistas = new Set();
-          archivosNormalizados = payload.archivos.map((item) => {
+          const views = new Set();
+          normalizedFiles = payload.archivos.map((item) => {
             if (
               !item ||
               typeof item !== "object" ||
               typeof item.contenido !== "string"
             )
               throw new Error("Entregable inválido");
-            const r = normalizarRutaRelativa(item.ruta);
-            if (vistas.has(r))
+            const r = normalizeRelativePath(item.ruta);
+            if (views.has(r))
               throw new LauncherError("Ruta duplicada en el entregable", 400);
-            vistas.add(r);
+            views.add(r);
             totalBytes += item.contenido.length;
             if (totalBytes > 250000) throw new Error("Entregable inválido");
             return {
@@ -653,69 +656,71 @@ export async function openTeams(
             };
           });
         }
-        const rawContenido =
-          contenido === null || contenido === undefined ? "" : contenido;
-        if (!textoValido(titulo, 200)) throw new Error("Entregable inválido");
-        if (!archivosNormalizados && !textoValido(rawContenido, 100000)) {
+        const rawContent =
+          content === null || content === undefined ? "" : content;
+        if (!validText(title, 200)) throw new Error("Entregable inválido");
+        if (!normalizedFiles && !validText(rawContent, 100000)) {
           throw new Error("Entregable inválido");
         }
-        if (typeof rawContenido !== "string" || rawContenido.length > 100000) {
+        if (typeof rawContent !== "string" || rawContent.length > 100000) {
           throw new Error("Entregable inválido");
         }
-        const member = equipo.miembros.find((m) => m.id === de);
-        const prevVersions = equipo.entregables.filter((e) =>
-          ruta ? e.ruta === ruta : !e.ruta && e.titulo === titulo,
+        const member = team.miembros.find((m) => m.id === de);
+        const prevVersions = team.entregables.filter((e) =>
+          path ? e.ruta === path : !e.ruta && e.titulo === title,
         );
         const version =
           prevVersions.reduce((max, e) => Math.max(max, e.version || 1), 0) + 1;
-        const entregaSha256 = archivosNormalizados
+        const deliverySha256 = normalizedFiles
           ? sha256Hex(
-              JSON.stringify(
-                archivosNormalizados.map((a) => [a.ruta, a.sha256]),
-              ),
+              JSON.stringify(normalizedFiles.map((a) => [a.ruta, a.sha256])),
             )
-          : sha256Hex(contenido || "");
-        const entrega = {
+          : sha256Hex(content || "");
+        const delivery = {
           id: randomUUID(),
           de,
           ...(member?.memberId ? { memberId: member.memberId } : {}),
           ...(member?.role ? { role: member.role } : {}),
-          titulo,
-          contenido: rawContenido,
-          ...(ruta ? { ruta } : {}),
+          titulo: title,
+          contenido: rawContent,
+          ...(path ? { ruta: path } : {}),
           ...(baseSha256 ? { baseSha256 } : {}),
-          sha256: entregaSha256,
+          sha256: deliverySha256,
           version,
-          ...(archivosNormalizados ? { archivos: archivosNormalizados } : {}),
+          ...(normalizedFiles ? { archivos: normalizedFiles } : {}),
           fecha: new Date().toISOString(),
         };
-        equipo.entregables.push(entrega);
-        return entrega;
+        team.entregables.push(delivery);
+        return delivery;
       });
     },
     /**
-     * @param {string} sesionLider
+     * @param {string} leadSession
      * @param {IntegrationOptions} [options]
      * @returns {Promise<IntegrationResult>}
      */
     integrar(
-      sesionLider,
-      { entregableIds = null, targetDir = null, resoluciones = [] } = {},
+      leadSession,
+      {
+        entregableIds: deliverableIds = null,
+        targetDir = null,
+        resoluciones: resolutions = [],
+      } = {},
     ) {
       /** @type {Promise<IntegrationResult>} */
-      const siguiente = cola.then(async () => {
-        const previo = structuredClone(equipos);
+      const next = queue.then(async () => {
+        const previous = structuredClone(teams);
         try {
-          const equipo = requerir(sesionLider);
-          if (equipo.lider !== sesionLider) {
+          const equipo = require(leadSession);
+          if (equipo.lider !== leadSession) {
             throw new LauncherError(
               "Solo la coordinadora del equipo puede integrar entregables.",
               403,
             );
           }
-          const seleccionados =
-            Array.isArray(entregableIds) && entregableIds.length > 0
-              ? entregableIds.map((id) => {
+          const selected =
+            Array.isArray(deliverableIds) && deliverableIds.length > 0
+              ? deliverableIds.map((id) => {
                   const hit = equipo.entregables.find((e) => e.id === id);
                   if (!hit)
                     throw new LauncherError("Entregable inexistente", 404);
@@ -723,7 +728,7 @@ export async function openTeams(
                 })
               : equipo.entregables;
 
-          if (seleccionados.length === 0) {
+          if (selected.length === 0) {
             throw new LauncherError(
               "No hay entregables para integrar en este equipo.",
               400,
@@ -731,10 +736,10 @@ export async function openTeams(
           }
 
           /** @type {Map<string, IntegrationCandidate[]>} */
-          const itemsPorRuta = new Map();
+          const itemsByPath = new Map();
           /** @type {TextDeliverySummary[]} */
-          const entregablesSoloTexto = [];
-          for (const e of seleccionados) {
+          const textOnlyDeliverables = [];
+          for (const e of selected) {
             if (e.archivos?.length) {
               for (const f of e.archivos) {
                 if (sha256Hex(f.contenido) !== f.sha256) {
@@ -743,7 +748,7 @@ export async function openTeams(
                     409,
                   );
                 }
-                const list = itemsPorRuta.get(f.ruta) ?? [];
+                const list = itemsByPath.get(f.ruta) ?? [];
                 list.push({
                   entregableId: e.id,
                   de: e.de,
@@ -756,7 +761,7 @@ export async function openTeams(
                   version: e.version || 1,
                   fecha: e.fecha,
                 });
-                itemsPorRuta.set(f.ruta, list);
+                itemsByPath.set(f.ruta, list);
               }
             } else if (e.ruta) {
               if (e.sha256 && sha256Hex(e.contenido) !== e.sha256) {
@@ -765,7 +770,7 @@ export async function openTeams(
                   409,
                 );
               }
-              const list = itemsPorRuta.get(e.ruta) ?? [];
+              const list = itemsByPath.get(e.ruta) ?? [];
               list.push({
                 entregableId: e.id,
                 de: e.de,
@@ -778,9 +783,9 @@ export async function openTeams(
                 version: e.version || 1,
                 fecha: e.fecha,
               });
-              itemsPorRuta.set(e.ruta, list);
+              itemsByPath.set(e.ruta, list);
             } else {
-              entregablesSoloTexto.push({
+              textOnlyDeliverables.push({
                 entregableId: e.id,
                 de: e.de,
                 memberId: e.memberId || null,
@@ -793,25 +798,25 @@ export async function openTeams(
 
           /** @type {Map<string, IntegrationResolution>} */
           const resMap = new Map();
-          for (const res of Array.isArray(resoluciones) ? resoluciones : []) {
+          for (const res of Array.isArray(resolutions) ? resolutions : []) {
             if (res && typeof res.ruta === "string") {
-              resMap.set(normalizarRutaRelativa(res.ruta), res);
+              resMap.set(normalizeRelativePath(res.ruta), res);
             }
           }
 
           /** @type {IntegrationConflict[]} */
-          const conflictos = [];
+          const conflicts = [];
           /** @type {ApprovedCandidate[]} */
           const aprobados = [];
-          const destinoBase = targetDir || equipo.directorioIntegracion || null;
+          const targetBase = targetDir || equipo.directorioIntegracion || null;
           // Reads the file currently in the integration workspace, so edits
           // made outside the team are never overwritten silently.
           /** @param {string} ruta */
-          const hashEnDisco = async (ruta) => {
-            if (!destinoBase) return null;
+          const hashOnDisk = async (ruta) => {
+            if (!targetBase) return null;
             try {
               return sha256Hex(
-                await readFile(path.resolve(destinoBase, ruta), "utf8"),
+                await readFile(path.resolve(targetBase, ruta), "utf8"),
               );
             } catch (error) {
               if (error.code === "ENOENT") return null;
@@ -821,40 +826,40 @@ export async function openTeams(
 
           // The last conflict recorded for a path, so a resolution can only
           // settle a conflict that was shown, over the destination it saw.
-          /** @param {string} ruta */
-          const conflictoRegistrado = (ruta) => {
-            for (const registro of [...(equipo.conflictos || [])].reverse()) {
-              const hit = (registro.conflictos || []).find(
-                (c) => c.ruta === ruta,
+          /** @param {string} path */
+          const registeredConflict = (path) => {
+            for (const registry of [...(equipo.conflictos || [])].reverse()) {
+              const hit = (registry.conflictos || []).find(
+                (c) => c.ruta === path,
               );
               if (hit) return hit;
             }
             return null;
           };
 
-          for (const [ruta, candidatos] of itemsPorRuta.entries()) {
+          for (const [ruta, candidates] of itemsByPath.entries()) {
             const actualHash = latestIntegratedHash(equipo, ruta);
             const resolucion = resMap.get(ruta);
             if (resolucion) {
-              const previo = conflictoRegistrado(ruta);
+              const previo = registeredConflict(ruta);
               if (!previo) {
                 throw new LauncherError(
                   `No hay un conflicto registrado para ${ruta}; integra primero para revisarlo.`,
                   409,
                 );
               }
-              const discoAhora = await hashEnDisco(ruta);
-              if (discoAhora !== (previo.hashEnDisco ?? null)) {
+              const diskNow = await hashOnDisk(ruta);
+              if (diskNow !== (previo.hashEnDisco ?? null)) {
                 // The destination changed after the conflict was shown (for
                 // example, a manual edit): the old resolution no longer
                 // applies and nothing is overwritten.
-                conflictos.push({
+                conflicts.push({
                   ruta,
                   motivo:
                     "El archivo de destino cambió después del conflicto registrado; revisa de nuevo antes de resolver.",
                   hashIntegradoActual: actualHash,
-                  hashEnDisco: discoAhora,
-                  entregas: candidatos.map((c) => ({
+                  hashEnDisco: diskNow,
+                  entregas: candidates.map((c) => ({
                     entregableId: c.entregableId,
                     de: c.de,
                     memberId: c.memberId,
@@ -868,12 +873,12 @@ export async function openTeams(
                 continue;
               }
               if (typeof resolucion.contenido === "string") {
-                const fuente =
-                  candidatos.find(
+                const source =
+                  candidates.find(
                     (c) => c.entregableId === resolucion.entregableId,
-                  ) || candidatos[candidatos.length - 1];
+                  ) || candidates[candidates.length - 1];
                 aprobados.push({
-                  ...fuente,
+                  ...source,
                   contenido: resolucion.contenido,
                   sha256: sha256Hex(resolucion.contenido),
                   resueltoExplicitamente: true,
@@ -882,17 +887,17 @@ export async function openTeams(
                 continue;
               }
               if (resolucion.entregableId) {
-                const elegido = candidatos.find(
+                const chosen = candidates.find(
                   (c) => c.entregableId === resolucion.entregableId,
                 );
-                if (!elegido) {
+                if (!chosen) {
                   throw new LauncherError(
                     `La resolución para ${ruta} referencia un entregable desconocido.`,
                     400,
                   );
                 }
                 aprobados.push({
-                  ...elegido,
+                  ...chosen,
                   resueltoExplicitamente: true,
                   discoEsperado: previo.hashEnDisco ?? null,
                 });
@@ -901,13 +906,13 @@ export async function openTeams(
             }
 
             // Detect concurrent edits from distinct members/versions or stale baseSha256
-            const distinctHashes = new Set(candidatos.map((c) => c.sha256));
+            const distinctHashes = new Set(candidates.map((c) => c.sha256));
             let conflictReason = null;
             if (distinctHashes.size > 1) {
               // Concurrent edits unless strictly chained via baseSha256 (c[i].baseSha256 === c[i-1].sha256)
               let chained = true;
-              for (let i = 1; i < candidatos.length; i++) {
-                if (candidatos[i].baseSha256 !== candidatos[i - 1].sha256) {
+              for (let i = 1; i < candidates.length; i++) {
+                if (candidates[i].baseSha256 !== candidates[i - 1].sha256) {
                   chained = false;
                   break;
                 }
@@ -917,41 +922,41 @@ export async function openTeams(
                   "Entregas concurrentes sobre la misma ruta con hash base incompatible.";
               }
             }
-            const ultimo = candidatos[candidatos.length - 1];
+            const ultimo = candidates[candidates.length - 1];
             // A chain may restart from a version already integrated; its
             // effective base is then the integrated hash, else the first base.
-            const yaIntegrado =
+            const alreadyIntegrated =
               actualHash !== null &&
-              candidatos.some((c) => c.sha256 === actualHash);
-            const baseEfectiva = yaIntegrado
+              candidates.some((c) => c.sha256 === actualHash);
+            const effectiveBase = alreadyIntegrated
               ? actualHash
-              : (candidatos[0].baseSha256 ?? null);
+              : (candidates[0].baseSha256 ?? null);
             if (
               !conflictReason &&
               actualHash !== null &&
-              baseEfectiva !== actualHash
+              effectiveBase !== actualHash
             ) {
               conflictReason =
                 "El entregable parte de un hash base distinto al ya integrado en el workspace.";
             }
-            const discoHash = await hashEnDisco(ruta);
+            const diskHash = await hashOnDisk(ruta);
             if (
               !conflictReason &&
-              discoHash !== null &&
-              discoHash !== ultimo.sha256 &&
-              discoHash !== baseEfectiva
+              diskHash !== null &&
+              diskHash !== ultimo.sha256 &&
+              diskHash !== effectiveBase
             ) {
               conflictReason =
                 "El archivo del workspace de integración no coincide con el hash base del entregable.";
             }
 
             if (conflictReason) {
-              conflictos.push({
+              conflicts.push({
                 ruta,
                 motivo: conflictReason,
                 hashIntegradoActual: actualHash,
-                hashEnDisco: discoHash,
-                entregas: candidatos.map((c) => ({
+                hashEnDisco: diskHash,
+                entregas: candidates.map((c) => ({
                   entregableId: c.entregableId,
                   de: c.de,
                   memberId: c.memberId,
@@ -963,22 +968,22 @@ export async function openTeams(
                 })),
               });
             } else {
-              aprobados.push({ ...ultimo, discoEsperado: discoHash });
+              aprobados.push({ ...ultimo, discoEsperado: diskHash });
             }
           }
 
-          const fecha = new Date().toISOString();
-          if (conflictos.length > 0) {
+          const date = new Date().toISOString();
+          if (conflicts.length > 0) {
             equipo.conflictos ??= [];
             equipo.conflictos.push({
               id: randomUUID(),
-              fecha,
-              autor: sesionLider,
-              conflictos,
+              fecha: date,
+              autor: leadSession,
+              conflictos: conflicts,
             });
             await mkdir(dir, { recursive: true, mode: 0o700 });
             const tmp = archivo + ".tmp";
-            await writeFile(tmp, JSON.stringify(equipos, null, 2), {
+            await writeFile(tmp, JSON.stringify(teams, null, 2), {
               mode: 0o600,
             });
             await rename(tmp, archivo);
@@ -988,17 +993,17 @@ export async function openTeams(
             return structuredClone({
               ok: false,
               estado: "conflicto",
-              conflictos,
+              conflictos: conflicts,
               integrados: [],
             });
           }
 
           /** @type {IntegratedFile[]} */
           const integrados = [];
-          if (destinoBase && aprobados.length > 0) {
-            const rootResolved = path.resolve(destinoBase);
+          if (targetBase && aprobados.length > 0) {
+            const rootResolved = path.resolve(targetBase);
             /** @type {Map<ApprovedCandidate, string>} */
-            const destinos = new Map();
+            const targets = new Map();
             for (const item of aprobados) {
               const dst = path.resolve(rootResolved, item.ruta);
               const rel = path.relative(rootResolved, dst);
@@ -1008,12 +1013,12 @@ export async function openTeams(
                   403,
                 );
               }
-              destinos.set(item, dst);
+              targets.set(item, dst);
             }
             // Re-read every destination right before writing: an edit made
             // while the integration was being checked is never overwritten.
             for (const item of aprobados) {
-              if ((await hashEnDisco(item.ruta)) !== item.discoEsperado) {
+              if ((await hashOnDisk(item.ruta)) !== item.discoEsperado) {
                 throw new LauncherError(
                   `El archivo ${item.ruta} cambió durante la integración; vuelve a integrar para revisarlo.`,
                   409,
@@ -1022,7 +1027,7 @@ export async function openTeams(
             }
             for (const item of aprobados) {
               // Every approved item got a destination in the loop above.
-              const dst = /** @type {string} */ (destinos.get(item));
+              const dst = /** @type {string} */ (targets.get(item));
               await mkdir(path.dirname(dst), { recursive: true, mode: 0o700 });
               const tmpDst = `${dst}.${process.pid}.tmp`;
               await writeFile(tmpDst, item.contenido, "utf8");
@@ -1059,13 +1064,13 @@ export async function openTeams(
           /** @type {IntegrationRecord} */
           const integracion = {
             id: randomUUID(),
-            fecha,
-            autor: sesionLider,
+            fecha: date,
+            autor: leadSession,
             ...(equipo.workOrderId ? { workOrderId: equipo.workOrderId } : {}),
             estado: "integrado",
             archivos: integrados,
-            ...(entregablesSoloTexto.length
-              ? { entregables: entregablesSoloTexto }
+            ...(textOnlyDeliverables.length
+              ? { entregables: textOnlyDeliverables }
               : {}),
           };
           equipo.integraciones ??= [];
@@ -1073,7 +1078,7 @@ export async function openTeams(
 
           await mkdir(dir, { recursive: true, mode: 0o700 });
           const tmp = archivo + ".tmp";
-          await writeFile(tmp, JSON.stringify(equipos, null, 2), {
+          await writeFile(tmp, JSON.stringify(teams, null, 2), {
             mode: 0o600,
           });
           await rename(tmp, archivo);
@@ -1088,22 +1093,20 @@ export async function openTeams(
             conflictos: [],
           });
         } catch (error) {
-          equipos = previo;
+          teams = previous;
           throw error;
         }
       });
-      cola = siguiente.catch(() => {});
-      return siguiente;
+      queue = next.catch(() => {});
+      return next;
     },
     /** @param {string} id */
     bandeja(id) {
-      return structuredClone(
-        requerir(id).mensajes.filter((m) => m.para === id),
-      );
+      return structuredClone(require(id).mensajes.filter((m) => m.para === id));
     },
     /** @param {string} id */
     estado(id) {
-      return structuredClone(requerir(id));
+      return structuredClone(require(id));
     },
   };
 }

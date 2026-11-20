@@ -16,9 +16,9 @@ import { validateEngineAttachments } from "../engines.mjs";
  * }} deps Turn orchestration that stays in the executor.
  */
 export function createConversationQueue(config, state, deps) {
-  const { conversations, registro } = config;
-  const { activos } = state;
-  const { continuar, drenarCola } = deps;
+  const { conversations, registro: registry } = config;
+  const { activos: active } = state;
+  const { continuar: proceed, drenarCola: drainQueue } = deps;
   /**
    * @param {string} id
    * @param {{ clientMessageId?: string, text?: string, mode?: string, attachments?: any[] }} [message]
@@ -30,20 +30,20 @@ export function createConversationQueue(config, state, deps) {
     if (!conversations) {
       throw new LauncherError("Integración estructurada no instalada.", 503);
     }
-    const sesion = registro.leer().find((s) => s.id === id && !s.eliminada);
-    if (!sesion) throw new LauncherError("Sesión inexistente.", 404);
-    if (!sesion.structured) {
+    const session = registry.leer().find((s) => s.id === id && !s.eliminada);
+    if (!session) throw new LauncherError("Sesión inexistente.", 404);
+    if (!session.structured) {
       throw new LauncherError(
         "La sesión no admite mensajería estructurada.",
         409,
       );
     }
     const validatedAttachments = validateEngineAttachments(
-      sesion.motor,
+      session.motor,
       attachments,
-      sesion.directorio || "",
+      session.directorio || "",
     );
-    const isWorking = activos.has(id);
+    const isWorking = active.has(id);
     if (isWorking) {
       const accepted = await conversations.sendMessage(id, {
         clientMessageId,
@@ -54,7 +54,7 @@ export function createConversationQueue(config, state, deps) {
         queueIfIdle: true,
       });
       // The turn may have ended while the message was being queued.
-      if (accepted.queued) await drenarCola(id);
+      if (accepted.queued) await drainQueue(id);
       return accepted;
     }
     if (mode === "queue") {
@@ -76,7 +76,7 @@ export function createConversationQueue(config, state, deps) {
     if (accepted.repetido) return accepted;
     const command = accepted.command;
     if (!command) throw new Error("No se pudo aceptar el mensaje.");
-    if (!sesion.conversacionId) {
+    if (!session.conversacionId) {
       await conversations.markCommandDelivery(
         id,
         command.id,
@@ -88,7 +88,7 @@ export function createConversationQueue(config, state, deps) {
         command: { ...command, deliveryStatus: "entrega_incierta" },
       };
     }
-    await continuar(id, command.text, {
+    await proceed(id, command.text, {
       attachments: command.attachments,
       commandId: command.id,
     });
@@ -110,7 +110,7 @@ export function createConversationQueue(config, state, deps) {
    * @param {string} id
    * @param {string} clientMessageId
    */
-  const cancelarCola = (id, clientMessageId) => {
+  const cancelQueue = (id, clientMessageId) => {
     if (!conversations) {
       throw new LauncherError("Integración estructurada no instalada.", 503);
     }
@@ -119,6 +119,6 @@ export function createConversationQueue(config, state, deps) {
   return {
     enviarMensaje,
     listarCola,
-    cancelarCola,
+    cancelarCola: cancelQueue,
   };
 }

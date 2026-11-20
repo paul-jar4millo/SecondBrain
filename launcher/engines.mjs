@@ -7,18 +7,18 @@ import path from "node:path";
 
 /**
  * @param {string} motor
- * @param {string} texto
+ * @param {string} text
  * @param {EngineOptions} [options]
  */
 export function engineCommand(
   motor,
-  texto,
-  { modelo, esfuerzo, conversacionId } = {},
+  text,
+  { modelo, esfuerzo: effort, conversacionId: conversationId } = {},
 ) {
   // A brief starting with "-" would be parsed by the CLI as an option.
-  const prompt = String(texto).startsWith("-")
-    ? "Instrucciones:\n" + texto
-    : texto;
+  const prompt = String(text).startsWith("-")
+    ? "Instrucciones:\n" + text
+    : text;
   if (motor === "claude" || motor === "deepseek")
     return {
       bin: "claude",
@@ -31,8 +31,8 @@ export function engineCommand(
         "--include-hook-events",
         "--permission-mode",
         "bypassPermissions",
-        ...(conversacionId ? ["--resume", conversacionId] : []),
-        ...opcionesClaude(motor, { modelo, esfuerzo }),
+        ...(conversationId ? ["--resume", conversationId] : []),
+        ...claudeOptions(motor, { modelo, esfuerzo: effort }),
       ],
     };
   if (motor === "codex")
@@ -45,7 +45,7 @@ export function engineCommand(
         "-c",
         'mcp_servers.secondbrain.env_vars=["SB_BRAIN_TOKEN_FILE","SB_BRAIN_URL","SB_AGENTE","SB_SESSION_ID"]',
         ...(modelo ? ["-m", modelo] : []),
-        ...(esfuerzo ? ["-c", `model_reasoning_effort="${esfuerzo}"`] : []),
+        ...(effort ? ["-c", `model_reasoning_effort="${effort}"`] : []),
         prompt,
       ],
     };
@@ -58,7 +58,7 @@ export function engineCommand(
         "--output-format",
         "stream-json",
         "--dangerously-skip-permissions",
-        ...(conversacionId ? ["--conversation", conversacionId] : []),
+        ...(conversationId ? ["--conversation", conversationId] : []),
         ...(modelo ? ["--model", modelo] : []),
       ],
     };
@@ -66,12 +66,12 @@ export function engineCommand(
 }
 
 /** Marina runs Claude Code against DeepSeek: it must never present itself as Claude or Ámbar. */
-export const IDENTIDAD_MARINA =
+export const MARINA_IDENTITY =
   "Eres Marina, la agente de SecondBrain que corre sobre DeepSeek mediante la API compatible con Anthropic. " +
   "No eres Claude ni Ámbar: preséntate siempre como Marina (DeepSeek) y responde en español.";
 
 // DeepSeek ignores Claude's effort levels; the thinking budget is what it honours.
-export const PENSAMIENTO_DEEPSEEK = {
+export const DEEPSEEK_THINKING = {
   low: "4096",
   medium: "16000",
   high: "32000",
@@ -80,11 +80,11 @@ export const PENSAMIENTO_DEEPSEEK = {
 
 /**
  * Model, effort and identity flags shared by the headless and interactive Claude Code.
- * @param {string} motor
+ * @param {string} engine
  * @param {EngineOptions} [options]
  */
-export function opcionesClaude(motor, { modelo, esfuerzo } = {}) {
-  if (motor === "deepseek") return ["--append-system-prompt", IDENTIDAD_MARINA];
+export function claudeOptions(engine, { modelo, esfuerzo } = {}) {
+  if (engine === "deepseek") return ["--append-system-prompt", MARINA_IDENTITY];
   return [
     ...(modelo ? ["--model", modelo] : []),
     ...(esfuerzo ? ["--effort", esfuerzo] : []),
@@ -93,13 +93,13 @@ export function opcionesClaude(motor, { modelo, esfuerzo } = {}) {
 
 /**
  * Effort for DeepSeek travels as an environment variable, never as a CLI flag.
- * @param {string} motor
- * @param {string | null} [esfuerzo]
+ * @param {string} engine
+ * @param {string | null} [effort]
  */
-export const entornoEsfuerzo = (motor, esfuerzo) => {
-  const key = /** @type {keyof typeof PENSAMIENTO_DEEPSEEK} */ (esfuerzo);
-  return motor === "deepseek" && PENSAMIENTO_DEEPSEEK[key]
-    ? { MAX_THINKING_TOKENS: PENSAMIENTO_DEEPSEEK[key] }
+export const effortEnvironment = (engine, effort) => {
+  const key = /** @type {keyof typeof DEEPSEEK_THINKING} */ (effort);
+  return engine === "deepseek" && DEEPSEEK_THINKING[key]
+    ? { MAX_THINKING_TOKENS: DEEPSEEK_THINKING[key] }
     : {};
 };
 
@@ -111,14 +111,14 @@ export const AGENTS_BY_ID = {
 };
 
 export const DEEPSEEK_MODEL = "deepseek-flash[1m]";
-export const DEEPSEEK_LIMITE = 1_000_000;
-export const GEMINI_LIMITE = 1_000_000;
+export const DEEPSEEK_LIMIT = 1_000_000;
+export const GEMINI_LIMIT = 1_000_000;
 
 /**
  * Agents get the vault credential; older installs only have the shared token file.
  * @param {NodeJS.ProcessEnv} env
  */
-export const archivoTokenVault = (env) =>
+export const fileTokenVault = (env) =>
   env.AGENTES_BRAIN_TOKEN_FILE ?? env.AGENTES_TOKEN_FILE;
 
 /**
@@ -127,7 +127,7 @@ export const archivoTokenVault = (env) =>
  * @param {NodeJS.ProcessEnv} env
  * @returns {NodeJS.ProcessEnv}
  */
-export function entornoDe(proveedor, env) {
+export function environmentOf(proveedor, env) {
   const runtime =
     env.SB_SESSION_SCOPES === "1" ? env.XDG_RUNTIME_DIR : undefined;
   if (
@@ -137,7 +137,7 @@ export function entornoDe(proveedor, env) {
       (process.getuid && runtime !== `/run/user/${process.getuid()}`))
   )
     throw new Error("Directorio de ejecución de sesión inválido");
-  const tokenVault = archivoTokenVault(env);
+  const tokenVault = fileTokenVault(env);
   const base = {
     PATH: env.PATH,
     HOME: env.HOME,
@@ -187,12 +187,12 @@ export function entornoDe(proveedor, env) {
   );
 }
 
-/** @param {number} fraccion */
-const porcentaje = (fraccion) =>
-  Math.min(100, Math.max(0, Math.round(fraccion * 1000) / 10));
-/** @param {number} [segundos] */
-const fecha = (segundos) =>
-  segundos ? new Date(segundos * 1000).toISOString() : null;
+/** @param {number} fraction */
+const percentage = (fraction) =>
+  Math.min(100, Math.max(0, Math.round(fraction * 1000) / 10));
+/** @param {number} [seconds] */
+const fecha = (seconds) =>
+  seconds ? new Date(seconds * 1000).toISOString() : null;
 
 /**
  * Folds Claude Code's stream-json lines; also used for DeepSeek through its Anthropic API.
@@ -229,8 +229,8 @@ export function readClaudeEvent(r, e) {
     r.compactado = true;
   if (e.type === "rate_limit_event") {
     const i = e.rate_limit_info || {};
-    const ventanas = i.unifiedWindows || { [String(i.rateLimitType)]: i };
-    for (const [tipo, v] of Object.entries(ventanas)) {
+    const windows = i.unifiedWindows || { [String(i.rateLimitType)]: i };
+    for (const [tipo, v] of Object.entries(windows)) {
       const id = /** @type {Partial<Record<string, UsageWindowId>>} */ ({
         five_hour: "5h",
         seven_day: "semanal",
@@ -239,7 +239,7 @@ export function readClaudeEvent(r, e) {
         r.ventanas[id] = {
           usado:
             typeof v.utilization === "number"
-              ? porcentaje(v.utilization)
+              ? percentage(v.utilization)
               : null,
           reinicia: fecha(v.resetsAt),
           agotada: v.status === "rejected",
@@ -249,9 +249,9 @@ export function readClaudeEvent(r, e) {
   if (e.type === "result") {
     if (e.is_error) r.error = String(e.result || "Claude terminó con error.");
     else r.texto = String(e.result || "");
-    const modelos = Object.values(e.modelUsage || {});
-    const limite = Math.max(0, ...modelos.map((m) => m.contextWindow || 0));
-    if (limite) r.limite = limite;
+    const models = Object.values(e.modelUsage || {});
+    const limit = Math.max(0, ...models.map((m) => m.contextWindow || 0));
+    if (limit) r.limite = limit;
   }
   return r;
 }
@@ -261,7 +261,7 @@ export function readClaudeEvent(r, e) {
  * primary. Its app server uses camelCase; its rollout files, snake_case.
  * @param {CodexUsageSnapshot | null} [snapshot]
  */
-export function ventanasCodex(snapshot) {
+export function codexWindows(snapshot) {
   /** @type {UsageWindows} */
   const ventanas = {};
   for (const v of [snapshot?.primary, snapshot?.secondary]) {
@@ -270,68 +270,68 @@ export function ventanasCodex(snapshot) {
       300: "5h",
       10080: "semanal",
     })[v.windowDurationMins ?? v.window_minutes ?? 0];
-    const usado = v.usedPercent ?? v.used_percent;
-    if (id && typeof usado === "number")
+    const used = v.usedPercent ?? v.used_percent;
+    if (id && typeof used === "number")
       ventanas[id] = {
-        usado,
+        usado: used,
         reinicia: fecha(v.resetsAt ?? v.resets_at),
-        agotada: usado >= 100,
+        agotada: used >= 100,
       };
   }
   return ventanas;
 }
 
 /**
- * @param {number} usado
- * @param {string | null} reinicia
+ * @param {number} used
+ * @param {string | null} restarts
  */
-const ventana = (usado, reinicia) => ({
-  usado,
-  reinicia,
-  agotada: usado >= 100,
+const ventana = (used, restarts) => ({
+  usado: used,
+  reinicia: restarts,
+  agotada: used >= 100,
 });
 
 /**
  * `rate_limits` of Claude Code's status line input: percent used, epoch seconds.
- * @param {ClaudeUsageSnapshot | null} [limites]
+ * @param {ClaudeUsageSnapshot | null} [limits]
  */
-export function ventanasClaude(limites) {
+export function claudeWindows(limits) {
   /** @type {UsageWindows} */
-  const ventanas = {};
-  for (const [origen, id] of /** @type {const} */ ([
+  const windows = {};
+  for (const [origin, id] of /** @type {const} */ ([
     ["five_hour", "5h"],
     ["seven_day", "semanal"],
   ])) {
-    const v = limites?.[origen];
+    const v = limits?.[origin];
     if (typeof v?.used_percentage === "number")
-      ventanas[id] = ventana(v.used_percentage, fecha(v.resets_at));
+      windows[id] = ventana(v.used_percentage, fecha(v.resets_at));
   }
-  return ventanas;
+  return windows;
 }
 
 /**
  * `quota` of Antigravity's status line input: fraction left, ISO date. Claude,
  * GPT and open models draw from the `3p-*` buckets, the rest from `gemini-*`.
  * @param {AgyQuota | null} [cuota]
- * @param {string | null} [modelo]
+ * @param {string | null} [model]
  */
-export function ventanasAgy(cuota, modelo) {
-  const familia = /claude|gpt|oss/i.test(modelo || "") ? "3p" : "gemini";
+export function agyWindows(cuota, model) {
+  const family = /claude|gpt|oss/i.test(model || "") ? "3p" : "gemini";
   /** @type {UsageWindows} */
-  const ventanas = {};
-  for (const [sufijo, id] of /** @type {const} */ ([
+  const windows = {};
+  for (const [suffix, id] of /** @type {const} */ ([
     ["5h", "5h"],
     ["weekly", "semanal"],
   ])) {
-    const v = cuota?.[`${familia}-${sufijo}`];
+    const v = cuota?.[`${family}-${suffix}`];
     if (!v || v.disabled || typeof v.remaining_fraction !== "number") continue;
-    const reinicia = Date.parse(v.reset_time ?? "");
-    ventanas[id] = ventana(
+    const restarts = Date.parse(v.reset_time ?? "");
+    windows[id] = ventana(
       Math.round((1 - v.remaining_fraction) * 1000) / 10,
-      Number.isNaN(reinicia) ? null : new Date(reinicia).toISOString(),
+      Number.isNaN(restarts) ? null : new Date(restarts).toISOString(),
     );
   }
-  return ventanas;
+  return windows;
 }
 
 /**
@@ -342,11 +342,11 @@ export function ventanasAgy(cuota, modelo) {
 export function readGeminiEvent(r, e) {
   const id = e.conversation_id || e.result?.conversation_id;
   if (id) r.sessionId = id;
-  const paso = e.step_update;
-  if (paso?.state === "DONE") {
-    if (paso.step_type === "checkpoint") r.compactado = true;
-    if (paso.step_type === "agent_response" && paso.usage) {
-      const u = paso.usage;
+  const step = e.step_update;
+  if (step?.state === "DONE") {
+    if (step.step_type === "checkpoint") r.compactado = true;
+    if (step.step_type === "agent_response" && step.usage) {
+      const u = step.usage;
       r.usados =
         (u.input_tokens || 0) +
         (u.cache_read_tokens || 0) +
@@ -364,34 +364,34 @@ export function readGeminiEvent(r, e) {
 
 /**
  * `agy /usage` also lists per-model limits: the tightest one is what Lira can spend.
- * @param {GeminiUsageGroup[]} [grupos]
+ * @param {GeminiUsageGroup[]} [groups]
  */
-export function ventanasGemini(grupos = []) {
+export function geminiWindows(groups = []) {
   /** @type {UsageWindows} */
-  const ventanas = {};
-  for (const b of grupos.flatMap((g) => g.buckets || [])) {
+  const windows = {};
+  for (const b of groups.flatMap((g) => g.buckets || [])) {
     const id = /** @type {Partial<Record<string, UsageWindowId>>} */ ({
       "5h": "5h",
       weekly: "semanal",
     })[b.window];
     if (!id || b.id?.startsWith("3p-")) continue;
-    const usado = porcentaje(1 - b.remaining_fraction);
-    const anterior = ventanas[id]?.usado;
-    if (anterior == null || !(anterior >= usado))
-      ventanas[id] = {
-        usado,
+    const used = percentage(1 - b.remaining_fraction);
+    const previous = windows[id]?.usado;
+    if (previous == null || !(previous >= used))
+      windows[id] = {
+        usado: used,
         reinicia: b.reset_time || null,
         agotada: b.remaining_fraction <= 0,
       };
   }
-  return ventanas;
+  return windows;
 }
 
 /**
  * Deterministic scene cues from actual provider events; never ask a model to navigate.
  * @param {ToolActivityEvent} e
  */
-export function actividadEvento(e) {
+export function eventActivity(e) {
   const item = e.params?.item || e.item;
   const tool = e.message?.content?.find((c) => c.type === "tool_use");
   const name = String(
@@ -405,22 +405,22 @@ export function actividadEvento(e) {
 }
 
 /**
- * @param {string | null} clave
+ * @param {string | null} key
  * @param {FetchBalance} [fetchFn]
  */
-export async function deepSeekBalance(clave, fetchFn = fetch) {
-  if (!clave) throw new Error("Saldo DeepSeek no disponible");
-  const respuesta = await fetchFn("https://api.deepseek.com/user/balance", {
-    headers: { Authorization: `Bearer ${clave}` },
+export async function deepSeekBalance(key, fetchFn = fetch) {
+  if (!key) throw new Error("Saldo DeepSeek no disponible");
+  const response = await fetchFn("https://api.deepseek.com/user/balance", {
+    headers: { Authorization: `Bearer ${key}` },
     signal: AbortSignal.timeout(5000),
   });
-  if (!respuesta.ok) throw new Error("Saldo DeepSeek no disponible");
-  const datos = /** @type {DeepSeekBalance} */ (await respuesta.json());
-  const usd = datos.balance_infos?.find(
+  if (!response.ok) throw new Error("Saldo DeepSeek no disponible");
+  const data = /** @type {DeepSeekBalance} */ (await response.json());
+  const usd = data.balance_infos?.find(
     (b) => b.currency === "USD",
   )?.total_balance;
   if (
-    !datos.is_available ||
+    !data.is_available ||
     typeof usd !== "string" ||
     !/^\d+(?:\.\d+)?$/.test(usd)
   )
@@ -436,7 +436,7 @@ export async function deepSeekBalance(clave, fetchFn = fetch) {
  * a live-terminal session. Nobody rewinds the provider's own conversation yet.
  * REQUISITOS names what the session must also have; `capacidadesDe` applies it.
  */
-export const CAPACIDADES = {
+export const CAPABILITIES = {
   claude: {
     reanudar: true,
     reanudarHarness: true,
@@ -517,7 +517,7 @@ export const CAPACIDADES = {
   },
 };
 
-export const REQUISITOS = {
+export const REQUIREMENTS = {
   revertirArchivos: "La carpeta de la sesión debe ser un repositorio git.",
   crearPr:
     "La carpeta debe ser un repositorio registrado con remoto origin en GitHub.",
@@ -530,18 +530,18 @@ export const REQUISITOS = {
  * @param {SessionCapabilitiesInput} sesion
  * @param {RepoCapabilitiesInput} [repo]
  */
-export function capacidadesDe(sesion, repo = {}) {
+export function capabilitiesOf(sesion, repo = {}) {
   const base =
-    CAPACIDADES[/** @type {keyof typeof CAPACIDADES} */ (sesion.motor)];
+    CAPABILITIES[/** @type {keyof typeof CAPABILITIES} */ (sesion.motor)];
   if (!base) return null;
-  const esRepo = !!repo.esRepo;
-  const tieneRemoto = !!repo.tieneRemoto;
-  const remotoGithub = !!repo.remotoGithub;
+  const isRepo = !!repo.esRepo;
+  const hasRemote = !!repo.tieneRemoto;
+  const githubRemote = !!repo.remotoGithub;
   return {
     ...base,
-    esRepo,
-    tieneRemoto,
-    remotoGithub,
+    esRepo: isRepo,
+    tieneRemoto: hasRemote,
+    remotoGithub: githubRemote,
     continuar: sesion.structured
       ? !!sesion.conversacionId
       : sesion.harness
@@ -550,9 +550,9 @@ export function capacidadesDe(sesion, repo = {}) {
     ...(sesion.structured
       ? { terminalInteractiva: false, herramientasEstructuradas: true }
       : {}),
-    revertirArchivos: base.revertirArchivos && esRepo,
-    crearPr: base.crearPr && esRepo && remotoGithub,
-    redactarPr: base.redactarPr && esRepo && remotoGithub,
+    revertirArchivos: base.revertirArchivos && isRepo,
+    crearPr: base.crearPr && isRepo && githubRemote,
+    redactarPr: base.redactarPr && isRepo && githubRemote,
     interrumpir: base.interrumpir && (!!sesion.harness || !!sesion.structured),
   };
 }
@@ -565,7 +565,7 @@ export function capacidadesDe(sesion, repo = {}) {
  * @returns {NormalizedAttachment[]}
  */
 export function validateEngineAttachments(motor, attachments = [], cwd = "") {
-  const caps = CAPACIDADES[/** @type {keyof typeof CAPACIDADES} */ (motor)];
+  const caps = CAPABILITIES[/** @type {keyof typeof CAPABILITIES} */ (motor)];
   if (!caps) throw new Error("Motor desconocido");
   const allowed = new Set(caps.adjuntos || ["text"]);
   if (!Array.isArray(attachments)) {

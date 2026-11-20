@@ -31,15 +31,15 @@ export async function apiDemo(path: string, body?: unknown) {
   if (path === "/sala/tablero") {
     const {
       id,
-      guardar,
-      espacio = "general",
+      guardar: save,
+      espacio: space = "general",
     } = body as { id: string; guardar: boolean; espacio: string };
-    const board: string[] = boards[espacio] || [];
-    boards[espacio] = guardar
+    const board: string[] = boards[space] || [];
+    boards[space] = save
       ? [...new Set([id, ...board])]
       : board.filter((x) => x !== id);
     localStorage.setItem(boardKey, JSON.stringify(boards));
-    return boards[espacio];
+    return boards[space];
   }
   throw new Error("Acción no disponible en la demo.");
 }

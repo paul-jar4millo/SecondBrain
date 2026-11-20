@@ -19,9 +19,9 @@ const usage = {
 it.each([
   ["claude", "quedan 75 %"],
   ["agy", "quedan 94 %"],
-])("muestra las ventanas medidas de %s", async (motor, text) => {
+])("muestra las ventanas medidas de %s", async (engine, text) => {
   fixture.api.mockResolvedValue(usage);
-  render(<UsageBars motor={motor} />);
+  render(<UsageBars motor={engine} />);
   expect(await screen.findByText(new RegExp(text))).toBeTruthy();
 });
 

@@ -22,9 +22,9 @@ export async function serveProviderConversation({
   res,
   id,
   conversations,
-  registro,
+  registro: registry,
 }) {
-  const session = registro.leer().find((s) => s.id === id && !s.eliminada);
+  const session = registry.leer().find((s) => s.id === id && !s.eliminada);
   if (!session?.structured)
     throw new LauncherError("Conversación estructurada no disponible.", 409);
   let closed = false;
@@ -36,7 +36,7 @@ export async function serveProviderConversation({
         const state = await conversations.snapshot(id);
         if (closed) return;
         if (res.writableLength > 4 * 1024 * 1024) return res.end();
-        const current = registro.leer().find((s) => s.id === id);
+        const current = registry.leer().find((s) => s.id === id);
         res.write(
           `event: conversation\ndata: ${JSON.stringify({ ...state, status: current?.estado, error: current?.error })}\n\n`,
         );
@@ -44,7 +44,7 @@ export async function serveProviderConversation({
       .catch(() => res.end());
   };
   const off = await conversations.subscribe(id, send);
-  const offRegistry = registro.subscribe(send);
+  const offRegistry = registry.subscribe(send);
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",

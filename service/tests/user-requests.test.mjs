@@ -36,7 +36,7 @@ test("pregunta persiste antes de emitir evento y sobrevive cierre de turno, inte
   storeRef = store;
 
   const woId = randomUUID();
-  const { solicitud } = await store.createRequest({
+  const { solicitud: request } = await store.createRequest({
     workOrderId: woId,
     sessionId: "sess-1",
     memberId: "coord-ambar",
@@ -46,8 +46,8 @@ test("pregunta persiste antes de emitir evento y sobrevive cierre de turno, inte
     nativeRequestId: "native-req-1",
     nativeTurnId: "turn-1",
   });
-  assert.equal(solicitud.status, "pendiente");
-  assert.equal(solicitud.nativeCallbackStatus, "open");
+  assert.equal(request.status, "pendiente");
+  assert.equal(request.nativeCallbackStatus, "open");
   assert.equal(eventsObserved.length, 1);
   assert.equal(eventsObserved[0].ev.type, "user_request.created");
 
@@ -57,7 +57,7 @@ test("pregunta persiste antes de emitir evento y sobrevive cierre de turno, inte
     nativeTurnId: "turn-1",
     reason: "closed_by_turn",
   });
-  const afterClose = store.get(solicitud.id);
+  const afterClose = store.get(request.id);
   assert.equal(afterClose.status, "pendiente");
   assert.equal(afterClose.nativeCallbackStatus, "closed_by_turn");
   assert.equal(afterClose.requiresNewTurn, true);
@@ -65,13 +65,13 @@ test("pregunta persiste antes de emitir evento y sobrevive cierre de turno, inte
   // Restart process -> question STILL survives
   await store.cerrar();
   const restarted = await createUserRequestStore(dir, { clock: () => now });
-  const afterRestart = restarted.get(solicitud.id);
+  const afterRestart = restarted.get(request.id);
   assert.equal(afterRestart.status, "pendiente");
   assert.equal(afterRestart.requiresNewTurn, true);
 
   // Wrong expectedNativeTurnId is rejected (409)
   await assert.rejects(
-    restarted.respond(solicitud.id, {
+    restarted.respond(request.id, {
       requestId: randomUUID(),
       option: "Sí",
       expectedNativeTurnId: "turn-old-999",
@@ -81,7 +81,7 @@ test("pregunta persiste antes de emitir evento y sobrevive cierre de turno, inte
 
   // Valid user response saves durable receipt without reusing closed native callback
   const reqId = randomUUID();
-  const answered = await restarted.respond(solicitud.id, {
+  const answered = await restarted.respond(request.id, {
     requestId: reqId,
     option: "Sí",
     by: "owner",
@@ -94,16 +94,16 @@ test("pregunta persiste antes de emitir evento y sobrevive cierre de turno, inte
   assert.equal(answered.recibo.origin, "movil");
 
   // Delivery tracking across states
-  const delivering = await restarted.updateDeliveryState(solicitud.id, {
+  const delivering = await restarted.updateDeliveryState(request.id, {
     status: "entregando",
   });
   assert.equal(delivering.status, "entregando");
-  const uncertain = await restarted.updateDeliveryState(solicitud.id, {
+  const uncertain = await restarted.updateDeliveryState(request.id, {
     status: "entrega_incierta",
     note: "Nuevo turno interrumpido antes del ACK",
   });
   assert.equal(uncertain.status, "entrega_incierta");
-  const confirmed = await restarted.updateDeliveryState(solicitud.id, {
+  const confirmed = await restarted.updateDeliveryState(request.id, {
     status: "confirmada",
   });
   assert.equal(confirmed.status, "confirmada");
