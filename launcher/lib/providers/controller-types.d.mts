@@ -42,7 +42,87 @@ export interface ProviderAnswer {
   [key: string]: unknown;
 }
 
+export type ProviderStepStatus = "pending" | "in_progress" | "completed";
+export type ProviderItemStatus = "in-progress" | "completed" | "failed";
+
+export interface ProviderFileDiff {
+  path: string;
+  oldPath?: string;
+  change: "add" | "modify" | "delete" | "rename";
+  patch: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface ProviderRateLimitWindow {
+  window: string;
+  usedPercent: number | null;
+  resetsAt: string | null;
+  status?: "allowed" | "warning" | "rejected";
+}
+
+/**
+ * Rich events beyond messages and tools. Ids are stable per provider item:
+ * a later event with the same id updates the same item. `parentId` ties an
+ * event to a subagent (Claude parent_tool_use_id).
+ */
+export type ProviderEvent =
+  | { type: "reasoning"; id: string; text: string; delta?: boolean }
+  | {
+      type: "plan";
+      id: string;
+      explanation?: string;
+      steps: { text: string; status: ProviderStepStatus }[];
+    }
+  | {
+      type: "todo_list";
+      id: string;
+      todos: { text: string; status: ProviderStepStatus }[];
+    }
+  | {
+      type: "file_change";
+      id: string;
+      diffs: ProviderFileDiff[];
+      status: ProviderItemStatus;
+    }
+  | { type: "turn_diff"; diffs: ProviderFileDiff[] }
+  | {
+      type: "command";
+      id: string;
+      command: string;
+      cwd?: string;
+      output?: string;
+      outputDelta?: string;
+      exitCode?: number | null;
+      durationMs?: number;
+      status: ProviderItemStatus;
+    }
+  | {
+      type: "subagent";
+      id: string;
+      name: string;
+      description?: string;
+      prompt?: string;
+      result?: string;
+      activity?: string;
+      status: ProviderItemStatus;
+    }
+  | {
+      type: "usage";
+      tokens: {
+        inputTokens: number;
+        outputTokens: number;
+        cachedInputTokens?: number;
+        reasoningTokens?: number;
+        costUsd?: number;
+      };
+    }
+  | { type: "rate_limits"; windows: ProviderRateLimitWindow[] }
+  | { type: "mode"; mode: string };
+
 export interface ProviderTurnContext extends ProfileContext, McpContext {
+  /** Rich events for the thread engine; optional for legacy callers. */
+  emit?(event: ProviderEvent): void;
   turnId: string;
   session: ProviderSession;
   cwd: string;

@@ -14,6 +14,7 @@ import {
   verifyAcpConfigModel,
   waitChildExit,
 } from "./shared.mjs";
+import { patchFromTexts, stepStatus } from "./provider-events.mjs";
 
 /** @typedef {import("./controller-types.mjs").ProviderTurnContext & import("./shared.mjs").AcpLaunchContext} AcpContext */
 /** @typedef {Partial<import("../../provider-rpc.mjs").RpcRequestMetadata>} RpcRequestMetadata */
@@ -44,7 +45,10 @@ import {
  * @typedef {AcpToolCallUpdate |
  *   { sessionUpdate: "available_commands_update", availableCommands?: { name?: string }[] } |
  *   { sessionUpdate: "config_option_update", configOptions?: unknown[] } |
- *   { sessionUpdate: "agent_message_chunk", content?: AcpMessageContent }
+ *   { sessionUpdate: "agent_message_chunk", content?: AcpMessageContent } |
+ *   { sessionUpdate: "agent_thought_chunk", content?: AcpMessageContent } |
+ *   { sessionUpdate: "plan", entries?: { content?: string, status?: string }[] } |
+ *   { sessionUpdate: "current_mode_update", currentModeId?: string }
  * } AcpSessionUpdate
  */
 /** @typedef {{ sessionId?: string, update?: AcpSessionUpdate }} AcpNotification */
@@ -145,6 +149,83 @@ export function createAcpController() {
   let connectCtx = null;
   const createdAt = new Date().toISOString();
   let lastUsedAt = Date.now();
+
+  /**
+   * Rich events (thoughts, plan, diffs, terminals, mode) for the thread engine.
+   * @param {AcpTurn} turn
+   * @param {AcpSessionUpdate} update
+   */
+  const emitAcpRichEvent = (turn, update) => {
+    const emit = turn.ctx.emit;
+    if (!emit) return;
+    const u = /** @type {Record<string, any>} */ (update);
+    if (
+      u.sessionUpdate === "agent_thought_chunk" &&
+      u.content?.type === "text"
+    ) {
+      emit({
+        type: "reasoning",
+        id: `acp:${turn.ctx.turnId}:thought:${turn.messageIndex}`,
+        text: String(u.content.text ?? ""),
+        delta: true,
+      });
+      return;
+    }
+    if (u.sessionUpdate === "plan" && Array.isArray(u.entries)) {
+      emit({
+        type: "plan",
+        id: `acp:${turn.ctx.turnId}:plan`,
+        steps: u.entries.map((/** @type {any} */ entry) => ({
+          text: String(entry?.content ?? ""),
+          status: stepStatus(entry?.status),
+        })),
+      });
+      return;
+    }
+    if (u.sessionUpdate === "current_mode_update" && u.currentModeId) {
+      emit({ type: "mode", mode: String(u.currentModeId) });
+      return;
+    }
+    if (
+      (u.sessionUpdate !== "tool_call" &&
+        u.sessionUpdate !== "tool_call_update") ||
+      !u.toolCallId
+    )
+      return;
+    const status =
+      u.status === "failed"
+        ? "failed"
+        : u.status === "completed"
+          ? "completed"
+          : "in-progress";
+    const content = Array.isArray(u.content) ? u.content : [];
+    const diffs = content
+      .filter((/** @type {any} */ c) => c?.type === "diff" && c.path)
+      .map((/** @type {any} */ c) =>
+        patchFromTexts(String(c.path), c.oldText ?? null, c.newText ?? ""),
+      );
+    if (diffs.length)
+      emit({ type: "file_change", id: u.toolCallId, diffs, status });
+    const command = u.rawInput?.command;
+    if (
+      u.kind === "execute" ||
+      content.some((/** @type {any} */ c) => c?.type === "terminal")
+    ) {
+      const output = content
+        .filter((/** @type {any} */ c) => c?.type === "content")
+        .map((/** @type {any} */ c) => c.content?.text ?? "")
+        .join("");
+      emit({
+        type: "command",
+        id: u.toolCallId,
+        command: Array.isArray(command)
+          ? command.join(" ")
+          : String(command ?? u.title ?? ""),
+        ...(output ? { output } : {}),
+        status,
+      });
+    }
+  };
 
   const isAlive = () =>
     !closing &&
@@ -305,6 +386,7 @@ export function createAcpController() {
               u.content.text,
             );
           }
+          emitAcpRichEvent(turn, u);
           if (u.sessionUpdate === "tool_call") {
             turn.messageIndex++;
             const record = {
