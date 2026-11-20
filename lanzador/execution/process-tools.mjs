@@ -11,7 +11,7 @@ import { promisify } from "node:util";
 /** @import { ChildProcess } from "node:child_process" */
 /** @import { ExecutorConfig } from "./options.mjs" */
 
-const runFile = promisify(execFile);
+export const runFile = promisify(execFile);
 
 /** Credential provider of each engine, when it differs from the engine id. */
 /** @type {Partial<Record<string, string>>} */
