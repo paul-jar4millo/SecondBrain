@@ -531,17 +531,7 @@ export function crearEjecutor({
       })
       .finally(async () => {
         await liberar(sesion.id);
-        if (sesion.structured && !job.cancelada && conversations) {
-          const current = registro.leer().find((s) => s.id === sesion.id);
-          if (current?.estado === "terminada" && current.conversacionId) {
-            const nextQueued = await conversations
-              .consumeNextQueuedMessage(sesion.id)
-              .catch(() => null);
-            if (nextQueued) {
-              dispatchQueuedTurn(sesion, nextQueued);
-            }
-          }
-        }
+        if (sesion.structured && !job.cancelada) await drenarCola(sesion.id);
       });
   }
   function vigilar(sesion, hijo) {
@@ -1078,17 +1068,13 @@ export function crearEjecutor({
     job.hijo = hijo;
     job.nativo = true;
     if (job.cancelada) senalar(hijo, "SIGTERM");
-    const detenerVigilante = vigilar(sesion, hijo);
     const terminal = crearTerminal();
     terminal.generacion = randomUUID();
     if (sesion.terminal) terminal.append(sesion.terminal + "\r\n");
     terminales.set(sesion.id, terminal);
-    await registro.actualizar(sesion.id, {
-      interactiva: true,
-      ...(["claude", "deepseek"].includes(sesion.motor)
-        ? { conversacionId: sesion.conversacionId || sesion.id }
-        : {}),
-    });
+    // Every reader is attached before the first await: output that arrives in
+    // between would otherwise reach only the watchdog, and a fast exit would
+    // never be seen.
     let pending = "";
     let changes = Promise.resolve();
     // Persisting the replay is not news: telling every client each 10 s would
@@ -1136,11 +1122,20 @@ export function crearEjecutor({
     hijo.stderr.on("data", (chunk) => {
       fallo = (fallo + chunk.toString()).slice(-margenDiagnostico(brief));
     });
+    const cierre = new Promise((resolve, reject) => {
+      hijo.once("error", reject);
+      hijo.once("close", resolve);
+    });
+    cierre.catch(() => {});
+    const detenerVigilante = vigilar(sesion, hijo);
     try {
-      const codigo = await new Promise((resolve, reject) => {
-        hijo.once("error", reject);
-        hijo.once("close", resolve);
+      await registro.actualizar(sesion.id, {
+        interactiva: true,
+        ...(["claude", "deepseek"].includes(sesion.motor)
+          ? { conversacionId: sesion.conversacionId || sesion.id }
+          : {}),
       });
+      const codigo = await cierre;
       if (codigo && !job.cancelada)
         diagnosticar(sesion, brief, { codigo, diagnostico: fallo });
       await changes;
@@ -1477,13 +1472,40 @@ export function crearEjecutor({
     });
     return registro.leer().find((s) => s.id === sesion.id) || sesion;
   }
-  function dispatchQueuedTurn(sesion, nextQueued) {
-    setImmediate(() => {
-      void continuar(sesion.id, nextQueued.text, {
-        attachments: nextQueued.attachments,
-        commandId: nextQueued.commandId,
-      }).catch(() => {});
-    });
+  /** Sessions whose next queued message is being started. */
+  const drenando = new Set();
+  /**
+   * Starts the next queued message of an idle structured session. Called when
+   * a turn ends and after a message is queued, since either can happen first.
+   */
+  async function drenarCola(id) {
+    if (!conversations || activos.has(id) || drenando.has(id)) return;
+    const sesion = registro.leer().find((s) => s.id === id && !s.eliminada);
+    if (sesion?.estado !== "terminada" || !sesion.conversacionId) return;
+    drenando.add(id);
+    try {
+      const siguiente = await conversations
+        .consumeNextQueuedMessage(id)
+        .catch(() => null);
+      if (!siguiente) return;
+      // A later tick lets the finished turn settle before the next one starts.
+      await new Promise((r) => setImmediate(r));
+      await continuar(id, siguiente.text, {
+        attachments: siguiente.attachments,
+        commandId: siguiente.commandId,
+      }).catch((error) =>
+        conversations
+          .markCommandDelivery(
+            id,
+            siguiente.commandId,
+            "entrega_incierta",
+            error?.message || "No se pudo iniciar el turno en cola.",
+          )
+          .catch(() => {}),
+      );
+    } finally {
+      drenando.delete(id);
+    }
   }
   function continuar(id, brief, turnOptions = {}) {
     return serial(async () => {
@@ -1737,13 +1759,17 @@ export function crearEjecutor({
       );
       const isWorking = activos.has(id);
       if (isWorking) {
-        return conversations.sendMessage(id, {
+        const accepted = await conversations.sendMessage(id, {
           clientMessageId,
           text,
           mode,
           attachments: validatedAttachments,
           online: true,
+          queueIfIdle: true,
         });
+        // The turn may have ended while the message was being queued.
+        if (accepted.queued) await drenarCola(id);
+        return accepted;
       }
       if (mode === "queue") {
         return conversations.sendMessage(id, {

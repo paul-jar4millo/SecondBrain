@@ -127,7 +127,7 @@ test("el replay PTY conserva UTF-8 dividido", async (t) => {
     harness: true,
     brief: "x",
   });
-  for (let i = 0; i < 100 && !child.listenerCount("close"); i++)
+  for (let i = 0; i < 100 && !registro.leer()[0]?.interactiva; i++)
     await new Promise((resolve) => setTimeout(resolve, 5));
   assert.equal(
     registro.leer()[0].interactiva,
