@@ -29,6 +29,19 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
     await put(`${module}/.data/personal.md`, "private");
     await put(`${module}/node_modules/private.txt`, "private");
   }
+  // The root lockfile is the source; a stale module lockfile is not shipped.
+  await put(
+    "package-lock.json",
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { workspaces: ["service", "mcp", "launcher"] },
+        service: { name: "@x/service" },
+        mcp: { name: "@x/mcp" },
+        launcher: { name: "@x/launcher" },
+      },
+    }),
+  );
   await put("service/lib/shared.mjs", "export const shared = true;");
   await put("service/lib/notes.md", "private");
   await put("service/http/context.mjs", "export const context = true;");
@@ -84,5 +97,10 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
     "equipo-cuatro-fases.md",
     "resumen-matutino.md",
   ]);
+  const lanzadorLock = JSON.parse(
+    await readFile(path.join(target, "lanzador/package-lock.json"), "utf8"),
+  );
+  assert.equal(lanzadorLock.name, "@x/launcher");
+  assert.equal(lanzadorLock.lockfileVersion, 3);
   await assert.rejects(packageRelease(target, { sourceRoot: source }), /vacío/);
 });
