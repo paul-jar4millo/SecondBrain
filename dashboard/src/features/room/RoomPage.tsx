@@ -2,18 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUI } from "../../components/ui";
 import { api, isDemo } from "../../core/store";
-import { montar } from "./sala";
+import { montar } from "./room";
 import { teamApi, teamController } from "../team/team-store";
 import { today } from "../../core/model";
 import { useFinance } from "../finance/useFinance";
-import { roomSummary } from "./sala-summary";
-import "./sala.css";
+import { roomSummary } from "./room-summary";
+import "./room.css";
 import "./agentes-panel.css";
 
 const apiSala = (path: string, body?: unknown) =>
   api(path, body ? { method: "POST", body: JSON.stringify(body) } : undefined);
 
-export default function SalaPage() {
+export default function RoomPage() {
   const { items, notify, openAgent, openTeam } = useUI();
   const { data: finance, error: financeError } = useFinance();
   const [hidden, setHidden] = useState(
@@ -61,7 +61,7 @@ export default function SalaPage() {
       montar(root.current!, {
         api: isDemo
           ? async (path, body) =>
-              (await import("./sala-demo")).apiDemo(path, body)
+              (await import("./room-demo")).apiDemo(path, body)
           : apiSala,
         toast: (message) => latest.current.notify(message),
         team: teamController,

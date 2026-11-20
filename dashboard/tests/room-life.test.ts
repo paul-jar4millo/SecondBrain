@@ -9,7 +9,7 @@ import {
   puestoPara,
   interactionPrompt,
   zoneGuide,
-} from "../src/features/sala/sala-life";
+} from "../src/features/room/room-life";
 
 describe("living room navigation", () => {
   it("routes around furniture without cutting corners or leaving the map", () => {

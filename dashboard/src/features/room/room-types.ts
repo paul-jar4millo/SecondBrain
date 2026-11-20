@@ -1,4 +1,4 @@
-import type { RoomSummary } from "./sala-summary";
+import type { RoomSummary } from "./room-summary";
 export interface Job {
   jobId?: string;
   estado: string;

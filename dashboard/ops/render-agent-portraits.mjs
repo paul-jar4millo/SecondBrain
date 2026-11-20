@@ -29,7 +29,7 @@ try {
   await page.evaluate(async () => {
     const THREE = await import("/node_modules/three/build/three.module.js");
     const { AGENTS_BY_ID, crearPersona } =
-      await import("/src/features/sala/sala-personajes.js");
+      await import("/src/features/room/room-characters.js");
     const renderer = new THREE.WebGLRenderer({
       alpha: true,
       antialias: true,

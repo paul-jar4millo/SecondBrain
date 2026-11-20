@@ -4,7 +4,7 @@ import {
   createThirdPersonCamera,
   followPlayer,
   resetCamera,
-} from "../src/features/sala/sala-camera";
+} from "../src/features/room/room-camera";
 
 describe("cámara de tercera persona", () => {
   it("suaviza el seguimiento sin cambiar el giro y converge igual a 30 y 60 FPS", () => {

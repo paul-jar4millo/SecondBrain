@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   sesionesEscena,
   conciliarCopias,
-} from "../src/features/sala/sala-sesiones";
+} from "../src/features/room/room-sessions";
 
 describe("sesiones observadas", () => {
   it("mantiene cuatro bases y crea una figura por sesión concurrente adicional", () => {

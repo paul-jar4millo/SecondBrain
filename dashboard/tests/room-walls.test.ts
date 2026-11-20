@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { expect, it } from "vitest";
-import { fadeWalls } from "../src/features/sala/sala-walls.js";
+import { fadeWalls } from "../src/features/room/room-walls.js";
 
 it("fades an obstructing wall without changing another surface sharing its material", () => {
   const shared = new THREE.MeshBasicMaterial();

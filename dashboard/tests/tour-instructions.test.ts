@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { tourInstructions } from "../src/features/sala/sala-life";
+import { tourInstructions } from "../src/features/room/room-life";
 
 it("enseña gestos táctiles sin pedir un teclado en el primer paseo móvil", () => {
   const steps = tourInstructions(true);

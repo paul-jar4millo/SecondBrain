@@ -18,7 +18,7 @@ npm --prefix dashboard run verify:browser     # Playwright suites
 | `src/app/`                                                                | `App`, `Workspace` (scene + tool dialog), routing, auth screen                 |
 | `src/core/`                                                               | Store and offline outbox (Dexie), API client, events (SSE), i18n, demo data    |
 | `src/i18n/`                                                               | Spanish and English dictionaries (`MessageKey` is checked at compile time)     |
-| `src/features/sala/`                                                      | The 3D refuge: scene, camera, characters, boards, quality levels               |
+| `src/features/room/`                                                      | The 3D refuge: scene, camera, characters, boards, quality levels               |
 | `src/features/{projects,tasks,finance,files,team,settings,assist,mundo}/` | Tools                                                                          |
 | `src/styles/`                                                             | `refugio.css` (HUD) and `tools.css` (dialogs and forms)                        |
 | `ops/`                                                                    | Dev server, precache, Blender scene script, Playwright suites, demo smoke test |
@@ -55,7 +55,7 @@ obstacles); the editable file is `ops/sala-refugio.blend`:
 blender -b --factory-startup -P ops/sala-refugio.py   # from dashboard/
 ```
 
-`src/features/sala/sala-mundo.js` applies materials and movement. Keep the
+`src/features/room/room-world.js` applies materials and movement. Keep the
 object name prefixes the script, navigation and obstacle contract rely on.
 Portraits in `public/portraits` are rendered from the GLB characters by
 `ops/render-agent-portraits.mjs`. Asset provenance:
@@ -70,7 +70,7 @@ and a lazily loaded `Component`. To add one: implement it with the existing
 authenticated APIs, register a unique route and its note path, and verify
 routes, errors, desktop and mobile with synthetic fixtures.
 
-The built-in "world" panel (`src/features/mundo/`) reads a published video
+The built-in "world" panel (`src/features/world/`) reads a published video
 package that `service/world.mjs` validates and serves after authentication;
 `MUNDO_PAQUETE` points to it. It never reads the external project's files or
 runs its scripts.

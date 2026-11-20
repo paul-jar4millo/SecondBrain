@@ -514,7 +514,7 @@
       "**Do** consultar sin ejecutar, conservar el contexto al volver y ofrecer inicio o copiado como acciones explícitas distintas.",
       "**Do** probar las herramientas en 1440 × 900, 1280 × 720, 1024 × 768, 375 × 812, 844 × 390 y anchura equivalente a zoom 200 %, incluyendo Escape y retorno de foco.",
       "**Do** respetar movimiento reducido: el mar, los giros y los halos se detienen.",
-      "**Do** comprobar los solapes del HUD con `ops/verify-refugio.mjs` en 1024 × 768, 1280 × 720, 1440 × 900, 375 × 812 y 844 × 390 antes de mover piezas."
+      "**Do** comprobar los solapes del HUD con `ops/verify-refuge.mjs` en 1024 × 768, 1280 × 720, 1440 × 900, 375 × 812 y 844 × 390 antes de mover piezas."
     ],
     "donts": [
       "**Don't** volver a tarjetas claras, pills, sombras suaves o iconos de trazo en el HUD.",

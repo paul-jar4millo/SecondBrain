@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { fadeWalls } from "./sala-walls.js";
+import { fadeWalls } from "./room-walls.js";
 
 // Scene dressing for the Blender map: toon materials, ink lines, the faceted sea,
 // glow halos and the small animated pieces. Group names are set in ops/sala-refugio.py.
