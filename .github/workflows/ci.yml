@@ -10,7 +10,8 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    # Weekly dependency audit (Mondays 15:23 UTC).
+    # Weekly dependency audit and browser suites (Mondays 15:23 UTC); a
+    # failing browser suite opens an issue (browser-report).
     - cron: "23 15 * * 1"
 
 permissions:
@@ -26,7 +27,6 @@ env:
 
 jobs:
   verify:
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -55,7 +55,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           case "$EVENT" in
-            workflow_dispatch) browser=true ;;
+            workflow_dispatch | schedule) browser=true ;;
             pull_request)
               if files=$(git diff --name-only "$BASE" HEAD); then
                 grep -qE '^(dashboard|service)/' <<<"$files" && browser=true || browser=false
@@ -245,3 +245,28 @@ jobs:
           path: .impeccable/review
           retention-days: 7
           if-no-files-found: ignore
+
+  # The weekly run has nobody watching it: a failing browser suite opens one
+  # issue (or comments on the open one) instead of failing silently.
+  browser-report:
+    needs: browser
+    if: always() && github.event_name == 'schedule' && needs.browser.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Weekly browser suites failing"
+          number=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
+          body="The scheduled browser suites failed: $RUN_URL"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
