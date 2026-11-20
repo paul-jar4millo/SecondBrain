@@ -532,6 +532,7 @@ test("HTTP routes and the resumable SSE stream", async (t) => {
     list.threads.map((x) => x.id),
     [thread.id],
   );
+  assert.equal(list.globalSeq, env.store.lastGlobalSeq());
   const sent = await fetch(`${base}/threads/${thread.id}/messages`, {
     method: "POST",
     body: JSON.stringify({ text: "más", mode: "send" }),
@@ -562,4 +563,106 @@ test("HTTP routes and the resumable SSE stream", async (t) => {
   const { value } = await globalReader.read();
   globalController.abort();
   assert.match(new TextDecoder().decode(value), /^id: 1\n/);
+});
+
+test("agent questions outlive the turn and their answer starts a new one", async (t) => {
+  const env = await setup(t, async () => {});
+  const thread = await env.engine.create({
+    kind: "scratch",
+    prompt: "a",
+    agent: AGENT,
+  });
+  await waitFor(() => env.log.turns.length === 1);
+  await env.engine.idle(thread.id);
+  const request = env.engine.askUser(thread.id, {
+    title: "¿Qué base de datos?",
+    options: ["SQLite", "Postgres"],
+  });
+  assert.equal(request.kind, "question");
+  assert.deepEqual(request.options, [
+    { id: "o1", label: "SQLite" },
+    { id: "o2", label: "Postgres" },
+  ]);
+  assert.equal(env.store.getThread(thread.id).status, "waiting-user");
+  // A restart keeps the agent's question open.
+  env.engine.recover();
+  assert.equal(env.engine.request(thread.id, request.id).status, "open");
+  assert.equal(env.store.getThread(thread.id).status, "waiting-user");
+  env.engine.answer(thread.id, request.id, {
+    answer: { optionId: "o2", text: "con réplica" },
+    origin: "app",
+  });
+  await waitFor(() => env.log.turns.length === 2);
+  await env.engine.idle(thread.id);
+  assert.equal(
+    env.log.turns[1].prompt,
+    `Respuesta a «¿Qué base de datos?» (${request.id}):\nPostgres\ncon réplica`,
+  );
+  assert.equal(env.engine.request(thread.id, request.id).status, "answered");
+  assert.equal(env.store.getThread(thread.id).status, "idle");
+  assert.throws(() => env.engine.askUser(thread.id, { title: "" }));
+  assert.throws(
+    () => env.engine.request(thread.id, "req_missing000"),
+    /no encontrada/,
+  );
+});
+
+test("an agent question during a turn is answered without a new turn", async (t) => {
+  /** @type {any} */
+  let asked;
+  const env = await setup(t, async (_ctx, n) => {
+    if (n !== 1) return;
+    asked = env.engine.askUser(_ctx.session.id, {
+      title: "Datos",
+      fields: [{ id: "name", label: "Nombre", type: "text", required: true }],
+    });
+    await waitFor(
+      () => env.engine.request(_ctx.session.id, asked.id).status === "answered",
+    );
+  });
+  const thread = await env.engine.create({
+    kind: "scratch",
+    prompt: "a",
+    agent: AGENT,
+  });
+  await waitFor(() => asked);
+  assert.equal(asked.kind, "form");
+  assert.equal(env.store.getThread(thread.id).status, "running");
+  env.engine.answer(thread.id, asked.id, {
+    answer: { values: { name: "Ana" } },
+    origin: "app",
+  });
+  await env.engine.idle(thread.id);
+  assert.equal(env.log.turns.length, 1);
+  assert.equal(env.store.getThread(thread.id).status, "idle");
+});
+
+test("the service may choose the thread id", async (t) => {
+  const env = await setup(t, async () => {});
+  const thread = await env.engine.create({
+    threadId: "thr_chosen00000001",
+    kind: "scratch",
+    prompt: "a",
+    agent: AGENT,
+  });
+  assert.equal(thread.id, "thr_chosen00000001");
+  await env.engine.idle(thread.id);
+  await assert.rejects(
+    env.engine.create({
+      threadId: thread.id,
+      kind: "scratch",
+      prompt: "a",
+      agent: AGENT,
+    }),
+    /ya existe/,
+  );
+  await assert.rejects(
+    env.engine.create({
+      threadId: "../x",
+      kind: "scratch",
+      prompt: "a",
+      agent: AGENT,
+    }),
+    /inválido/,
+  );
 });
