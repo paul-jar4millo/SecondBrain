@@ -40,6 +40,20 @@ export interface ThreadQuery {
   limit?: number;
 }
 
+export interface ThreadMeta {
+  /** Commit the thread branched from (repo threads). */
+  baseCommit?: string;
+  /** Provider session ids by engine, to resume conversations. */
+  nativeIds?: Record<string, string>;
+}
+
+export interface Checkpoint {
+  turnId: string;
+  threadId: string;
+  beforeTree: string | null;
+  afterTree: string | null;
+}
+
 export interface Store {
   readonly db: Db;
   append(threadId: string, events: readonly NewThreadEvent[]): ThreadEvent[];
@@ -59,6 +73,10 @@ export interface Store {
   inbox(): InboxEntry[];
   recordUsage(snapshot: UsageSnapshot): void;
   latestUsage(engine: string): UsageSnapshot | null;
+  meta(threadId: string): ThreadMeta;
+  setMeta(threadId: string, patch: Partial<ThreadMeta>): ThreadMeta;
+  recordCheckpoint(checkpoint: Checkpoint): void;
+  checkpoint(turnId: string): Checkpoint | null;
   rebuildProjections(): void;
   backup(file: string): void;
   close(): void;
@@ -301,6 +319,50 @@ export function openStore(file: string): Store {
             source: row.source,
             windows: parseJson(row.data),
           })
+        : null;
+    },
+
+    meta(threadId) {
+      const row = one<{ data: string }>(
+        "SELECT data FROM thread_meta WHERE thread_id = ?",
+        threadId,
+      );
+      return row ? parseJson<ThreadMeta>(row.data) : {};
+    },
+
+    setMeta(threadId, patch) {
+      const next = { ...store.meta(threadId), ...patch };
+      db.prepare(
+        `INSERT INTO thread_meta (thread_id, data) VALUES (?, ?)
+         ON CONFLICT(thread_id) DO UPDATE SET data = excluded.data`,
+      ).run(threadId, json(next));
+      return next;
+    },
+
+    recordCheckpoint({ turnId, threadId, beforeTree, afterTree }) {
+      db.prepare(
+        `INSERT INTO checkpoints (turn_id, thread_id, before_tree, after_tree)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(turn_id) DO UPDATE SET
+           before_tree = COALESCE(excluded.before_tree, before_tree),
+           after_tree = COALESCE(excluded.after_tree, after_tree)`,
+      ).run(turnId, threadId, beforeTree, afterTree);
+    },
+
+    checkpoint(turnId) {
+      const row = one<{
+        turn_id: string;
+        thread_id: string;
+        before_tree: string | null;
+        after_tree: string | null;
+      }>("SELECT * FROM checkpoints WHERE turn_id = ?", turnId);
+      return row
+        ? {
+            turnId: row.turn_id,
+            threadId: row.thread_id,
+            beforeTree: row.before_tree,
+            afterTree: row.after_tree,
+          }
         : null;
     },
 
