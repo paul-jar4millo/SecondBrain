@@ -387,6 +387,7 @@ async function createHarness(t, options = {}) {
     HOME: dir,
     USERPROFILE: dir,
     CODEX_HOME: path.join(dir, ".codex-isolated"),
+    SB_CODEX_BIN: process.execPath,
     SB_LANZADOR_DATA_DIR: dataDir,
     ...(options.env || {}),
   };
@@ -2248,6 +2249,7 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
       HOME: root,
       USERPROFILE: root,
       CODEX_HOME: path.join(root, ".cx"),
+      SB_CODEX_BIN: process.execPath,
       SB_LANZADOR_DATA_DIR: lanzadorData,
     },
     conversations,
