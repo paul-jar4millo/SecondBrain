@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { fadeWalls } from "./room-walls.js";
+import { fadeWalls } from "./room-walls";
 
 // Scene dressing for the Blender map: toon materials, ink lines, the faceted sea,
 // glow halos and the small animated pieces. Group names are set in ops/room-refuge.py.
