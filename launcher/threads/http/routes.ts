@@ -142,6 +142,22 @@ export function createThreadsHttp({
       },
     ],
     [
+      "POST",
+      new RegExp(`^/threads/${ID}/close$`),
+      async (m, req, res) => {
+        send(res, 200, {
+          thread: await engine.close(m[1] as string, await readJson(req)),
+        });
+      },
+    ],
+    [
+      "POST",
+      new RegExp(`^/threads/${ID}/archive$`),
+      async (m, _req, res) => {
+        send(res, 200, { thread: await engine.archive(m[1] as string) });
+      },
+    ],
+    [
       "GET",
       new RegExp(`^/threads/${ID}/diff$`),
       async (m, _req, res) => {
@@ -181,7 +197,10 @@ export function createThreadsHttp({
         return true;
       }
       if (error instanceof EngineError)
-        send(res, STATUS_BY_CODE[error.code] ?? 400, { error: error.message });
+        send(res, STATUS_BY_CODE[error.code] ?? 400, {
+          error: error.message,
+          ...error.details,
+        });
       else if ((error as { name?: string })?.name === "ZodError")
         send(res, 400, { error: "Parámetros inválidos." });
       else send(res, 500, { error: "Error interno del lanzador." });
