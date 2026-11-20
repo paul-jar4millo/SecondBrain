@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { PageHeading } from "../../components/PageHeading";
 import { api, isDemo } from "../../core/store";
-import { montarPanel } from "./panel.js";
+import { montarPanel } from "./panel";
 import { useConfirmation } from "../../components/useConfirmation";
 import "./panel.css";
 
