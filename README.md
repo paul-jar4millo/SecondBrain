@@ -1,5 +1,7 @@
 # SecondBrain
 
+**English** · [Español](README.es.md)
+
 [![CI](https://github.com/paul-jar4millo/SecondBrain/actions/workflows/ci.yml/badge.svg)](https://github.com/paul-jar4millo/SecondBrain/actions/workflows/ci.yml)
 [![Live demo](https://img.shields.io/badge/demo-GitHub%20Pages-2f66e6)](https://paul-jar4millo.github.io/SecondBrain/?lang=en)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -16,8 +18,6 @@ consequences.
 (synthetic data, runs entirely in your browser)
 
 ![The refuge: a low-poly loft with the agent team and the HUD](docs/assets/refuge.gif)
-
-[Español](README.es.md)
 
 ## Highlights
 
@@ -84,14 +84,14 @@ The full install with agents is in [deployment](docs/deployment.md).
 
 ## Quality
 
-| Check | Tooling |
-| --- | --- |
-| Tests | ~540 tests: `node:test` for service, MCP, runner and ops; Vitest + Testing Library for the dashboard |
-| Coverage | V8 coverage per module, summarized in every CI run (service ≈ 85 % lines) |
-| Browser | Playwright suites for the refuge, tools, approvals and conversations, desktop and mobile |
-| Static analysis | ESLint, Prettier, TypeScript (`strict` in the dashboard, `@ts-check` in Node modules), ShellCheck |
-| Supply chain | Exact dependency versions, SHA-pinned actions, Dependabot, `npm audit` |
-| History | Conventional Commits, checked by a hook and in CI |
+| Check           | Tooling                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------- |
+| Tests           | ~540 tests: `node:test` for service, MCP, runner and ops; Vitest + Testing Library for the dashboard |
+| Coverage        | V8 coverage per module, summarized in every CI run (service ≈ 85 % lines)                            |
+| Browser         | Playwright suites for the refuge, tools, approvals and conversations, desktop and mobile             |
+| Static analysis | ESLint, Prettier, TypeScript (`strict` in the dashboard, `@ts-check` in Node modules), ShellCheck    |
+| Supply chain    | Exact dependency versions, SHA-pinned actions, Dependabot, `npm audit`                               |
+| History         | Conventional Commits, checked by a hook and in CI                                                    |
 
 ```sh
 npm test && npm run test:api        # unit and integration
@@ -101,20 +101,20 @@ npm run coverage                    # per-module coverage table
 
 ## Documentation
 
-| | |
-| --- | --- |
-| [Architecture](docs/architecture/README.md) | Context, containers, request flows |
-| [Modules](docs/modules/) | [service](docs/modules/service.md), [mcp](docs/modules/mcp.md), [lanzador](docs/modules/lanzador.md), [dashboard](docs/modules/dashboard.md) |
-| [HTTP API](docs/api.md) · [MCP tools](docs/mcp-tools.md) | Interfaces |
-| [Configuration](docs/configuration.md) | Environment variables and host files |
-| [Deployment](docs/deployment.md) · [Operations](docs/operations.md) | Docker, Proxmox VE, backups, rollback |
-| [CI/CD](docs/ci-cd.md) | Pipelines and releases |
-| [Product](PRODUCT.md) · [Design](DESIGN.md) | What it is for and how it looks |
+|                                                                     |                                                                                                                                              |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Architecture](docs/architecture/README.md)                         | Context, containers, request flows                                                                                                           |
+| [Modules](docs/modules/)                                            | [service](docs/modules/service.md), [mcp](docs/modules/mcp.md), [lanzador](docs/modules/launcher.md), [dashboard](docs/modules/dashboard.md) |
+| [HTTP API](docs/api.md) · [MCP tools](docs/mcp-tools.md)            | Interfaces                                                                                                                                   |
+| [Configuration](docs/configuration.md)                              | Environment variables and host files                                                                                                         |
+| [Deployment](docs/deployment.md) · [Operations](docs/operations.md) | Docker, Proxmox VE, backups, rollback                                                                                                        |
+| [CI/CD](docs/ci-cd.md)                                              | Pipelines and releases                                                                                                                       |
+| [Product](PRODUCT.md) · [Design](DESIGN.md)                         | What it is for and how it looks                                                                                                              |
 
 ## Roadmap
 
 - Finish moving tool content to the i18n dictionaries.
-- Split `service/index.mjs` and `lanzador/executor.mjs` into route and
+- Split `service/index.mjs` and `launcher/executor.mjs` into route and
   lifecycle modules (the provider controllers are already split).
 - Extend `@ts-check` to the remaining Node files.
 - Raise MCP and dashboard coverage.

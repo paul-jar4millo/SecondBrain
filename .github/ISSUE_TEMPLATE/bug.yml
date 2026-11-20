@@ -20,7 +20,7 @@ body:
     id: module
     attributes:
       label: Module
-      options: [dashboard, service, mcp, lanzador, ops, docs]
+      options: [dashboard, service, mcp, launcher, ops, docs]
     validations:
       required: true
   - type: input

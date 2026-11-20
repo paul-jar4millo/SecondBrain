@@ -1,4 +1,4 @@
-// The session executor. Each concern lives in lanzador/execution/; what stays
+// The session executor. Each concern lives in launcher/execution/; what stays
 // here is the turn orchestration (launch, release, resource queue, message
 // queue), whose functions call one another.
 import { validateEngineAttachments } from "./engines.mjs";

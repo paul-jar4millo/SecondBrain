@@ -5,6 +5,17 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 
 /**
+ * Repository folder → folder in the release. The launcher lives in launcher/
+ * in the repository but stays lanzador/ in the release, because systemd units,
+ * sb-hilo, remote hooks and the deploy helper on the hosts use that path.
+ */
+export const RELEASE_MODULES = /** @type {const} */ ([
+  ["service", "service"],
+  ["mcp", "mcp"],
+  ["launcher", "lanzador"],
+]);
+
+/**
  * Explicit inputs: never copy an entire checkout or runtime data directory.
  * @param {string} destination
  * @param {{ sourceRoot?: string }} [options]
@@ -22,20 +33,20 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
     path.join(target, "dashboard/dist"),
     { recursive: true },
   );
-  for (const module of ["service", "mcp", "lanzador"]) {
-    await mkdir(path.join(target, module));
+  for (const [module, output] of RELEASE_MODULES) {
+    await mkdir(path.join(target, output));
     for (const entry of await readdir(path.join(root, module), {
       withFileTypes: true,
     })) {
       if (
         entry.isFile() &&
         (entry.name.endsWith(".mjs") ||
-          (module === "lanzador" && entry.name === "terminal.py") ||
+          (module === "launcher" && entry.name === "terminal.py") ||
           ["package.json", "package-lock.json"].includes(entry.name))
       )
         await cp(
           path.join(root, module, entry.name),
-          path.join(target, module, entry.name),
+          path.join(target, output, entry.name),
         );
     }
     // Internal folders of a package, recursively: only .mjs sources.
@@ -58,14 +69,14 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
             path.join(entry.parentPath, entry.name),
           );
           await mkdir(
-            path.dirname(path.join(target, module, folder, relative)),
+            path.dirname(path.join(target, output, folder, relative)),
             {
               recursive: true,
             },
           );
           await cp(
             path.join(lib, relative),
-            path.join(target, module, folder, relative),
+            path.join(target, output, folder, relative),
           );
         }
     }
@@ -73,16 +84,16 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
   await mkdir(path.join(target, "lanzador/skills"));
   for (const skill of ["equipo-cuatro-fases", "resumen-matutino"])
     await cp(
-      path.join(root, `lanzador/skills/${skill}.md`),
+      path.join(root, `launcher/skills/${skill}.md`),
       path.join(target, `lanzador/skills/${skill}.md`),
     );
   // Product skills: only each skill folder's SKILL.md, so the catalog
   // hashes the same bytes in the release and nothing else from the folder ships.
-  for (const entry of await readdir(path.join(root, "lanzador/skills"), {
+  for (const entry of await readdir(path.join(root, "launcher/skills"), {
     withFileTypes: true,
   })) {
     if (!entry.isDirectory()) continue;
-    const file = path.join(root, "lanzador/skills", entry.name, "SKILL.md");
+    const file = path.join(root, "launcher/skills", entry.name, "SKILL.md");
     const isFile = await stat(file)
       .then((s) => s.isFile())
       .catch((e) => {
@@ -96,7 +107,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
       path.join(target, "lanzador/skills", entry.name, "SKILL.md"),
     );
   }
-  await cp(path.join(root, "ops/lanzador"), path.join(target, "ops/lanzador"), {
+  await cp(path.join(root, "ops/launcher"), path.join(target, "ops/lanzador"), {
     recursive: true,
   });
   for (const directory of [
@@ -160,7 +171,7 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
     recursive: true,
   });
   // Verify the manifests are private before distributing any software package.
-  for (const module of ["service", "mcp", "lanzador"]) {
+  for (const [, module] of RELEASE_MODULES) {
     if (
       !JSON.parse(
         await readFile(path.join(target, module, "package.json"), "utf8"),
