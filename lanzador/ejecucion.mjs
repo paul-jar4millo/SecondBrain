@@ -1,6 +1,6 @@
 import { spawn, execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -30,6 +30,7 @@ import { sessionCommand, stopSessionScope } from "./limits.mjs";
 import { ErrorLanzador } from "./errores.mjs";
 import { resolveExecutorOptions } from "./execution/options.mjs";
 import { createExecutionState } from "./execution/state.mjs";
+import { createSessionSecrets } from "./execution/secrets.mjs";
 import { createProcessTools } from "./execution/process-tools.mjs";
 
 /** @import { LauncherSession } from "./session-types.d.ts" */
@@ -95,47 +96,11 @@ export function crearEjecutor(options) {
     margenDiagnostico,
     diagnosticar,
   } = createProcessTools(config);
-  /**
-   * @param {string} sessionId
-   * @param {string} token
-   */
-  async function writeSessionTokenFile(sessionId, token) {
-    const dir = sessionTokenDir();
-    await mkdir(dir, { recursive: true, mode: 0o700 });
-    const file = path.join(dir, `${sessionId}.token`);
-    await writeFile(file, String(token), { mode: 0o600 });
-    sessionTokenFiles.set(sessionId, file);
-    return file;
-  }
-  /** @param {string} sessionId */
-  async function cleanupSessionRuntimeSecrets(sessionId) {
-    const file = sessionTokenFiles.get(sessionId);
-    sessionTokenFiles.delete(sessionId);
-    sessionProfiles.delete(sessionId);
-    sessionBillingGrants.delete(sessionId);
-    materializedSkillsBySession.delete(sessionId);
-    const cleanupSkills = materializedSkillCleanups.get(sessionId);
-    materializedSkillCleanups.delete(sessionId);
-    if (cleanupSkills) {
-      await cleanupSkills().catch(() => {});
-    }
-    if (file) {
-      await rm(file, { force: true }).catch(() => {});
-    }
-  }
-  /** @param {LauncherSession} sesion */
-  function resolveSessionEffectiveProfile(sesion) {
-    const baseId = sesion.toolProfileId || "ejecucion";
-    const baseCatalogProfile =
-      toolCatalog?.getProfile(baseId) ||
-      TOOL_PROFILES_BASE[baseId] ||
-      TOOL_PROFILES_BASE.ejecucion;
-    const override =
-      sessionProfiles.get(sesion.id) || sesion.effectiveProfile || null;
-    return override
-      ? narrowChildProfile(baseCatalogProfile, override)
-      : structuredClone(baseCatalogProfile);
-  }
+  const {
+    writeSessionTokenFile,
+    cleanupSessionRuntimeSecrets,
+    resolveSessionEffectiveProfile,
+  } = createSessionSecrets(config, state, { sessionTokenDir });
   /** @param {string} id */
   function limpiarEviccionOciosa(id) {
     const timer = idleTimers.get(id);
