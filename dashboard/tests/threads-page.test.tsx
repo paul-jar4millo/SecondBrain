@@ -241,29 +241,23 @@ it("closes a repo thread by local merge and asks before archiving", async () => 
   await user.click(
     within(close).getByRole("radio", { name: /Integrar en local/ }),
   );
-  await user.click(
-    within(close).getByRole("button", { name: "Integrar", exact: true }),
-  );
+  await user.click(within(close).getByRole("button", { name: "Integrar" }));
   expect(submitBody("/threads/cerrar")).toEqual({
     id: thread.id,
     mode: "merge",
   });
   await screen.findByText("Este thread está cerrado.");
-  await user.click(
-    screen.getByRole("button", { name: "Archivar", exact: true }),
-  );
+  await user.click(screen.getByRole("button", { name: "Archivar" }));
   const archive = screen.getByRole("dialog", { name: "Archivar thread" });
   await user.click(within(archive).getByRole("button", { name: "Cancelar" }));
   expect(api.mock.calls.some(([url]) => url === "/threads/archivar")).toBe(
     false,
   );
-  await user.click(
-    screen.getByRole("button", { name: "Archivar", exact: true }),
-  );
+  await user.click(screen.getByRole("button", { name: "Archivar" }));
   await user.click(
     within(screen.getByRole("dialog", { name: "Archivar thread" })).getByRole(
       "button",
-      { name: "Archivar", exact: true },
+      { name: "Archivar" },
     ),
   );
   expect(submitBody("/threads/archivar")).toEqual({ id: thread.id });
