@@ -8,7 +8,7 @@ import "./panel.css";
 const apiPanel = (path: string, body?: unknown) =>
   api(path, body ? { method: "POST", body: JSON.stringify(body) } : undefined);
 
-export default function MundoPage() {
+export default function WorldPage() {
   const { confirm, confirmation } = useConfirmation();
   const raiz = useRef<HTMLDivElement>(null);
   useEffect(() => {

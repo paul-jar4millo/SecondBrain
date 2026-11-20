@@ -16,7 +16,7 @@
     "sb": "node ops/sb.mjs",
     "test:docker": "node ops/smoke-container.mjs",
     "format:check": "prettier --check src tests ops",
-    "verify:browser": "node ops/verify-refugio.mjs && node ops/verify-aprobaciones.mjs && node ops/verify-project-dashboards.mjs && node ops/verify-tools.mjs && node ops/verify-conversations.mjs && node ops/verify-workspaces.mjs",
+    "verify:browser": "node ops/verify-refuge.mjs && node ops/verify-approvals.mjs && node ops/verify-project-dashboards.mjs && node ops/verify-tools.mjs && node ops/verify-conversations.mjs && node ops/verify-workspaces.mjs",
     "lint": "eslint src --max-warnings 0",
     "coverage": "vitest run --coverage"
   },

@@ -2,11 +2,11 @@
  * An error whose message is written in Spanish for the user and is safe to
  * show as is. The HTTP layer answers with `status`; anything else stays generic.
  */
-export class ErrorLanzador extends Error {
+export class LauncherError extends Error {
   /** @param {string} mensaje */
   constructor(mensaje, status = 409) {
     super(mensaje);
-    this.name = "ErrorLanzador";
+    this.name = "LauncherError";
     this.status = status;
   }
 }

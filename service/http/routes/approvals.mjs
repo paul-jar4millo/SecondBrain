@@ -1,5 +1,5 @@
 import { body, send } from "../io.mjs";
-import { ConflictoAprobacion } from "../../approvals.mjs";
+import { ApprovalConflict } from "../../approvals.mjs";
 import { Failure } from "../../vault.mjs";
 /** @import { RouteModule } from "../route-types.d.ts" */
 
@@ -18,7 +18,7 @@ export const approvalRoutes = (ctx, req) => {
           por: auth.state?.username || actorOf(request),
         });
       } catch (error) {
-        if (error instanceof ConflictoAprobacion)
+        if (error instanceof ApprovalConflict)
           throw Object.assign(new Failure(error.message, 409), {
             recibo: error.recibo,
           });

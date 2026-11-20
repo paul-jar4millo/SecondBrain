@@ -4,7 +4,7 @@
 import path from "node:path";
 import { Failure } from "../vault.mjs";
 import { body, send } from "./io.mjs";
-import { MOTOR_ACTOR, intersectProfileBounds } from "../agent-profiles.mjs";
+import { ENGINE_ACTOR, intersectProfileBounds } from "../agent-profiles.mjs";
 import { randomUUID } from "node:crypto";
 /** @import { ToolProfile } from "../types.d.ts" */
 /** @import { WorkOrderManifest } from "../work-order-types.d.ts" */
@@ -107,7 +107,7 @@ export async function handleTeamAction(ctx, req, accion) {
       parentProfile,
     );
     const preassignedSessionId = randomUUID();
-    const childActor = MOTOR_ACTOR[datos.motor] || null;
+    const childActor = ENGINE_ACTOR[datos.motor] || null;
     mintedChild = await auth.issueCapability({
       sessionId: preassignedSessionId,
       parentSessionId: callerCap.sessionId || sesion,

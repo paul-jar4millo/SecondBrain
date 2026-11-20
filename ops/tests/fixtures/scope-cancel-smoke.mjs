@@ -1,6 +1,6 @@
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
-import { abrirRegistro } from "/opt/secondbrain/current/lanzador/sessions.mjs";
-import { crearEjecutor } from "/opt/secondbrain/current/lanzador/executor.mjs";
+import { openSessionRegistry } from "/opt/secondbrain/current/lanzador/sessions.mjs";
+import { createExecutor } from "/opt/secondbrain/current/lanzador/executor.mjs";
 import { setTimeout as delay } from "node:timers/promises";
 const dir = await mkdtemp("/var/lib/sb-agente/scope-cancel-");
 let descendant;
@@ -11,7 +11,7 @@ try {
     fake,
     `import{spawn}from'node:child_process';import fs from'node:fs';if(fs.existsSync(${JSON.stringify(pidFile)})){console.log('RESUMED');process.exit(0);}const child=spawn(process.execPath,['-e','process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});child.unref();fs.writeFileSync(${JSON.stringify(pidFile)},String(child.pid));console.log('READY');setInterval(()=>{},1000);`,
   );
-  const registro = await abrirRegistro(dir + "/sessions.json");
+  const registro = await openSessionRegistry(dir + "/sessions.json");
   const env = {
     PATH: "/opt/node/bin:/usr/bin:/bin",
     HOME: "/var/lib/sb-agente",
@@ -19,7 +19,7 @@ try {
     XDG_RUNTIME_DIR: "/run/user/" + process.getuid(),
     AGENTES_CLAUDE_DIR: dir + "/claude",
   };
-  const runner = crearEjecutor({
+  const runner = createExecutor({
     registro,
     proyectos: { test: dir },
     env,

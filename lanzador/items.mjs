@@ -5,7 +5,7 @@ import path from "node:path";
 /**
  * Structured conversation for the dashboard: provider transcripts become a flat
  * list of items (user, assistant, tool, error, system) with tool calls paired to
- * their results. `leerConversacion` (conversations.mjs) keeps feeding
+ * their results. `readConversation` (conversations.mjs) keeps feeding
  * `sesion.mensajes`; this module is the live, richer view.
  */
 
@@ -236,7 +236,7 @@ const INTERNO_CLAUDE = /^<(?:command-|local-command|system-reminder|bash-)/;
  * @param {Accumulator} acc
  * @param {number} linea
  */
-function leerClaude(e, acc, linea) {
+function readClaudeEvent(e, acc, linea) {
   if (e.isSidechain || e.isMeta) return;
   const ts = e.timestamp ?? null;
   if (e.type === "system" && e.subtype === "api_error") {
@@ -444,8 +444,8 @@ function leerAgy(e, acc, linea) {
 
 /** @type {Record<string, (event: TranscriptEvent, acc: Accumulator, line: number) => void>} */
 const LECTORES = {
-  claude: leerClaude,
-  deepseek: leerClaude,
+  claude: readClaudeEvent,
+  deepseek: readClaudeEvent,
   codex: leerCodex,
   agy: leerAgy,
 };
@@ -455,7 +455,7 @@ const LECTORES = {
  * `drenar` returns only the items that were created or updated since.
  * @param {string} motor
  */
-export function crearNormalizador(motor) {
+export function createNormalizer(motor) {
   const leer = LECTORES[motor];
   if (!leer) throw new Error("Motor desconocido");
   const acc = crearAcumulador();
@@ -487,7 +487,7 @@ export function crearNormalizador(motor) {
  * @param {string} texto
  */
 export function normalizarItems(motor, texto) {
-  const normalizador = crearNormalizador(motor);
+  const normalizador = createNormalizer(motor);
   normalizador.alimentar(texto);
   return normalizador.todos();
 }
@@ -605,7 +605,7 @@ export async function localizarTranscript(sesion, env) {
  * }} options
  */
 function seguirArchivo({ localizar, motor, intervalo, alCambiar }) {
-  const normalizador0 = () => crearNormalizador(motor);
+  const normalizador0 = () => createNormalizer(motor);
   let normalizador = normalizador0();
   /** @type {string | null} */
   let archivo = null;
@@ -714,7 +714,7 @@ function seguirArchivo({ localizar, motor, intervalo, alCambiar }) {
  *   intervalo?: number
  * }} options
  */
-export function crearItems({ registro, env = process.env, intervalo = 1000 }) {
+export function createItems({ registro, env = process.env, intervalo = 1000 }) {
   /** @type {Map<string, { lectores: Set<TranscriptListener>, seguidor: ReturnType<typeof seguirArchivo> }>} */
   const seguidores = new Map();
   return {

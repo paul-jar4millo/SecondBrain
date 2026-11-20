@@ -9,10 +9,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createBrainMcp } from "../index.mjs";
 import { createApplication } from "../../service/index.mjs";
-import { abrirRegistro } from "../../lanzador/sessions.mjs";
-import { abrirEquipos } from "../../lanzador/teams.mjs";
-import { crearEjecutor } from "../../lanzador/executor.mjs";
-import { crearServidor } from "../../lanzador/index.mjs";
+import { openSessionRegistry } from "../../lanzador/sessions.mjs";
+import { openTeams } from "../../lanzador/teams.mjs";
+import { createExecutor } from "../../lanzador/executor.mjs";
+import { createLauncherServer } from "../../lanzador/index.mjs";
 
 test("MCP, servicio y lanzador coordinan sesiones de distintos motores", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-team-e2e-"));
@@ -24,10 +24,10 @@ test("MCP, servicio y lanzador coordinan sesiones de distintos motores", async (
     fake,
     'setTimeout(() => { console.log(JSON.stringify({event:"result",result:{status:"SUCCESS",response:"listo"}})); console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:"listo"}})); }, Number(process.argv[2]))',
   );
-  const registro = await abrirRegistro(
+  const registro = await openSessionRegistry(
     path.join(dir, "state", "sesiones.json"),
   );
-  const equipos = await abrirEquipos(path.join(dir, "state", "equipos"), {
+  const equipos = await openTeams(path.join(dir, "state", "equipos"), {
     activo: (id) =>
       registro
         .leer()
@@ -35,7 +35,7 @@ test("MCP, servicio y lanzador coordinan sesiones de distintos motores", async (
           (s) => s.id === id && ["pendiente", "trabajando"].includes(s.estado),
         ),
   });
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     equipos,
     proyectos: { prueba: dir },
@@ -46,7 +46,7 @@ test("MCP, servicio y lanzador coordinan sesiones de distintos motores", async (
     }),
   });
   const hash = (s) => createHash("sha256").update(s).digest("hex");
-  const launcher = crearServidor({
+  const launcher = createLauncherServer({
     registro,
     equipos,
     ejecutor,

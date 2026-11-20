@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { abrirEquipos } from "../teams.mjs";
+import { openTeams } from "../teams.mjs";
 
 test("miembros intercambian mensajes y entregables, conservados tras reiniciar", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-team-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const equipos = await abrirEquipos(dir);
+  const equipos = await openTeams(dir);
   const equipo = await equipos.crear("lider");
   await equipos.agregar(equipo.id, "lider", "hija1", "agy");
   await equipos.agregar(equipo.id, "lider", "hija2", "deepseek");
@@ -19,7 +19,7 @@ test("miembros intercambian mensajes y entregables, conservados tras reiniciar",
     equipos.estado("lider").entregables[0].contenido,
     "Resultado sintético",
   );
-  const recuperado = await abrirEquipos(dir);
+  const recuperado = await openTeams(dir);
   assert.equal(recuperado.estado("hija2").miembros.length, 3);
   assert.equal(recuperado.bandeja("hija1")[0].de, "lider");
   assert.throws(() => recuperado.bandeja("ajeno"));
@@ -28,7 +28,7 @@ test("miembros intercambian mensajes y entregables, conservados tras reiniciar",
 test("rechaza profundidad superior a dos, exceso de miembros y mensajes entre equipos", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-team-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const equipos = await abrirEquipos(dir);
+  const equipos = await openTeams(dir);
   const a = await equipos.crear("a");
   const b = await equipos.crear("b");
   await equipos.agregar(a.id, "a", "a1", "codex");
@@ -47,7 +47,7 @@ test("encargos simultáneos no sobrepasan el límite y un miembro terminado libe
   const dir = await mkdtemp(path.join(tmpdir(), "sb-team-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const inactivos = new Set();
-  const equipos = await abrirEquipos(dir, {
+  const equipos = await openTeams(dir, {
     activo: (id) => !inactivos.has(id),
   });
   const team = await equipos.crear("lider");

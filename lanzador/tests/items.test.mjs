@@ -4,8 +4,8 @@ import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
-  crearItems,
-  crearNormalizador,
+  createItems,
+  createNormalizer,
   localizarTranscript,
   normalizarItems,
   resumirEntrada,
@@ -121,7 +121,7 @@ test("Claude: empareja tool_use con tool_result y conserva el orden", () => {
 });
 
 test("una herramienta sin resultado queda pendiente y el resultado la actualiza con el mismo id", () => {
-  const n = crearNormalizador("claude");
+  const n = createNormalizer("claude");
   n.alimentar(
     lineas({
       type: "assistant",
@@ -322,7 +322,7 @@ test("Antigravity: texto de usuario y respuesta; pasos de herramienta degradan a
 
 test("ignora líneas rotas y motores desconocidos fallan", () => {
   assert.deepEqual(normalizarItems("claude", '{"roto":\nnada'), []);
-  assert.throws(() => crearNormalizador("otro"));
+  assert.throws(() => createNormalizer("otro"));
 });
 
 async function entornoTemporal(t) {
@@ -408,7 +408,7 @@ test("sigue el transcript por offset, emite solo lo añadido y se detiene con el
   const registro = {
     leer: () => [{ id, motor: "claude", conversacionId: id }],
   };
-  const items = crearItems({
+  const items = createItems({
     registro,
     env: { HOME: raiz, AGENTES_CLAUDE_DIR: path.join(raiz, "claude") },
     intervalo: 20,

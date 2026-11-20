@@ -19,7 +19,7 @@ import path from "node:path";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** A decision that conflicts with the receipt already stored for that approval. */
-export class ConflictoAprobacion extends Error {
+export class ApprovalConflict extends Error {
   /** @param {ApprovalReceipt} recibo */
   constructor(recibo) {
     super("La solicitud ya fue resuelta con otra decisión.");
@@ -30,7 +30,7 @@ export class ConflictoAprobacion extends Error {
  * @param {string} dir
  * @param {{ reloj?: () => number, plazoMs?: number, onChange?: () => void }} [options]
  */
-export async function crearColaAprobaciones(
+export async function createApprovalQueue(
   dir,
   { reloj = Date.now, plazoMs = 1800000, onChange = () => {} } = {},
 ) {
@@ -183,7 +183,7 @@ export async function crearColaAprobaciones(
     /**
      * Resolves a pending request once. The same `requestId` again returns the
      * stored receipt (`repetido`); a different one on a resolved request, or
-     * the same one on another request, raises ConflictoAprobacion with the receipt.
+     * the same one on another request, raises ApprovalConflict with the receipt.
      * @param {string} id
      * @param {unknown} aprobar
      * @param {{ requestId?: string, por?: unknown }} [options]
@@ -201,10 +201,10 @@ export async function crearColaAprobaciones(
         if (r?.recibo) {
           if (requestId && r.recibo.requestId === requestId)
             return { recibo: structuredClone(r.recibo), repetido: true };
-          throw new ConflictoAprobacion(structuredClone(r.recibo));
+          throw new ApprovalConflict(structuredClone(r.recibo));
         }
         const previo = requestId && recibos.get(requestId);
-        if (previo) throw new ConflictoAprobacion(structuredClone(previo));
+        if (previo) throw new ApprovalConflict(structuredClone(previo));
         if (!r || r.estado !== "pendiente")
           throw new Error("Solicitud no pendiente");
         if (reloj() >= r.vence) {

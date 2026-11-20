@@ -1,4 +1,4 @@
-import type { AgentState } from "./sala-types";
+import type { AgentState } from "./room-types";
 
 export interface SesionObservada {
   id: string;

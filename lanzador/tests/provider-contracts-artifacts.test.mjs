@@ -8,11 +8,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createApplication } from "../../service/index.mjs";
 import { createToolCatalogStore } from "../tool-catalog.mjs";
-import { crearEjecutor } from "../executor.mjs";
-import { crearServidor } from "../index.mjs";
+import { createExecutor } from "../executor.mjs";
+import { createLauncherServer } from "../index.mjs";
 import { createCodexController } from "../provider-controllers.mjs";
 import { createProviderConversations } from "../provider-conversations.mjs";
-import { abrirRegistro } from "../sessions.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
 
 import {
   E2E_TIMEOUT_MS,
@@ -47,7 +47,7 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
   // queued and runs as a follow-up turn: the race a fast agent creates.
   let releaseTurn1;
   const turn1Held = new Promise((r) => (releaseTurn1 = r));
-  const registro = await abrirRegistro(
+  const registro = await openSessionRegistry(
     path.join(lanzadorData, "sesiones.json"),
   );
   const toolCatalog = await createToolCatalogStore({ dataDir: lanzadorData });
@@ -145,7 +145,7 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
     },
   });
 
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     proyectos: { demo: projDir },
     env: {
@@ -162,7 +162,7 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
   });
 
   const controlToken = "ctrl-token-art";
-  const launcher = crearServidor({
+  const launcher = createLauncherServer({
     registro,
     ejecutor,
     conversations,

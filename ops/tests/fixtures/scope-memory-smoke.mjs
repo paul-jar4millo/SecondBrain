@@ -1,6 +1,6 @@
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
-import { abrirRegistro } from "/opt/secondbrain/current/lanzador/sessions.mjs";
-import { crearEjecutor } from "/opt/secondbrain/current/lanzador/executor.mjs";
+import { openSessionRegistry } from "/opt/secondbrain/current/lanzador/sessions.mjs";
+import { createExecutor } from "/opt/secondbrain/current/lanzador/executor.mjs";
 const dir = await mkdtemp("/var/lib/sb-agente/scope-memory-");
 try {
   const burn = dir + "/burn.mjs",
@@ -14,14 +14,14 @@ try {
     other,
     "setTimeout(()=>console.log(JSON.stringify({type:'result',result:'SURVIVED'})),2200);",
   );
-  const registro = await abrirRegistro(dir + "/sessions.json");
+  const registro = await openSessionRegistry(dir + "/sessions.json");
   const env = {
     PATH: "/opt/node/bin:/usr/bin:/bin",
     HOME: "/var/lib/sb-agente",
     SB_SESSION_SCOPES: "1",
     XDG_RUNTIME_DIR: "/run/user/" + process.getuid(),
   };
-  const runner = crearEjecutor({
+  const runner = createExecutor({
     registro,
     proyectos: { test: dir },
     env,

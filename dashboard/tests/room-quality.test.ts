@@ -6,7 +6,7 @@ import {
   nextPixelRatio,
   qualityFor,
   shadowUpdateDue,
-} from "../src/features/sala/sala-quality.js";
+} from "../src/features/room/room-quality.js";
 
 describe("quality levels", () => {
   it("chooses high quality on a desktop with a fine pointer", () => {

@@ -1,14 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { comandoHarness } from "../harness.mjs";
-import { prepararAgy, prepararClaude } from "../claude-config.mjs";
+import { prepareAgy, prepareClaude } from "../claude-config.mjs";
 import { readFile } from "node:fs/promises";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { abrirRegistro } from "../sessions.mjs";
-import { crearEjecutor } from "../executor.mjs";
-import { abrirEspacios } from "../workspaces.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { createExecutor } from "../executor.mjs";
+import { openWorkspaces } from "../workspaces.mjs";
 
 test("uses each original interactive CLI", () => {
   for (const motor of ["claude", "codex", "agy", "deepseek"]) {
@@ -30,13 +30,13 @@ test(
       fake,
       `console.log('READY');process.stdin.on('data', d=>{console.log('ECHO:'+d.toString());if(d.toString().includes('exit'))process.exit(0)});`,
     );
-    const registro = await abrirRegistro(path.join(dir, "sessions.json"));
-    const espacios = await abrirEspacios({
+    const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+    const espacios = await openWorkspaces({
       archivo: path.join(dir, "spaces.json"),
       proyectos: {},
       workspaces: path.join(dir, "workspaces"),
     });
-    const runner = crearEjecutor({
+    const runner = createExecutor({
       registro,
       espacios,
       proyectos: {},
@@ -72,8 +72,8 @@ test(
     assert.equal(saved.espacioId, "p1");
     assert.equal(saved.proyecto, null);
     assert.ok(saved.directorio.startsWith(path.join(dir, "workspaces")));
-    const reopened = await abrirRegistro(path.join(dir, "sessions.json"));
-    const restored = crearEjecutor({ registro: reopened, proyectos: {} });
+    const reopened = await openSessionRegistry(path.join(dir, "sessions.json"));
+    const restored = createExecutor({ registro: reopened, proyectos: {} });
     const output = await restored.terminal(s.id);
     assert.match(output.datos, /ECHO:hello/);
     assert.equal(output.activa, false);
@@ -152,13 +152,13 @@ test(
       fake,
       `process.stdout.write('\\x1b[2m? for\\x1b[0m shortcuts\\n');process.stdin.on('data', d=>{console.log('ECHO:'+d.toString());if(d.toString().includes('salir'))process.exit(0)});`,
     );
-    const registro = await abrirRegistro(path.join(dir, "sessions.json"));
-    const espacios = await abrirEspacios({
+    const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+    const espacios = await openWorkspaces({
       archivo: path.join(dir, "spaces.json"),
       proyectos: {},
       workspaces: path.join(dir, "workspaces"),
     });
-    const runner = crearEjecutor({
+    const runner = createExecutor({
       registro,
       espacios,
       proyectos: {},
@@ -209,7 +209,7 @@ test("prepara la configuración de cada agente sin perder datos ni tocar otra", 
     path.join(dir, "settings.json"),
     JSON.stringify({ hooks: { Stop: [] } }),
   );
-  await prepararClaude(dir, "/w/p1", { firma: "Marina · DeepSeek" });
+  await prepareClaude(dir, "/w/p1", { firma: "Marina · DeepSeek" });
   const config = JSON.parse(
     await readFile(path.join(dir, ".claude.json"), "utf8"),
   );
@@ -224,7 +224,7 @@ test("prepara la configuración de cada agente sin perder datos ni tocar otra", 
   assert.equal(settings.skipDangerousModePermissionPrompt, true);
   assert.match(settings.statusLine.command, /Marina · DeepSeek/);
   await writeFile(path.join(dir, ".claude.json"), "{roto");
-  await prepararClaude(dir, "/w/p2");
+  await prepareClaude(dir, "/w/p2");
   assert.equal(await readFile(path.join(dir, ".claude.json"), "utf8"), "{roto");
 });
 
@@ -237,8 +237,8 @@ test("Lira confía en el espacio del proyecto antes de abrir Antigravity", async
     archivo,
     JSON.stringify({ theme: "x", trustedWorkspaces: ["/srv/repo"] }),
   );
-  await prepararAgy(home, "/datos/workspaces/p1");
-  await prepararAgy(home, "/datos/workspaces/p1");
+  await prepareAgy(home, "/datos/workspaces/p1");
+  await prepareAgy(home, "/datos/workspaces/p1");
   const datos = JSON.parse(await readFile(archivo, "utf8"));
   assert.equal(datos.theme, "x");
   assert.deepEqual(datos.trustedWorkspaces, [

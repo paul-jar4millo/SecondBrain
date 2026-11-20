@@ -23,7 +23,7 @@ const BASE_IDS = ["ambar", "menta", "lira", "marina"];
  * @param {string} dataDirectory
  * @param {new (message: string, status?: number) => Error} Failure
  */
-export async function createSala(dataDirectory, Failure) {
+export async function createRoom(dataDirectory, Failure) {
   // Optional reference bank (links only, no image copies). Without one the
   // board starts empty; see docs/modules/service.md for its format.
   const bancoFile = process.env.SB_REFERENCE_BANK;

@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ocultarDiagnostico } from "../diagnostics.mjs";
+import { redactDiagnostic } from "../diagnostics.mjs";
 
 test("oculta encargos multilínea aunque stderr los serialice como JSON o cite una línea", () => {
   const brief = 'Encargo privado sintético\nRevisar "archivo reservado"';
-  const output = ocultarDiagnostico(
+  const output = redactDiagnostic(
     `Error del motor: ${JSON.stringify({ prompt: brief })}\nRevisar "archivo reservado"`,
     { env: {}, textos: [brief] },
   );

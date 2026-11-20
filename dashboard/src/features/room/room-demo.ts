@@ -1,5 +1,5 @@
 import { demoReferences as banco } from "./demo-references";
-import { apiAgentesDemo } from "./sala-agentes-demo.js";
+import { apiAgentesDemo } from "./room-agents-demo.js";
 const demoKey = "sb-refugio-orders-v1";
 const boardKey = "sb-refugio-board-v1";
 export async function apiDemo(path: string, body?: unknown) {

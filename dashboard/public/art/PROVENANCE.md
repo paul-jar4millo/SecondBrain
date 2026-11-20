@@ -10,7 +10,7 @@ Portraits in `public/portraits` are rendered from the models by
 
 Visual references guide composition but grant no right to redistribute
 third-party images. The reference bank is optional (`SB_REFERENCE_BANK`); the
-demo only uses first-party assets (`src/features/sala/demo-references.ts`).
+demo only uses first-party assets (`src/features/room/demo-references.ts`).
 Fonts in `public/fonts` keep their OFL licenses.
 
 Visual direction: [DESIGN](../../../DESIGN.md).

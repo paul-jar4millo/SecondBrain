@@ -1,7 +1,7 @@
 // Pure team logic for the refuge: who sits together, which threads join them,
 // which handoffs really happened and who is waiting for the owner's OK.
-import { PUESTOS } from "./sala-life";
-import { figuraDeSesion, type SesionObservada } from "./sala-sesiones";
+import { PUESTOS } from "./room-life";
+import { figuraDeSesion, type SesionObservada } from "./room-sessions";
 
 export interface GrupoEquipo {
   equipoId: string;

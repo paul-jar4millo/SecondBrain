@@ -1,11 +1,11 @@
 import type { ChildProcess, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
-import type { abrirEquipos } from "./teams.mjs";
-import type { abrirEspacios } from "./workspaces.mjs";
+import type { openTeams } from "./teams.mjs";
+import type { openWorkspaces } from "./workspaces.mjs";
 import type { createToolCatalogStore } from "./tool-catalog.mjs";
-import type { crearSeguimiento } from "./checkpoints.mjs";
-import type { comandoHarness, crearTerminal } from "./harness.mjs";
-import type { comandoMotor } from "./engines.mjs";
+import type { createTracking } from "./checkpoints.mjs";
+import type { comandoHarness, createTerminal } from "./harness.mjs";
+import type { engineCommand } from "./engines.mjs";
 import type { createProviderConversations } from "./provider-conversations.mjs";
 import type { SessionRegistry } from "./session-types.d.ts";
 import type { ManifestInput } from "./team-types.d.ts";
@@ -14,15 +14,15 @@ import type { ProviderAttachment } from "./lib/providers/shared.mjs";
 
 export interface ExecutorOptions {
   registro: SessionRegistry;
-  equipos?: Awaited<ReturnType<typeof abrirEquipos>> | null;
+  equipos?: Awaited<ReturnType<typeof openTeams>> | null;
   proyectos: Record<string, string>;
-  espacios?: Awaited<ReturnType<typeof abrirEspacios>> | null;
+  espacios?: Awaited<ReturnType<typeof openWorkspaces>> | null;
   env?: NodeJS.ProcessEnv;
-  comando?: typeof comandoMotor;
+  comando?: typeof engineCommand;
   comandoInteractivo?: typeof comandoHarness;
   maxActivos?: number;
   lanzarPty?: typeof spawn;
-  seguimiento?: ReturnType<typeof crearSeguimiento> | null;
+  seguimiento?: ReturnType<typeof createTracking> | null;
   conversations?: ReturnType<typeof createProviderConversations> | null;
   toolCatalog?: Awaited<ReturnType<typeof createToolCatalogStore>> | null;
   consultarSaldo?: () => Promise<number>;
@@ -108,7 +108,7 @@ export type MonitoredChild = ChildProcess & {
   stderr: Readable;
 };
 
-export type LiveTerminal = ReturnType<typeof crearTerminal> & {
+export type LiveTerminal = ReturnType<typeof createTerminal> & {
   generacion: string;
 };
 

@@ -6,14 +6,14 @@ import {
   createThirdPersonCamera,
   followPlayer,
   resetCamera,
-} from "./sala-camera";
+} from "./room-camera";
 import {
   AGENTES,
   JUGADOR,
   MODELOS,
   cargarTodos,
   crearPersona,
-} from "./sala-personajes.js";
+} from "./room-characters.js";
 import {
   createNavigation,
   activityFor,
@@ -24,17 +24,17 @@ import {
   ZONES,
   zoneGuide,
   tourInstructions,
-} from "./sala-life";
-import { FONDO, vestirMundo } from "./sala-mundo.js";
-import { estadoPersonaje, etiquetaRoster } from "./equipo-panel.js";
-import { cursorFor, pickTarget } from "./sala-pick.js";
-import { createOverlayStack } from "./sala-overlays.js";
-import { createWorldBoards } from "./sala-tableros.js";
+} from "./room-life";
+import { FONDO, vestirMundo } from "./room-world.js";
+import { estadoPersonaje, etiquetaRoster } from "./team-panel.js";
+import { cursorFor, pickTarget } from "./room-pick.js";
+import { createOverlayStack } from "./room-overlays.js";
+import { createWorldBoards } from "./room-boards.js";
 import {
   sesionesEscena,
   conciliarCopias,
   type CopiaObservada,
-} from "./sala-sesiones";
+} from "./room-sessions";
 import {
   equiposEscena,
   figurasEsperandoOk,
@@ -42,15 +42,15 @@ import {
   relevosNuevos,
   type AprobacionObservada,
   type PuestoEquipo,
-} from "./sala-equipos";
-import { createHilos } from "./sala-hilos";
+} from "./room-teams";
+import { createHilos } from "./room-threads";
 import {
   advanceTour,
   thumbAxis,
   observedCompletions,
   createRoomSound,
   waitingFlow,
-} from "./sala-controls.js";
+} from "./room-controls.js";
 import {
   QUALITY,
   QUALITY_LABELS,
@@ -60,7 +60,7 @@ import {
   nextPixelRatio,
   qualityFor,
   shadowUpdateDue,
-} from "./sala-quality.js";
+} from "./room-quality.js";
 
 import type {
   AgentsState,
@@ -70,15 +70,15 @@ import type {
   SceneState,
   RoomStats,
   ZoneId,
-} from "./sala-types";
-import type { Point } from "./sala-life";
+} from "./room-types";
+import type { Point } from "./room-life";
 import type {
   TeamController,
   AgentTarget,
   TeamTarget,
   TeamEvent,
 } from "../team/team-controller";
-import type { RoomSummary } from "./sala-summary";
+import type { RoomSummary } from "./room-summary";
 type Spec = (typeof AGENTES)[number];
 type Person = Awaited<ReturnType<typeof crearPersona>>;
 interface Actor extends Person {
@@ -128,7 +128,7 @@ const ICONS = {
   minus: icon('<path d="M5 12h14"/>'),
   chevron: icon('<path d="m9 6 6 6-6 6"/>'),
 };
-// Same breakpoint as the compact HUD in sala.css: phones in both orientations.
+// Same breakpoint as the compact HUD in room.css: phones in both orientations.
 const COMPACT_QUERY = "(max-width: 700px), (max-height: 500px)";
 const QUALITY_KEY = "sb-refugio-calidad";
 const CORAL = "#ff6f61";
@@ -1713,7 +1713,7 @@ export function montar(
       }
     }
   }
-  // `?debug` only: numbers and world-to-screen helpers for ops/verify-refugio.mjs.
+  // `?debug` only: numbers and world-to-screen helpers for ops/verify-refuge.mjs.
   if (debug)
     window.__refugio = {
       stats: () => ({

@@ -50,7 +50,7 @@ only this device's preferences in the browser.
 ## Implementation and checks
 
 Tokens and rules: `dashboard/src/styles/refugio.css` and
-`dashboard/src/styles/tools.css`. Camera: `dashboard/src/features/sala/sala-camera.ts`.
+`dashboard/src/styles/tools.css`. Camera: `dashboard/src/features/room/room-camera.ts`.
 Modeling: `dashboard/ops/sala-refugio.py`.
 
 Never invent work states or deliverables. Reduced motion, disconnection and

@@ -136,7 +136,7 @@ export function tamanoPermitido(cols, rows) {
  * client does not replay raw bytes. `seq` counts the chunks fed; a snapshot is
  * consistent with exactly the chunks up to its `seq`.
  */
-export function crearTerminal({
+export function createTerminal({
   cols = 120,
   rows = 40,
   scrollback = 3000,

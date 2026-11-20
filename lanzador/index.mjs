@@ -1,25 +1,25 @@
 import http from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { inferirFase } from "./phases.mjs";
+import { inferPhase } from "./phases.mjs";
 import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { acquireInstance } from "../service/instance.mjs";
-import { abrirRegistro } from "./sessions.mjs";
-import { crearEjecutor } from "./executor.mjs";
-import { abrirEquipos } from "./teams.mjs";
-import { crearCatalogo } from "./models.mjs";
-import { observarConversaciones } from "./conversations.mjs";
-import { abrirEspacios } from "./workspaces.mjs";
-import { crearUso } from "./usage.mjs";
-import { crearItems } from "./items.mjs";
-import { servirFlujo } from "./flow.mjs";
-import { crearGit } from "./git.mjs";
-import { crearCheckpoints, crearSeguimiento } from "./checkpoints.mjs";
-import { crearPr } from "./pr.mjs";
-import { crearAcciones } from "./actions.mjs";
-import { ErrorLanzador } from "./errors.mjs";
-import { ocultarDiagnostico } from "./diagnostics.mjs";
+import { openSessionRegistry } from "./sessions.mjs";
+import { createExecutor } from "./executor.mjs";
+import { openTeams } from "./teams.mjs";
+import { createModelCatalog } from "./models.mjs";
+import { watchConversations } from "./conversations.mjs";
+import { openWorkspaces } from "./workspaces.mjs";
+import { createUsage } from "./usage.mjs";
+import { createItems } from "./items.mjs";
+import { serveFlow } from "./flow.mjs";
+import { createGit } from "./git.mjs";
+import { createCheckpoints, createTracking } from "./checkpoints.mjs";
+import { createPrClient } from "./pr.mjs";
+import { createActions } from "./actions.mjs";
+import { LauncherError } from "./errors.mjs";
+import { redactDiagnostic } from "./diagnostics.mjs";
 import { CAPACIDADES, REQUISITOS } from "./engines.mjs";
 import { readLimits } from "./limits.mjs";
 import {
@@ -95,10 +95,13 @@ export async function arrancar(env = process.env) {
   const hookHash = (await readFile(hookHashFile, "utf8")).trim();
   const soltar = await acquireInstance(dataDir);
   try {
-    const registro = await abrirRegistro(path.join(dataDir, "sesiones.json"), {
-      retencionDias: limits.retencionDias,
-    });
-    const equipos = await abrirEquipos(path.join(dataDir, "equipos"), {
+    const registro = await openSessionRegistry(
+      path.join(dataDir, "sesiones.json"),
+      {
+        retencionDias: limits.retencionDias,
+      },
+    );
+    const equipos = await openTeams(path.join(dataDir, "equipos"), {
       activo: (id) =>
         registro
           .leer()
@@ -108,17 +111,17 @@ export async function arrancar(env = process.env) {
           ),
       onChange: () => registro.notificar(),
     });
-    const espacios = await abrirEspacios({
+    const espacios = await openWorkspaces({
       archivo: path.join(dataDir, "espacios.json"),
       proyectos,
       workspaces: path.join(dataDir, "workspaces"),
     });
-    const ejecutorGit = crearGit({ env });
-    const checkpoints = crearCheckpoints({
+    const ejecutorGit = createGit({ env });
+    const checkpoints = createCheckpoints({
       git: ejecutorGit,
       dirIndices: path.join(dataDir, "indices-checkpoint"),
     });
-    const seguimiento = crearSeguimiento({
+    const seguimiento = createTracking({
       registro,
       checkpoints,
       cwdDe: (s) =>
@@ -131,7 +134,7 @@ export async function arrancar(env = process.env) {
       dataDir: dataDir,
       env,
     });
-    const ejecutor = crearEjecutor({
+    const ejecutor = createExecutor({
       registro,
       equipos,
       proyectos,
@@ -142,27 +145,27 @@ export async function arrancar(env = process.env) {
       toolCatalog,
       maxActivos: limits.maxActivos,
     });
-    const catalogo = crearCatalogo({ env });
-    const itemsSesion = crearItems({ registro, env });
-    const acciones = crearAcciones({
+    const catalogo = createModelCatalog({ env });
+    const itemsSesion = createItems({ registro, env });
+    const acciones = createActions({
       registro,
       seguimiento,
       checkpoints,
-      pr: crearPr({ git: ejecutorGit, info: checkpoints.info, env }),
+      pr: createPrClient({ git: ejecutorGit, info: checkpoints.info, env }),
       catalogo,
       proyectos,
       items: itemsSesion,
     });
     const dejarConversaciones = env.HOME
-      ? observarConversaciones({ registro, env, proyectos })
+      ? watchConversations({ registro, env, proyectos })
       : () => {};
-    const servidor = crearServidor({
+    const servidor = createLauncherServer({
       registro,
       ejecutor,
       conversations,
       toolCatalog,
       catalogo,
-      uso: crearUso({ env }),
+      uso: createUsage({ env }),
       items: itemsSesion,
       acciones,
       equipos,
@@ -206,7 +209,7 @@ function autorizado(header, hash) {
 // The catalog checks both what the caller asked for and what the approved
 // manifest card fixes, so a card cannot carry an unavailable model.
 /**
- * @param {Pick<ReturnType<typeof crearCatalogo>, "validar">} catalogo
+ * @param {Pick<ReturnType<typeof createModelCatalog>, "validar">} catalogo
  * @param {Pick<LauncherRequestBody, "motor" | "modelo" | "esfuerzo" | "manifest" | "memberId">} datos
  * @param {{ coordinadora: boolean }} options
  */
@@ -225,12 +228,12 @@ async function validarSeleccion(catalogo, datos, { coordinadora }) {
 }
 
 /** @param {LauncherServerOptions} options */
-export function crearServidor({
+export function createLauncherServer({
   registro,
   ejecutor,
   conversations,
   toolCatalog = null,
-  catalogo = crearCatalogo({ env: {}, agy: async () => "" }),
+  catalogo = createModelCatalog({ env: {}, agy: async () => "" }),
   uso = async () => ({}),
   items,
   acciones,
@@ -293,7 +296,7 @@ export function crearServidor({
             !valido(desde) ||
             !(hasta === null || hasta === "actual" || valido(Number(hasta)))
           )
-            throw new ErrorLanzador("Rango de cambios inválido.", 400);
+            throw new LauncherError("Rango de cambios inválido.", 400);
           return enviar(
             200,
             await acciones.diff(
@@ -377,7 +380,7 @@ export function crearServidor({
           .leer()
           .find((s) => s.id === conversationArtifactRoute[1] && !s.eliminada);
         if (!session?.structured) {
-          throw new ErrorLanzador("Conversación no disponible.", 404);
+          throw new LauncherError("Conversación no disponible.", 404);
         }
         const { artifact, buffer } = await conversations.readArtifact(
           session.id,
@@ -404,7 +407,7 @@ export function crearServidor({
         return;
       }
       if (req.method === "GET" && flujoRoute)
-        return servirFlujo({
+        return serveFlow({
           res,
           id: flujoRoute[1],
           ejecutor,
@@ -508,7 +511,7 @@ export function crearServidor({
             ),
           );
         } catch (err) {
-          throw new ErrorLanzador(err.message, 400);
+          throw new LauncherError(err.message, 400);
         }
       }
       if (url === "/herramientas/skills/resolver") {
@@ -529,7 +532,7 @@ export function crearServidor({
           }
           return enviar(200, await cat.resolveSkillsForTask(safeDatos));
         } catch (err) {
-          throw new ErrorLanzador(err.message, 400);
+          throw new LauncherError(err.message, 400);
         }
       }
       if (conversationRoute && conversationRoute[2] && conversations) {
@@ -537,7 +540,7 @@ export function crearServidor({
           .leer()
           .find((s) => s.id === conversationRoute[1] && !s.eliminada);
         if (!session?.structured)
-          throw new ErrorLanzador("Conversación no disponible.", 404);
+          throw new LauncherError("Conversación no disponible.", 404);
         if (conversationRoute[2] === "answer")
           return enviar(
             200,
@@ -584,7 +587,7 @@ export function crearServidor({
         if (body.interrumpir === true && acciones) {
           const sesion = registro.leer().find((s) => s.id === terminalRoute[1]);
           if (sesion && !(await acciones.capacidades(sesion))?.interrumpir)
-            throw new ErrorLanzador(
+            throw new LauncherError(
               "Esta sesión no tiene terminal en marcha para interrumpir el turno.",
             );
         }
@@ -689,7 +692,7 @@ export function crearServidor({
             ) {
               resolvedTarget = requested;
             } else {
-              throw new ErrorLanzador(
+              throw new LauncherError(
                 "Directorio destino de integración no autorizado.",
                 403,
               );
@@ -736,7 +739,7 @@ export function crearServidor({
           body.herramienta.length > 100
         )
           return enviar(400, { error: "Herramienta inválida." });
-        const fase = inferirFase(body.herramienta);
+        const fase = inferPhase(body.herramienta);
         if (fase)
           await registro.actualizar(sesion.id, {
             fase,
@@ -765,7 +768,7 @@ export function crearServidor({
           acciones &&
           !(await acciones.capacidades(previa))?.continuar
         )
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "Este agente no permite continuar esta conversación; abre una nueva.",
           );
       }
@@ -798,7 +801,7 @@ export function crearServidor({
         ),
       );
     } catch (error) {
-      if (error instanceof ErrorLanzador && !res.headersSent)
+      if (error instanceof LauncherError && !res.headersSent)
         return enviar(error.status, { error: error.message, seguro: true });
       const conocidas = new Set([
         "Conflicto de vínculos; actualiza e inténtalo de nuevo",
@@ -831,12 +834,12 @@ export function crearServidor({
             ruta: String(req.url ?? "").split("?")[0],
             metodo: req.method,
             nombre: error?.name,
-            mensaje: ocultarDiagnostico(error?.message, {
+            mensaje: redactDiagnostic(error?.message, {
               textos: Object.values(datos ?? {}).filter(
                 (value) => typeof value === "string",
               ),
             }),
-            pila: ocultarDiagnostico(error?.stack, {
+            pila: redactDiagnostic(error?.stack, {
               textos: Object.values(datos ?? {}).filter(
                 (value) => typeof value === "string",
               ),

@@ -28,8 +28,8 @@ try {
   await page.goto(`${origin}/__portraits`);
   await page.evaluate(async () => {
     const THREE = await import("/node_modules/three/build/three.module.js");
-    const { AGENTES, crearPersona } =
-      await import("/src/features/sala/sala-personajes.js");
+    const { AGENTS_BY_ID, crearPersona } =
+      await import("/src/features/room/room-characters.js");
     const renderer = new THREE.WebGLRenderer({
       alpha: true,
       antialias: true,
@@ -54,7 +54,7 @@ try {
     camera.position.set(0.12, 1.35, 4);
     camera.lookAt(0, 1.28, 0);
     const figures = [];
-    for (const spec of AGENTES) {
+    for (const spec of AGENTS_BY_ID) {
       const person = await crearPersona(spec);
       person.raiz.visible = false;
       person.animar(0, "quieta");

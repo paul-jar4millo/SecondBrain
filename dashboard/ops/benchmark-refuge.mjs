@@ -1,5 +1,5 @@
-// Build both checkouts first. node ops/benchmark-refugio.mjs <baseline repo> [current repo]
-// Uses Playwright with the same optional paths as verify-refugio.mjs. No real vault or models.
+// Build both checkouts first. node ops/benchmark-refuge.mjs <baseline repo> [current repo]
+// Uses Playwright with the same optional paths as verify-refuge.mjs. No real vault or models.
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 
 if (!process.argv[2])
   throw new Error(
-    "Uso: node ops/benchmark-refugio.mjs <repo-base-compilado> [repo-actual]",
+    "Uso: node ops/benchmark-refuge.mjs <repo-base-compilado> [repo-actual]",
   );
 const currentRoot = path.resolve(
   process.argv[3] || fileURLToPath(new URL("../../", import.meta.url)),

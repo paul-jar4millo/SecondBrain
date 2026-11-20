@@ -1118,7 +1118,7 @@ with group('Anim_Bob_b', origin=(0, 0, 0)):
 
 # ---------------------------------------------------------------------------
 # Task worktables. Four standing slots leave circulation routes open.
-# Coordinates match PUESTOS in sala-life.ts.
+# Coordinates match PUESTOS in room-life.ts.
 # ---------------------------------------------------------------------------
 workstations = [
     ('investigar', -.7, -10, 'ice'),

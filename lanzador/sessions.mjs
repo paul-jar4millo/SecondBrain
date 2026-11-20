@@ -73,7 +73,7 @@ function congelar(value) {
  * @param {string} archivo
  * @param {{ retencionDias?: number, onPrune?: SessionPruneHandler | null }} [options]
  */
-export async function abrirRegistro(
+export async function openSessionRegistry(
   archivo,
   { retencionDias = 90, onPrune = null } = {},
 ) {

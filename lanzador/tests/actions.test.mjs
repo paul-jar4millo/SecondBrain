@@ -13,13 +13,13 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { crearServidor } from "../index.mjs";
-import { abrirRegistro } from "../sessions.mjs";
-import { crearGit } from "../git.mjs";
-import { crearCheckpoints, crearSeguimiento } from "../checkpoints.mjs";
-import { crearPr, nombreRama, propuestaPr, slug } from "../pr.mjs";
-import { crearAcciones } from "../actions.mjs";
-import { CAPACIDADES, capacidadesDe, modeloEconomico } from "../engines.mjs";
+import { createLauncherServer } from "../index.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { createGit } from "../git.mjs";
+import { createCheckpoints, createTracking } from "../checkpoints.mjs";
+import { createPrClient, nombreRama, propuestaPr, slug } from "../pr.mjs";
+import { createActions } from "../actions.mjs";
+import { CAPACIDADES, capacidadesDe, economyModel } from "../engines.mjs";
 import { git, repoSintetico } from "./helpers-git.mjs";
 
 const huella = (token) => createHash("sha256").update(token).digest("hex");
@@ -76,9 +76,9 @@ async function entorno(t, { remoto = true, motor = "claude", estado } = {}) {
     git(cwd, "push", "-q", "-u", "origin", "main");
   }
   const gh = await ghFalso(dir);
-  const ejecutorGit = crearGit({ ghComando: gh.comando });
-  const checkpoints = crearCheckpoints({ git: ejecutorGit });
-  const registro = await abrirRegistro(path.join(dir, "sesiones.json"));
+  const ejecutorGit = createGit({ ghComando: gh.comando });
+  const checkpoints = createCheckpoints({ git: ejecutorGit });
+  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
   const sesion = await registro.crear({
     motor,
     origen: "sala",
@@ -88,7 +88,7 @@ async function entorno(t, { remoto = true, motor = "claude", estado } = {}) {
     harness: true,
   });
   await registro.actualizar(sesion.id, { estado: estado ?? "terminada" });
-  const seguimiento = crearSeguimiento({
+  const seguimiento = createTracking({
     registro,
     checkpoints,
     cwdDe: (s) => s.directorio,
@@ -98,11 +98,11 @@ async function entorno(t, { remoto = true, motor = "claude", estado } = {}) {
     falsoMotor,
     `console.log(JSON.stringify({type:"result",result:JSON.stringify({titulo:"feat(login): redacta el PR",descripcion:"## Resumen\\nRedactado"})}));`,
   );
-  const acciones = crearAcciones({
+  const acciones = createActions({
     registro,
     seguimiento,
     checkpoints,
-    pr: crearPr({
+    pr: createPrClient({
       git: ejecutorGit,
       info: checkpoints.info,
       // Internal runs leave a mark under HOME: never the developer's own.
@@ -112,7 +112,7 @@ async function entorno(t, { remoto = true, motor = "claude", estado } = {}) {
     catalogo: { modelos: async () => ({}) },
     proyectos: { repo: cwd },
   });
-  const servidor = crearServidor({
+  const servidor = createLauncherServer({
     registro,
     ejecutor: { entrada: () => ({ ok: true }) },
     acciones,
@@ -180,10 +180,10 @@ test("las capacidades salen del código real de cada motor y se estrechan por re
   );
   assert.equal(capacidadesDe({ motor: "otro" }), null);
   assert.equal(
-    modeloEconomico("claude", [{ id: "opus" }, { id: "haiku" }]),
+    economyModel("claude", [{ id: "opus" }, { id: "haiku" }]),
     "haiku",
   );
-  assert.equal(modeloEconomico("codex", [{ id: "gpt-5" }]), null);
+  assert.equal(economyModel("codex", [{ id: "gpt-5" }]), null);
 });
 
 test("la propuesta es determinista: título convencional, archivos y cambios por turno", () => {
@@ -407,7 +407,7 @@ test(
       `#!${process.execPath}\nconsole.log("https://github.com/test/repo/pull/1");\n`,
     );
     await chmod(path.join(dir, "gh"), 0o755);
-    const g = crearGit({
+    const g = createGit({
       env: { ...process.env, PATH: dir + path.delimiter + process.env.PATH },
     });
     assert.match((await g.gh(dir, ["pr", "create"])).stdout, /pull\/1/);
@@ -432,8 +432,8 @@ console.log(JSON.stringify({ type: "result", result: JSON.stringify({ titulo: "f
     motor: "claude",
     encargo: "Prueba",
   };
-  const pr = crearPr({
-    git: crearGit(),
+  const pr = createPrClient({
+    git: createGit(),
     info: async () => ({}),
     env: { PATH: process.env.PATH, HOME: dir },
     comando: () => ({ bin: process.execPath, args: [falso] }),

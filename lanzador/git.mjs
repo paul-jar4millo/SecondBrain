@@ -43,7 +43,7 @@ export function entornoGit(env = process.env, extra = {}) {
  * git and gh through execFile: no shell, a timeout and a minimal environment.
  * @param {{ env?: NodeJS.ProcessEnv, timeout?: number, ghComando?: string[] }} [options]
  */
-export function crearGit({
+export function createGit({
   env = process.env,
   timeout = 60000,
   // Tests run a fake gh as `node fake.mjs`; production uses the real one.

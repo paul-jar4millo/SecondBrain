@@ -1,5 +1,5 @@
 /** @param {unknown} actividad */
-export function inferirFase(actividad) {
+export function inferPhase(actividad) {
   const texto = String(actividad || "").toLowerCase();
   if (/\b(test|tests|git|pytest|vitest|jest)\b/.test(texto)) return "revisar";
   if (/plan/.test(texto)) return "planificar";

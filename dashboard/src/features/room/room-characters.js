@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as clonarFigura } from "three/addons/utils/SkeletonUtils.js";
-import { rampa } from "./sala-cuarto.js";
+import { rampa } from "./room-chamber.js";
 
 // Un tipo por proveedor: silueta (modelo), colores de base y forma de buscar.
 export const TIPOS = {

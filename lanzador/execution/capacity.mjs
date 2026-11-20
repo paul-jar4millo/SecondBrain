@@ -1,6 +1,6 @@
 // Process slots: which sessions hold one, evicting idle controllers to make
 // room, and closing every connection on shutdown.
-import { ErrorLanzador } from "../errors.mjs";
+import { LauncherError } from "../errors.mjs";
 import { stopSessionScope } from "../limits.mjs";
 import { rm } from "node:fs/promises";
 /** @import { ExecutorConfig } from "./options.mjs" */
@@ -64,7 +64,7 @@ export function createCapacity(config, state, deps) {
   ) {
     limpiarEviccionOciosa(id);
     if (activos.has(id)) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         "Detén la sesión antes de cerrar su conexión.",
         409,
       );

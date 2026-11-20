@@ -189,13 +189,13 @@ jobs:
       matrix:
         include:
           - group: refuge-desktop
-            commands: REFUGIO_PARTES=escritorio node ops/verify-refugio.mjs
+            commands: REFUGIO_PARTES=escritorio node ops/verify-refuge.mjs
           - group: refuge-layouts
-            commands: REFUGIO_PARTES=descarga,layouts node ops/verify-refugio.mjs
+            commands: REFUGIO_PARTES=descarga,layouts node ops/verify-refuge.mjs
           - group: refuge-mobile
-            commands: REFUGIO_PARTES=movil,privado,sinwebgl node ops/verify-refugio.mjs
+            commands: REFUGIO_PARTES=movil,privado,sinwebgl node ops/verify-refuge.mjs
           - group: team-and-tools
-            commands: node ops/verify-aprobaciones.mjs && node ops/verify-project-dashboards.mjs && node ops/verify-tools.mjs && node ops/verify-conversations.mjs
+            commands: node ops/verify-approvals.mjs && node ops/verify-project-dashboards.mjs && node ops/verify-tools.mjs && node ops/verify-conversations.mjs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

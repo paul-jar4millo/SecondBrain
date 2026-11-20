@@ -44,7 +44,7 @@ const VIGENCIA = 30_000;
  * @param {string} texto
  * @returns {UsageSnapshot | null}
  */
-export function ultimoUsoCodex(texto) {
+export function latestCodexUsage(texto) {
   const lineas = texto.split("\n");
   for (let i = lineas.length - 1; i >= 0; i--) {
     if (!lineas[i].includes('"rate_limits"')) continue;
@@ -128,7 +128,7 @@ async function cola(archivo) {
  * Reads what Codex already recorded: asking its servers would spend nothing, but needs a process.
  * @param {string} sesiones
  */
-export async function leerUsoCodex(sesiones) {
+export async function readCodexUsage(sesiones) {
   // sessions/YYYY/MM/DD/rollout-*.jsonl
   const archivos = [];
   for (const dir of await carpetasRecientes(sesiones, 3))
@@ -144,7 +144,7 @@ export async function leerUsoCodex(sesiones) {
       }
   archivos.sort((a, b) => b.cambio - a.cambio);
   for (const { completo } of archivos.slice(0, MAX_ARCHIVOS)) {
-    const uso = ultimoUsoCodex(await cola(completo).catch(() => ""));
+    const uso = latestCodexUsage(await cola(completo).catch(() => ""));
     if (uso) return uso;
   }
   return null;
@@ -196,7 +196,7 @@ export const carpetaAgy = (home) => path.join(home, ".gemini/antigravity-cli");
  * @param {string} carpeta
  * @param {string} [firma]
  */
-export const lineaUso = (motor, carpeta, firma) => ({
+export const usageLine = (motor, carpeta, firma) => ({
   type: "command",
   command: [
     process.execPath,
@@ -212,14 +212,14 @@ export const lineaUso = (motor, carpeta, firma) => ({
 /** @param {{ command?: unknown } | null} [linea] */
 // Releases before the English rename installed the script as uso-linea.mjs;
 // recognising it lets those settings move to the new path.
-export const esLineaUso = (linea) =>
+export const isUsageLine = (linea) =>
   /(?:usage-line|uso-linea)\.mjs/.test(String(linea?.command));
 
 /**
  * @param {string} archivo
  * @returns {Promise<UsageSnapshot | null>}
  */
-export async function leerUsoLinea(archivo) {
+export async function readUsageLine(archivo) {
   /** @type {Partial<UsageSnapshot>} */
   let datos;
   try {
@@ -262,17 +262,12 @@ export async function leerUsoLinea(archivo) {
  * @param {StatusLinePayload | null} datos
  * @param {string} archivo
  */
-export async function guardarUsoLinea(
-  motor,
-  datos,
-  archivo,
-  ahora = Date.now(),
-) {
+export async function saveUsageLine(motor, datos, archivo, ahora = Date.now()) {
   const ventanas =
     LECTORES_LINEA[/** @type {keyof typeof LECTORES_LINEA} */ (motor)]?.(datos);
   const contexto = contextoLinea(datos);
   if ((!ventanas || !Object.keys(ventanas).length) && !contexto) return false;
-  const previo = await leerUsoLinea(archivo);
+  const previo = await readUsageLine(archivo);
   const temporal = `${archivo}.tmp`;
   await mkdir(path.dirname(archivo), { recursive: true });
   await writeFile(
@@ -297,7 +292,7 @@ export async function guardarUsoLinea(
   return true;
 }
 
-export function crearUso({ env = process.env, ahora = Date.now } = {}) {
+export function createUsage({ env = process.env, ahora = Date.now } = {}) {
   /** @type {UsageCache | null} */
   let memoria = null;
   return async function uso() {
@@ -307,15 +302,17 @@ export function crearUso({ env = process.env, ahora = Date.now } = {}) {
       memoria = {
         en: ahora(),
         codex: raiz
-          ? await leerUsoCodex(path.join(raiz, "sessions")).catch(
+          ? await readCodexUsage(path.join(raiz, "sessions")).catch(
               /** @returns {null} */ () => null,
             )
           : null,
         claude: env.AGENTES_CLAUDE_DIR
-          ? await leerUsoLinea(path.join(env.AGENTES_CLAUDE_DIR, ARCHIVO_LINEA))
+          ? await readUsageLine(
+              path.join(env.AGENTES_CLAUDE_DIR, ARCHIVO_LINEA),
+            )
           : null,
         agy: env.HOME
-          ? await leerUsoLinea(path.join(carpetaAgy(env.HOME), ARCHIVO_LINEA))
+          ? await readUsageLine(path.join(carpetaAgy(env.HOME), ARCHIVO_LINEA))
           : null,
       };
     }

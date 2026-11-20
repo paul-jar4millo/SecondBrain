@@ -6,7 +6,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Vault } from "../vault.mjs";
 import { createApplication } from "../index.mjs";
-import { createLanzador } from "../launcher-client.mjs";
+import { createLauncherClient } from "../launcher-client.mjs";
 import { Failure } from "../vault.mjs";
 import http from "node:http";
 
@@ -62,15 +62,16 @@ test("launcher events reconnect with the control credential and unsubscribe on s
   });
   const url = `http://127.0.0.1:${server.address().port}`;
   let cambios = 0;
-  const malo = createLanzador(Failure, { url, token: "otro" }).subscribe(
+  const malo = createLauncherClient(Failure, { url, token: "otro" }).subscribe(
     () => cambios++,
   );
   await new Promise((r) => setTimeout(r, 100));
   malo();
   assert.equal(cambios, 0);
-  const stop = createLanzador(Failure, { url, token: "control" }).subscribe(
-    () => cambios++,
-  );
+  const stop = createLauncherClient(Failure, {
+    url,
+    token: "control",
+  }).subscribe(() => cambios++);
   await new Promise((r) => setTimeout(r, 100));
   assert.ok(cambios >= 1 && autorizadas === 1);
   respuestas[0].write("data: changed\n\n");
