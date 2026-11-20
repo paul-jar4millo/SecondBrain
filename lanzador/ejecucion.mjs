@@ -1,5 +1,7 @@
+// The session executor. Each concern lives in lanzador/execution/; what stays
+// here is the turn orchestration (launch, release, resource queue, message
+// queue), whose functions call one another.
 import { validarAdjuntosMotor } from "./motores.mjs";
-
 import { stopSessionScope } from "./limits.mjs";
 import { ErrorLanzador } from "./errores.mjs";
 import { resolveExecutorOptions } from "./execution/options.mjs";
@@ -11,14 +13,12 @@ import { createTerminalIo } from "./execution/terminal-io.mjs";
 import { createStarter } from "./execution/start.mjs";
 import { createRemoteRunner } from "./execution/run-remote.mjs";
 import { createLocalRunner } from "./execution/run-local.mjs";
-
 import { createMonitor } from "./execution/monitor.mjs";
 import { createCapacity } from "./execution/capacity.mjs";
 import { createSessionSecrets } from "./execution/secrets.mjs";
 import { createProcessTools } from "./execution/process-tools.mjs";
 
 /** @import { LauncherSession } from "./session-types.d.ts" */
-
 /** @import { ActiveJob, ExecutorOptions, TurnOptions } from "./types.d.ts" */
 
 /** @param {ExecutorOptions} options */
