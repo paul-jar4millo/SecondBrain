@@ -1,6 +1,6 @@
 // The executor's options with their defaults applied, so every execution
 // module receives the same resolved values.
-import { comandoMotor, saldoDeepSeek } from "../motores.mjs";
+import { comandoMotor, saldoDeepSeek } from "../engines.mjs";
 import { comandoHarness } from "../harness.mjs";
 import { spawn } from "node:child_process";
 

@@ -9,7 +9,7 @@ import { test } from "node:test";
 
 import { createClaudeController } from "../provider-controllers.mjs";
 import { createProviderConversations } from "../provider-conversations.mjs";
-import { abrirRegistro } from "../sesiones.mjs";
+import { abrirRegistro } from "../sessions.mjs";
 
 import { createHarness, waitFor } from "./helpers/provider-fakes.mjs";
 

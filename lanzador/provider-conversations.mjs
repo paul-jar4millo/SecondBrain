@@ -5,7 +5,7 @@ import {
   PROVIDER_ADAPTERS,
   validateAndExtractElicitationContent,
 } from "./provider-adapters.mjs";
-import { ErrorLanzador } from "./errores.mjs";
+import { ErrorLanzador } from "./errors.mjs";
 import { sha256Hex } from "./lib/hash.mjs";
 
 /** @import {ConversationAdapter, ConversationAnswer, ConversationCommand, ConversationConnection, ConversationContext, ConversationController, ConversationEvent, ConversationEventInput, ConversationItem, ConversationJob, ConversationReceipt, ConversationRequest, ConversationState, ConversationStore, MessageDeliveryStatus, NativeCallbackStatus, PendingConversationCallback, QueuedConversationMessage, RunConversationOptions, SendConversationMessageOptions} from "./provider-conversation-types.mjs" */

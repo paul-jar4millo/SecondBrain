@@ -1,11 +1,11 @@
 import type { ChildProcess, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
-import type { abrirEquipos } from "./equipos.mjs";
-import type { abrirEspacios } from "./espacios.mjs";
-import type { createToolCatalogStore } from "./catalogo-herramientas.mjs";
+import type { abrirEquipos } from "./teams.mjs";
+import type { abrirEspacios } from "./workspaces.mjs";
+import type { createToolCatalogStore } from "./tool-catalog.mjs";
 import type { crearSeguimiento } from "./checkpoints.mjs";
 import type { comandoHarness, crearTerminal } from "./harness.mjs";
-import type { comandoMotor } from "./motores.mjs";
+import type { comandoMotor } from "./engines.mjs";
 import type { createProviderConversations } from "./provider-conversations.mjs";
 import type { SessionRegistry } from "./session-types.d.ts";
 import type { ManifestInput } from "./team-types.d.ts";

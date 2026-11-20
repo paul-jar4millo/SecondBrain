@@ -1,7 +1,7 @@
 // Controller for Agent Client Protocol (ACP) CLIs.
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
-import { validarAdjuntosMotor } from "../../motores.mjs";
+import { validarAdjuntosMotor } from "../../engines.mjs";
 import { providerRpc } from "../../provider-rpc.mjs";
 import {
   exitedChildren,

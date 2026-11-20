@@ -30,7 +30,7 @@ Chosen option 3. `service` is the only process that writes the vault:
 - Every write includes `expectedHash` (SHA-256 of the version read); a
   mismatch returns `409` and the client reconciles.
 - Writes are serialized, journaled before the file is replaced (temporary file
-  + atomic rename) and replayed after a crash.
+  - atomic rename) and replayed after a crash.
 - With `VAULT_GIT=on`, confirmed transactions are committed with
   isomorphic-git (no `git` binary in the request path) and a systemd timer
   pushes to a private remote every ten minutes with its own deploy key.

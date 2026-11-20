@@ -8,15 +8,15 @@ import path from "node:path";
 
 import { PassThrough, Writable } from "node:stream";
 
-import { createToolCatalogStore } from "../../catalogo-herramientas.mjs";
-import { crearEjecutor } from "../../ejecucion.mjs";
+import { createToolCatalogStore } from "../../tool-catalog.mjs";
+import { crearEjecutor } from "../../executor.mjs";
 
 import {
   createAcpController,
   createCodexController,
 } from "../../provider-controllers.mjs";
 import { createProviderConversations } from "../../provider-conversations.mjs";
-import { abrirRegistro } from "../../sesiones.mjs";
+import { abrirRegistro } from "../../sessions.mjs";
 
 export const FAKE_CODEX_SCRIPT = `
 import { createInterface } from "node:readline";

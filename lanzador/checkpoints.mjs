@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ErrorLanzador } from "./errores.mjs";
+import { ErrorLanzador } from "./errors.mjs";
 /** @import { LauncherSession, SessionCheckpoint, SessionRegistry } from "./session-types.d.ts" */
 
 /** @typedef {{ esRepo: boolean, tieneRemoto: boolean, remotoGithub: boolean }} RepositoryInfo */

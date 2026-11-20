@@ -7,12 +7,12 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { test } from "node:test";
 import { createApplication } from "../../service/index.mjs";
-import { createToolCatalogStore } from "../catalogo-herramientas.mjs";
-import { crearEjecutor } from "../ejecucion.mjs";
+import { createToolCatalogStore } from "../tool-catalog.mjs";
+import { crearEjecutor } from "../executor.mjs";
 import { crearServidor } from "../index.mjs";
 import { createCodexController } from "../provider-controllers.mjs";
 import { createProviderConversations } from "../provider-conversations.mjs";
-import { abrirRegistro } from "../sesiones.mjs";
+import { abrirRegistro } from "../sessions.mjs";
 
 import {
   E2E_TIMEOUT_MS,

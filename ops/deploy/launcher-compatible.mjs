@@ -55,7 +55,7 @@ async function supports(release, required) {
   if (required === 1) return true;
   // This is a static capability marker, never import or execute release code.
   const marker = await readFile(
-    path.join(release, "lanzador/registro-version.mjs"),
+    path.join(release, "lanzador/version-registry.mjs"),
     "utf8",
   ).catch(() => "");
   // Only line comments may precede the export; any other statement is rejected.

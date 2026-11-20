@@ -1,6 +1,6 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { carpetaAgy, esLineaUso, lineaUso } from "./uso.mjs";
+import { carpetaAgy, esLineaUso, lineaUso } from "./usage.mjs";
 
 /** @typedef {{ command?: string, type?: string, stack_with_default?: boolean }} StatusLine */
 /**

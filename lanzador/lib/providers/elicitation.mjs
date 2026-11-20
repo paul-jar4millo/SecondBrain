@@ -1,5 +1,5 @@
 // Validation of MCP elicitation forms (requested schema and the user's answers).
-import { ErrorLanzador } from "../../errores.mjs";
+import { ErrorLanzador } from "../../errors.mjs";
 
 const SUPPORTED_FORM_FIELD_TYPES = new Set([
   "string",

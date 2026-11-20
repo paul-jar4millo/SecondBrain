@@ -1,10 +1,7 @@
 // Team delegation: a coordinator assigns a member from the approved manifest
 // or starts a child session, and waits for it.
-import { ErrorLanzador } from "../errores.mjs";
-import {
-  TOOL_PROFILES_BASE,
-  narrowChildProfile,
-} from "../catalogo-herramientas.mjs";
+import { ErrorLanzador } from "../errors.mjs";
+import { TOOL_PROFILES_BASE, narrowChildProfile } from "../tool-catalog.mjs";
 /** @import { ExecutionRequest } from "../types.d.ts" */
 /** @import { ExecutorConfig } from "./options.mjs" */
 /** @import { ExecutionState } from "./state.mjs" */

@@ -9,11 +9,11 @@ SB_BRAIN_URL=http://127.0.0.1:5080/api/v1 node mcp/index.mjs   # stdio server
 node mcp/brain-cli.mjs brain_read '{"path":"Home.md"}'          # one-shot CLI
 ```
 
-| File | Responsibility |
-| --- | --- |
-| `index.mjs` | `createBrainMcp()` registers tools with the official SDK; stdio entry point |
-| `http.mjs` | API client: bearer token, timeouts, chunked waits, streaming uploads and downloads |
-| `brain-cli.mjs` | Runs a single tool call from a shell; used by isolated agent sessions |
+| File            | Responsibility                                                                     |
+| --------------- | ---------------------------------------------------------------------------------- |
+| `index.mjs`     | `createBrainMcp()` registers tools with the official SDK; stdio entry point        |
+| `http.mjs`      | API client: bearer token, timeouts, chunked waits, streaming uploads and downloads |
+| `brain-cli.mjs` | Runs a single tool call from a shell; used by isolated agent sessions              |
 
 Design choices:
 

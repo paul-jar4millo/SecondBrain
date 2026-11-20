@@ -5,7 +5,7 @@ import path from "node:path";
 /**
  * Structured conversation for the dashboard: provider transcripts become a flat
  * list of items (user, assistant, tool, error, system) with tool calls paired to
- * their results. `leerConversacion` (conversaciones.mjs) keeps feeding
+ * their results. `leerConversacion` (conversations.mjs) keeps feeding
  * `sesion.mensajes`; this module is the live, richer view.
  */
 

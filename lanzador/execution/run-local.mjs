@@ -1,6 +1,6 @@
 // Runs one turn of a session: a structured provider conversation when the engine
 // has one, otherwise the engine CLI as a child process.
-import { ErrorLanzador } from "../errores.mjs";
+import { ErrorLanzador } from "../errors.mjs";
 import { PROVIDER_BY_ENGINE } from "./process-tools.mjs";
 import {
   actividadEvento,
@@ -9,13 +9,13 @@ import {
   leerClaude,
   leerGemini,
   nuevoClaude,
-} from "../motores.mjs";
-import { buildMcpConfigForProfile } from "../catalogo-herramientas.mjs";
+} from "../engines.mjs";
+import { buildMcpConfigForProfile } from "../tool-catalog.mjs";
 import { mkdir } from "node:fs/promises";
 import { sessionCommand } from "../limits.mjs";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { inferirFase } from "../fases.mjs";
+import { inferirFase } from "../phases.mjs";
 import { StringDecoder } from "node:string_decoder";
 /** @import { LauncherSession } from "../session-types.d.ts" */
 /** @import { TurnOptions } from "../types.d.ts" */

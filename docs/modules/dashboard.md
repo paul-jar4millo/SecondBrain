@@ -13,15 +13,15 @@ npm --prefix dashboard run verify:browser     # Playwright suites
 
 ## Layout
 
-| Path | Content |
-| --- | --- |
-| `src/app/` | `App`, `Workspace` (scene + tool dialog), routing, auth screen |
-| `src/core/` | Store and offline outbox (Dexie), API client, events (SSE), i18n, demo data |
-| `src/i18n/` | Spanish and English dictionaries (`MessageKey` is checked at compile time) |
-| `src/features/sala/` | The 3D refuge: scene, camera, characters, boards, quality levels |
-| `src/features/{projects,tasks,finance,files,team,settings,assist,mundo}/` | Tools |
-| `src/styles/` | `refugio.css` (HUD) and `tools.css` (dialogs and forms) |
-| `ops/` | Dev server, precache, Blender scene script, Playwright suites, demo smoke test |
+| Path                                                                      | Content                                                                        |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `src/app/`                                                                | `App`, `Workspace` (scene + tool dialog), routing, auth screen                 |
+| `src/core/`                                                               | Store and offline outbox (Dexie), API client, events (SSE), i18n, demo data    |
+| `src/i18n/`                                                               | Spanish and English dictionaries (`MessageKey` is checked at compile time)     |
+| `src/features/sala/`                                                      | The 3D refuge: scene, camera, characters, boards, quality levels               |
+| `src/features/{projects,tasks,finance,files,team,settings,assist,mundo}/` | Tools                                                                          |
+| `src/styles/`                                                             | `refugio.css` (HUD) and `tools.css` (dialogs and forms)                        |
+| `ops/`                                                                    | Dev server, precache, Blender scene script, Playwright suites, demo smoke test |
 
 ## Behavior
 
@@ -71,7 +71,7 @@ authenticated APIs, register a unique route and its note path, and verify
 routes, errors, desktop and mobile with synthetic fixtures.
 
 The built-in "world" panel (`src/features/mundo/`) reads a published video
-package that `service/mundo.mjs` validates and serves after authentication;
+package that `service/world.mjs` validates and serves after authentication;
 `MUNDO_PAQUETE` points to it. It never reads the external project's files or
 runs its scripts.
 

@@ -24,11 +24,11 @@ dashboard or the health endpoint, not on the task's last result.
 
 ## Backups
 
-| What | How | When |
-| --- | --- | --- |
-| Vault | isomorphic-git commits + `secondbrain-vault-push.timer` to a private remote (own deploy key) | Every 10 minutes |
-| Vault + `DATA_DIR` | `secondbrain-backup.timer` → restic, configured in `/etc/secondbrain/backup.env` | Daily 03:30 ± 30 min |
-| Whole container (optional) | `ops/backup/host-backup.sh` on the host + `windows-backup.ps1` (restic) on a PC | Daily data, weekly full |
+| What                       | How                                                                                          | When                    |
+| -------------------------- | -------------------------------------------------------------------------------------------- | ----------------------- |
+| Vault                      | isomorphic-git commits + `secondbrain-vault-push.timer` to a private remote (own deploy key) | Every 10 minutes        |
+| Vault + `DATA_DIR`         | `secondbrain-backup.timer` → restic, configured in `/etc/secondbrain/backup.env`             | Daily 03:30 ± 30 min    |
+| Whole container (optional) | `ops/backup/host-backup.sh` on the host + `windows-backup.ps1` (restic) on a PC              | Daily data, weekly full |
 
 Without `backup.env` the backup unit is skipped, and the health endpoint says
 so — a disabled timer is never reported as a working backup.
@@ -59,7 +59,7 @@ part of a software rollback.
 
 Before restarting the agent runner, the helper checks that the release
 `current` points to can read the stored session index
-(`lanzador/registro-version.mjs`). If active sessions exist, deployment
+(`lanzador/version-registry.mjs`). If active sessions exist, deployment
 waits up to 15 minutes, then finishes the service update and keeps the
 previous runner, reporting it in the health endpoint.
 

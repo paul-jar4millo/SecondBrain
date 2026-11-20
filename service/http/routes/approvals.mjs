@@ -1,5 +1,5 @@
 import { body, send } from "../io.mjs";
-import { ConflictoAprobacion } from "../../aprobaciones.mjs";
+import { ConflictoAprobacion } from "../../approvals.mjs";
 import { Failure } from "../../vault.mjs";
 /** @import { RouteModule } from "../route-types.d.ts" */
 

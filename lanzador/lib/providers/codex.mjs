@@ -1,7 +1,7 @@
 // Controller for the Codex app-server protocol.
 import { randomUUID } from "node:crypto";
-import { ErrorLanzador } from "../../errores.mjs";
-import { validarAdjuntosMotor } from "../../motores.mjs";
+import { ErrorLanzador } from "../../errors.mjs";
+import { validarAdjuntosMotor } from "../../engines.mjs";
 import { providerRpc } from "../../provider-rpc.mjs";
 import {
   buildCodexArgs,

@@ -1,6 +1,6 @@
 // Process slots: which sessions hold one, evicting idle controllers to make
 // room, and closing every connection on shutdown.
-import { ErrorLanzador } from "../errores.mjs";
+import { ErrorLanzador } from "../errors.mjs";
 import { stopSessionScope } from "../limits.mjs";
 import { rm } from "node:fs/promises";
 /** @import { ExecutorConfig } from "./options.mjs" */

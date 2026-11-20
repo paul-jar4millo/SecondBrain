@@ -1,32 +1,32 @@
 import http from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { inferirFase } from "./fases.mjs";
+import { inferirFase } from "./phases.mjs";
 import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { acquireInstance } from "../service/instance.mjs";
-import { abrirRegistro } from "./sesiones.mjs";
-import { crearEjecutor } from "./ejecucion.mjs";
-import { abrirEquipos } from "./equipos.mjs";
-import { crearCatalogo } from "./modelos.mjs";
-import { observarConversaciones } from "./conversaciones.mjs";
-import { abrirEspacios } from "./espacios.mjs";
-import { crearUso } from "./uso.mjs";
+import { abrirRegistro } from "./sessions.mjs";
+import { crearEjecutor } from "./executor.mjs";
+import { abrirEquipos } from "./teams.mjs";
+import { crearCatalogo } from "./models.mjs";
+import { observarConversaciones } from "./conversations.mjs";
+import { abrirEspacios } from "./workspaces.mjs";
+import { crearUso } from "./usage.mjs";
 import { crearItems } from "./items.mjs";
-import { servirFlujo } from "./flujo.mjs";
+import { servirFlujo } from "./flow.mjs";
 import { crearGit } from "./git.mjs";
 import { crearCheckpoints, crearSeguimiento } from "./checkpoints.mjs";
 import { crearPr } from "./pr.mjs";
-import { crearAcciones } from "./acciones.mjs";
-import { ErrorLanzador } from "./errores.mjs";
-import { ocultarDiagnostico } from "./diagnostico.mjs";
-import { CAPACIDADES, REQUISITOS } from "./motores.mjs";
+import { crearAcciones } from "./actions.mjs";
+import { ErrorLanzador } from "./errors.mjs";
+import { ocultarDiagnostico } from "./diagnostics.mjs";
+import { CAPACIDADES, REQUISITOS } from "./engines.mjs";
 import { readLimits } from "./limits.mjs";
 import {
   createProviderConversations,
   serveProviderConversation,
 } from "./provider-conversations.mjs";
-import { createToolCatalogStore } from "./catalogo-herramientas.mjs";
+import { createToolCatalogStore } from "./tool-catalog.mjs";
 
 /** @import { LauncherRequestBody, LauncherServerOptions } from "./launcher-server-types.d.ts" */
 /** @import { ExecutionRequest } from "./types.d.ts" */

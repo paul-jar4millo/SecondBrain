@@ -2,10 +2,7 @@
 // and the skills materialized for the session.
 import path from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import {
-  TOOL_PROFILES_BASE,
-  narrowChildProfile,
-} from "../catalogo-herramientas.mjs";
+import { TOOL_PROFILES_BASE, narrowChildProfile } from "../tool-catalog.mjs";
 /** @import { LauncherSession } from "../session-types.d.ts" */
 /** @import { ExecutorConfig } from "./options.mjs" */
 /** @import { ExecutionState } from "./state.mjs" */

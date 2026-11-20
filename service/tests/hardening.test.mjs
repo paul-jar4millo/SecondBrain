@@ -8,8 +8,8 @@ import { Readable } from "node:stream";
 import { Auth, totp } from "../auth.mjs";
 import { Failure, Vault } from "../vault.mjs";
 import { createSharedFiles } from "../shared-files.mjs";
-import { crearColaAprobaciones } from "../aprobaciones.mjs";
-import { createMundo } from "../mundo.mjs";
+import { crearColaAprobaciones } from "../approvals.mjs";
+import { createMundo } from "../world.mjs";
 import { createApplication } from "../index.mjs";
 
 process.env.SB_REFERENCE_BANK = fileURLToPath(
@@ -290,7 +290,7 @@ test("elimina claves de límites de intentos caducadas", async () => {
 });
 test("limita bytes de imágenes remotas de Pinterest", async (t) => {
   const dir = await temp(t);
-  const { createSala } = await import("../sala.mjs");
+  const { createSala } = await import("../room.mjs");
   const sala = await createSala(dir, Failure);
   const pin = sala
     .leer()

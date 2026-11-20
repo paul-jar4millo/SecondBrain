@@ -1,7 +1,7 @@
 // Messages sent to a structured session: delivered now, steered into the
 // running turn or queued until the turn ends.
-import { ErrorLanzador } from "../errores.mjs";
-import { validarAdjuntosMotor } from "../motores.mjs";
+import { ErrorLanzador } from "../errors.mjs";
+import { validarAdjuntosMotor } from "../engines.mjs";
 /** @import { TurnOptions } from "../types.d.ts" */
 /** @import { LauncherSession } from "../session-types.d.ts" */
 /** @import { ExecutorConfig } from "./options.mjs" */

@@ -1,6 +1,6 @@
 // Static data of the tool catalog: catalog states, base tool profiles and the
 // skills the product ships. The logic that evaluates them is in
-// catalogo-herramientas.mjs.
+// tool-catalog.mjs.
 /** @import { CatalogState, SkillProvenanceStage, SkillSpec, ToolProfiles } from "./tool-catalog-types.d.ts" */
 
 /** @type {CatalogState[]} */

@@ -3,7 +3,7 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execFileAsync } from "./shared.mjs";
-import { INHERITED_DESKTOP_CONNECTORS } from "../../catalogo-herramientas.mjs";
+import { INHERITED_DESKTOP_CONNECTORS } from "../../tool-catalog.mjs";
 import { parseCodexMcpServerEntries } from "./toml.mjs";
 
 /**

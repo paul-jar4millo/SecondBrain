@@ -45,13 +45,15 @@ export interface ApplicationOptions {
     token?: string;
     tokenFile?: string;
   };
-  lanzador?: Parameters<typeof import("./lanzador.mjs").createLanzador>[1];
+  lanzador?: Parameters<
+    typeof import("./launcher-client.mjs").createLanzador
+  >[1];
   mcpRemoto?: Pick<
-    Parameters<typeof import("./mcp-remoto.mjs").crearMcpRemoto>[0],
+    Parameters<typeof import("./remote-mcp.mjs").crearMcpRemoto>[0],
     "now"
   >;
   aprobaciones?: Parameters<
-    typeof import("./aprobaciones.mjs").crearColaAprobaciones
+    typeof import("./approvals.mjs").crearColaAprobaciones
   >[1];
   workOrders?: Parameters<
     typeof import("./work-orders.mjs").createWorkOrderStore

@@ -1,7 +1,7 @@
 // Controller for Claude Code through the Claude Agent SDK.
 import { randomUUID } from "node:crypto";
-import { ErrorLanzador } from "../../errores.mjs";
-import { IDENTIDAD_MARINA, validarAdjuntosMotor } from "../../motores.mjs";
+import { ErrorLanzador } from "../../errors.mjs";
+import { IDENTIDAD_MARINA, validarAdjuntosMotor } from "../../engines.mjs";
 import {
   validateAndExtractElicitationContent,
   validateRequestedSchema,

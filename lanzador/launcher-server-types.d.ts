@@ -1,10 +1,10 @@
-import type { crearAcciones } from "./acciones.mjs";
-import type { createToolCatalogStore } from "./catalogo-herramientas.mjs";
-import type { crearEjecutor } from "./ejecucion.mjs";
-import type { abrirEquipos } from "./equipos.mjs";
-import type { abrirEspacios } from "./espacios.mjs";
+import type { crearAcciones } from "./actions.mjs";
+import type { createToolCatalogStore } from "./tool-catalog.mjs";
+import type { crearEjecutor } from "./executor.mjs";
+import type { abrirEquipos } from "./teams.mjs";
+import type { abrirEspacios } from "./workspaces.mjs";
 import type { crearItems } from "./items.mjs";
-import type { crearCatalogo } from "./modelos.mjs";
+import type { crearCatalogo } from "./models.mjs";
 import type { ConversationAnswer } from "./provider-conversation-types.mjs";
 import type { createProviderConversations } from "./provider-conversations.mjs";
 import type { SessionRegistry } from "./session-types.d.ts";

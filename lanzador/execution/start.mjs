@@ -1,15 +1,12 @@
 // Starts a session: validates the request, prepares its workspace and token,
 // and launches its first turn or queues it until a process slot frees up.
 import path from "node:path";
-import { ErrorLanzador } from "../errores.mjs";
-import { validarAdjuntosMotor } from "../motores.mjs";
+import { ErrorLanzador } from "../errors.mjs";
+import { validarAdjuntosMotor } from "../engines.mjs";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { runFile } from "./process-tools.mjs";
-import {
-  TOOL_PROFILES_BASE,
-  narrowChildProfile,
-} from "../catalogo-herramientas.mjs";
+import { TOOL_PROFILES_BASE, narrowChildProfile } from "../tool-catalog.mjs";
 /** @import { ExecutionRequest, TurnOptions } from "../types.d.ts" */
 /** @import { LauncherSession } from "../session-types.d.ts" */
 /** @import { ExecutorConfig } from "./options.mjs" */

@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import xterm from "@xterm/headless";
 import { SerializeAddon } from "@xterm/addon-serialize";
-import { opcionesClaude } from "./motores.mjs";
+import { opcionesClaude } from "./engines.mjs";
 
 /** @import { TerminalEvent, TerminalSnapshot } from "./types.d.ts" */
 /** @import { LauncherSession } from "./session-types.d.ts" */

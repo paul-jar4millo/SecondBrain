@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
-import { ErrorLanzador } from "./errores.mjs";
-import { marcarInterna } from "./conversaciones.mjs";
+import { ErrorLanzador } from "./errors.mjs";
+import { marcarInterna } from "./conversations.mjs";
 import {
   comandoMotor,
   entornoDe,
@@ -10,7 +10,7 @@ import {
   leerGemini,
   modeloEconomico,
   nuevoClaude,
-} from "./motores.mjs";
+} from "./engines.mjs";
 
 /** @import { LauncherSession } from "./session-types.d.ts" */
 

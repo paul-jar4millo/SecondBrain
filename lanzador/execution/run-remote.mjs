@@ -1,6 +1,6 @@
 // Runs a turn in an interactive harness over a pty, for engines without a
 // structured protocol, and relays its terminal.
-import { entornoDe, entornoEsfuerzo } from "../motores.mjs";
+import { entornoDe, entornoEsfuerzo } from "../engines.mjs";
 import { comandoRemoto } from "../remote.mjs";
 import { sessionCommand } from "../limits.mjs";
 import { prepararAgy, prepararClaude } from "../claude-config.mjs";

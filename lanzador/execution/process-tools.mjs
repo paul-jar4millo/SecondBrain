@@ -3,7 +3,7 @@
 import path from "node:path";
 import os from "node:os";
 import { cp, readdir, rm, rmdir } from "node:fs/promises";
-import { ocultarDiagnostico } from "../diagnostico.mjs";
+import { ocultarDiagnostico } from "../diagnostics.mjs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 /** @import { ToolProfile } from "../tool-catalog-types.d.ts" */

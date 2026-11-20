@@ -120,5 +120,5 @@ export type SessionSnapshot = readonly Readonly<LauncherSession>[];
 export type SessionObserver = (sessions: SessionSnapshot) => void;
 export type SessionPruneHandler = (session: LauncherSession) => unknown;
 export type SessionRegistry = Awaited<
-  ReturnType<typeof import("./sesiones.mjs").abrirRegistro>
+  ReturnType<typeof import("./sessions.mjs").abrirRegistro>
 >;
