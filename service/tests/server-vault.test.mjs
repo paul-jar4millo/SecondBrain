@@ -10,53 +10,13 @@ import {
   symlink,
   readdir,
 } from "node:fs/promises";
-import { connect } from "node:net";
+
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { Vault, discoverVault, hash } from "../vault.mjs";
-import { createApplication } from "../index.mjs";
-import { totp } from "../auth.mjs";
+import { discoverVault, hash } from "../vault.mjs";
 
-async function fixture(fn) {
-  const root = await mkdtemp(path.join(tmpdir(), "sb-vault-"));
-  for (const dir of [
-    "00-Inbox",
-    "01-Proyectos",
-    "02-Areas/Finanzas",
-    "03-Recursos",
-    "04-Archivo",
-    "99-Meta",
-  ])
-    await mkdir(path.join(root, dir), { recursive: true });
-  await writeFile(path.join(root, "Home.md"), "# Mi vault\n");
-  const vault = new Vault(root);
-  try {
-    await fn({
-      root,
-      vault,
-      write: async (relative, body) => {
-        await mkdir(path.dirname(path.join(root, relative)), {
-          recursive: true,
-        });
-        await writeFile(path.join(root, relative), body);
-      },
-    });
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-}
-const item = (kind, data = {}) => ({
-  id: randomUUID(),
-  kind,
-  title: "Prueba " + kind,
-  version: 0,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  ...data,
-});
-const mutate = (vault, entity, mutationId = randomUUID()) =>
-  vault.mutate({ mutationId, baseVersion: entity.version, entity });
+import { fixture, item, mutate } from "./helpers/vault-fixture.mjs";
 
 test("a prompt can create a project and then tasks pointing to its client id", () =>
   fixture(async ({ vault }) => {
@@ -81,6 +41,7 @@ test("discovers the real vault from a nested checkout without a prompt", () =>
     await mkdir(path.join(root, "apps/web"), { recursive: true });
     assert.equal(await discoverVault(path.join(root, "apps/web")), root);
   }));
+
 test("reads existing Obsidian notes, projects and checkboxes without rewriting their files", () =>
   fixture(async ({ root, vault, write }) => {
     const text =
@@ -100,6 +61,7 @@ test("reads existing Obsidian notes, projects and checkboxes without rewriting t
     );
     assert.deepEqual(await readdir(path.join(root, "00-Inbox")), []);
   }));
+
 test("edits the original Markdown, preserving unknown YAML/comments, body and verification dates", () =>
   fixture(async ({ root, vault, write }) => {
     await write(
@@ -118,6 +80,7 @@ test("edits the original Markdown, preserving unknown YAML/comments, body and ve
     assert.equal(result.version, hash(raw));
     assert.equal((await readdir(path.join(root, "03-Recursos"))).length, 1);
   }));
+
 test("reflects external Obsidian edits, additions, renames and removals on the next read", () =>
   fixture(async ({ root, vault, write }) => {
     await write("03-Recursos/Uno.md", "# Uno\nTexto 1");
@@ -146,6 +109,7 @@ test("reflects external Obsidian edits, additions, renames and removals on the n
     await rm(path.join(root, current.vaultPath));
     assert.ok(!(await vault.snapshot()).items.some((i) => i.id === record.id));
   }));
+
 test("never overwrites an externally edited note with a stale browser revision", () =>
   fixture(async ({ root, vault, write }) => {
     await write("00-Inbox/Nota.md", "# Nota\nOriginal");
@@ -160,6 +124,7 @@ test("never overwrites an externally edited note with a stale browser revision",
       /Cambio externo/,
     );
   }));
+
 test("updates native checkboxes in place and preserves unrelated text and external edits", () =>
   fixture(async ({ root, vault, write }) => {
     const file = "01-Proyectos/Pasos.md";
@@ -193,6 +158,7 @@ test("updates native checkboxes in place and preserves unrelated text and extern
       2,
     );
   }));
+
 test("creates readable native files, an index and stable identities instead of SQL rows", () =>
   fixture(async ({ root, vault }) => {
     const note = await mutate(
@@ -213,6 +179,7 @@ test("creates readable native files, an index and stable identities instead of S
       note.version,
     );
   }));
+
 test("ignores application code, secrets, hidden folders and symlinks outside the vault", (t) =>
   fixture(async ({ root, vault, write }) => {
     await write("apps/private.md", "# Not a note");
@@ -252,6 +219,7 @@ test("ignores application code, secrets, hidden folders and symlinks outside the
       await rm(outside, { recursive: true, force: true });
     }
   }));
+
 test("exposes invalid YAML for repair and refuses to clobber it", () =>
   fixture(async ({ vault, write }) => {
     await write("00-Inbox/Mala.md", "---\nlist: [broken\n---\n# Mala");
@@ -262,121 +230,7 @@ test("exposes invalid YAML for repair and refuses to clobber it", () =>
       /frontmatter/,
     );
   }));
-test("derives a balanced ledger from the same Markdown records, with no double-counted card payments", () =>
-  fixture(async ({ vault }) => {
-    const a = await mutate(
-      vault,
-      item("account", { accountType: "asset", currency: "MXN" }),
-    );
-    const c = await mutate(
-      vault,
-      item("account", { accountType: "credit", currency: "MXN" }),
-    );
-    await mutate(
-      vault,
-      item("transaction", {
-        transactionType: "opening",
-        amountMinor: 100000,
-        accountId: a.id,
-        date: "2026-11-06",
-        status: "confirmed",
-      }),
-    );
-    const expense = await mutate(
-      vault,
-      item("transaction", {
-        transactionType: "expense",
-        amountMinor: 12000,
-        accountId: c.id,
-        category: "Personal",
-        date: "2026-11-06",
-        status: "confirmed",
-      }),
-    );
-    await mutate(
-      vault,
-      item("transaction", {
-        transactionType: "payment",
-        amountMinor: 12000,
-        accountId: a.id,
-        otherAccountId: c.id,
-        date: "2026-11-06",
-        status: "confirmed",
-      }),
-    );
-    const ledger = await vault.ledger();
-    const sum = (id) =>
-      ledger
-        .filter((x) => x.account === id)
-        .reduce((n, x) => n + x.debit - x.credit, 0);
-    assert.equal(sum(a.id), 88000);
-    assert.equal(sum(c.id), 0);
-    assert.equal(sum("expense:Personal"), 12000);
-    assert.equal(
-      ledger.reduce((n, x) => n + x.debit - x.credit, 0),
-      0,
-    );
-    await assert.rejects(
-      mutate(vault, { ...expense, title: "overwrite" }),
-      /confirmados/,
-    );
-  }));
-test("excludes malformed externally edited financial records from totals, while showing the source and errors", () =>
-  fixture(async ({ root, vault }) => {
-    const account = await mutate(
-      vault,
-      item("account", { accountType: "asset" }),
-    );
-    const transaction = await mutate(
-      vault,
-      item("transaction", {
-        transactionType: "expense",
-        amountMinor: 1000,
-        accountId: account.id,
-        date: "2026-11-06",
-        status: "confirmed",
-      }),
-    );
-    await writeFile(
-      path.join(root, transaction.vaultPath),
-      (await readFile(path.join(root, transaction.vaultPath), "utf8")).replace(
-        "amountMinor: 1000",
-        "amountMinor: wrong",
-      ),
-    );
-    const snapshot = await vault.snapshot();
-    assert.ok(
-      snapshot.items.find((i) => i.id === transaction.id).validationErrors
-        .length,
-    );
-    assert.equal((await vault.ledger()).length, 0);
-    assert.ok(snapshot.issues.length);
-  }));
-test("monthly recurrence preserves the day anchor through February and cannot duplicate its next occurrence", () =>
-  fixture(async ({ vault }) => {
-    const task = await mutate(
-      vault,
-      item("task", {
-        date: "2027-01-31",
-        recurrence: "monthly",
-        status: "pending",
-      }),
-    );
-    const op = randomUUID();
-    await mutate(vault, { ...task, status: "done" }, op);
-    await mutate(vault, { ...task, status: "done" }, op);
-    let next = (await vault.snapshot()).items.filter(
-      (i) => i.kind === "task" && i.date === "2027-02-28",
-    );
-    assert.equal(next.length, 1);
-    await mutate(vault, { ...next[0], status: "done" });
-    assert.equal(
-      (await vault.snapshot()).items.filter(
-        (i) => i.kind === "task" && i.date === "2027-03-31",
-      ).length,
-      1,
-    );
-  }));
+
 test("rejects invalid imports before creating files and skips duplicate IDs", () =>
   fixture(async ({ vault, root }) => {
     const first = item("note", { title: "Imported" });
@@ -386,171 +240,6 @@ test("rejects invalid imports before creating files and skips duplicate IDs", ()
     assert.equal((await readdir(path.join(root, "00-Inbox"))).length, 0);
     await vault.import([first]);
     assert.equal((await vault.import([first])).imported, 0);
-  }));
-test("fresh authentication protects a real file-backed API; CSRF, TOTP, recovery, external updates and static routes work", () =>
-  fixture(async ({ root, write }) => {
-    await write("00-Inbox/Existente.md", "# Ya estaba aquí\nSin importar.");
-    const runtime = await mkdtemp(path.join(tmpdir(), "sb-auth-"));
-    const staticRoot = path.join(runtime, "dist");
-    await mkdir(staticRoot);
-    await writeFile(path.join(staticRoot, "index.html"), "<h1>App</h1>");
-    const app = await createApplication({
-      vaultRoot: root,
-      dataDirectory: runtime,
-      staticRoot,
-      authLimit: 100,
-      auth: true,
-    });
-    await new Promise((r) => app.server.listen(0, "127.0.0.1", r));
-    const base = "http://127.0.0.1:" + app.server.address().port;
-    const jar = new Map();
-    async function request(
-      route,
-      method = "GET",
-      data,
-      expected = 200,
-      csrf = true,
-    ) {
-      let token;
-      if (method !== "GET" && csrf)
-        token = (await request("/api/v1/auth/csrf")).token;
-      const response = await fetch(base + route, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: [...jar].map(([k, v]) => k + "=" + v).join("; "),
-          ...(token ? { "X-CSRF-TOKEN": token } : {}),
-        },
-        body: data ? JSON.stringify(data) : undefined,
-      });
-      for (const cookie of response.headers.getSetCookie()) {
-        const first = cookie.split(";")[0];
-        const i = first.indexOf("=");
-        jar.set(first.slice(0, i), first.slice(i + 1));
-      }
-      const text = await response.text();
-      let result;
-      try {
-        result = JSON.parse(text);
-      } catch {
-        result = text;
-      }
-      assert.equal(response.status, expected, JSON.stringify(result));
-      return result;
-    }
-    try {
-      await request("/api/v1/items", "GET", undefined, 401);
-      await request("/api/v1/mutations", "POST", {}, 400, false);
-      const password = "a-unique-long-password";
-      await request(
-        "/api/v1/auth/setup",
-        "POST",
-        { username: "..", password },
-        400,
-      );
-      await request("/api/v1/auth/setup", "POST", {
-        username: "owner",
-        password,
-      });
-      const loaded = await request("/api/v1/items");
-      assert.ok(loaded.some((i) => i.title === "Ya estaba aquí"));
-      const status = await request("/api/v1/vault/status");
-      assert.equal(status.root, root);
-      assert.equal(status.documents, 2);
-      const note = loaded.find((i) => i.title === "Ya estaba aquí");
-      await request("/api/v1/mutations", "POST", {
-        mutationId: randomUUID(),
-        baseVersion: note.version,
-        entity: { ...note, body: "Escrito desde la app" },
-      });
-      assert.match(
-        await readFile(path.join(root, note.vaultPath), "utf8"),
-        /Escrito desde la app/,
-      );
-      await write(
-        note.vaultPath,
-        (await readFile(path.join(root, note.vaultPath), "utf8")).replace(
-          "Escrito desde la app",
-          "Editado en Obsidian",
-        ),
-      );
-      assert.equal(
-        (await request("/api/v1/items")).find((i) => i.id === note.id).body,
-        undefined,
-      );
-      assert.match(
-        (
-          await request(
-            "/api/v1/vault/note?path=" + encodeURIComponent(note.vaultPath),
-          )
-        ).content,
-        /Editado en Obsidian/,
-      );
-      const controller = new AbortController();
-      const stream = await fetch(base + "/api/v1/events", {
-        headers: { Cookie: [...jar].map(([k, v]) => k + "=" + v).join("; ") },
-        signal: controller.signal,
-      });
-      assert.equal(stream.status, 200);
-      const reader = stream.body.getReader();
-      await reader.read();
-      const timeout = setTimeout(() => controller.abort(), 2500);
-      try {
-        await write(
-          note.vaultPath,
-          (await readFile(path.join(root, note.vaultPath), "utf8")) +
-            "\nCambio para notificar.",
-        );
-        let message = "";
-        while (!message.includes("data: changed")) {
-          const chunk = await reader.read();
-          assert.ok(!chunk.done);
-          message += new TextDecoder().decode(chunk.value);
-        }
-        assert.match(message, /data: changed/);
-      } finally {
-        clearTimeout(timeout);
-        controller.abort();
-      }
-      const setup = await request("/api/v1/auth/totp/start", "POST", {});
-      const recovery = await request("/api/v1/auth/totp/enable", "POST", {
-        code: totp(setup.key),
-      });
-      assert.equal(recovery.codes.length, 8);
-      await request("/api/v1/auth/logout", "POST", {}, 204);
-      assert.equal(
-        (
-          await request("/api/v1/auth/login", "POST", {
-            username: "owner",
-            password,
-          })
-        ).requiresCode,
-        true,
-      );
-      await request("/api/v1/items", "GET", undefined, 401);
-      await request("/api/v1/auth/login", "POST", {
-        username: "owner",
-        password,
-        code: recovery.codes[0],
-      });
-      await request("/api/v1/auth/logout", "POST", {}, 204);
-      await request(
-        "/api/v1/auth/login",
-        "POST",
-        { username: "owner", password, code: recovery.codes[0] },
-        401,
-      );
-      await request("/api/v1/auth/login", "POST", {
-        username: "owner",
-        password,
-        code: totp(setup.key),
-      });
-      assert.match(await request("/notes/anything"), /App/);
-      await request("/api/v1/not-there", "GET", undefined, 404);
-    } finally {
-      await app.close();
-      await rm(runtime, { recursive: true, force: true });
-    }
   }));
 
 test("new tasks are native Markdown checkboxes; editing them in Obsidian controls their status", () =>
@@ -577,6 +266,7 @@ test("new tasks are native Markdown checkboxes; editing them in Obsidian control
       (e) => e.status === 409,
     );
   }));
+
 test("creates a project task inside its existing Obsidian project note", () =>
   fixture(async ({ root, vault, write }) => {
     await write(
@@ -599,6 +289,7 @@ test("creates a project task inside its existing Obsidian project note", () =>
       /#\^sb-/,
     );
   }));
+
 test("concurrent app writes to separate tasks in one note do not overwrite each other", () =>
   fixture(async ({ root, vault, write }) => {
     await write("00-Inbox/Lista.md", "# Lista\n- [ ] Uno\n- [ ] Dos\n");
@@ -612,6 +303,7 @@ test("concurrent app writes to separate tasks in one note do not overwrite each 
     assert.match(raw, /- \[x\] Uno/);
     assert.match(raw, /- \[x\] Dos/);
   }));
+
 test("supports flat Obsidian properties and does not schedule project templates as real projects", () =>
   fixture(async ({ vault, write }) => {
     await write(
@@ -650,6 +342,7 @@ test("rolls back earlier files if a multi-file import fails halfway through", ()
     );
     assert.ok(!snapshot.byPath.has("00-Inbox/_App.md"));
   }));
+
 test("recovers interrupted writes and preserves subsequent external edits", () =>
   fixture(async ({ root, vault, write }) => {
     const { Journal } = await import("../journal.mjs");
@@ -681,39 +374,6 @@ test("discovers notes in custom Obsidian folders as well as PARA", () =>
     );
   }));
 
-test("keeps credentials and sessions across Node restarts, and persists logout revocation", () =>
-  fixture(async ({ root }) => {
-    const { Auth } = await import("../auth.mjs");
-    const directory = path.join(root, ".auth");
-    const first = new Auth(directory);
-    await first.init();
-    const values = new Map();
-    const response = {
-      getHeader: (key) => values.get(key),
-      setHeader: (key, value) => values.set(key, value),
-    };
-    const request = { socket: { remoteAddress: "127.0.0.1" }, headers: {} };
-    await first.setup(
-      {
-        password: "a-password-for-restarts",
-        username: "owner",
-      },
-      request,
-      response,
-    );
-    const cookie = values
-      .get("Set-Cookie")
-      .find((s) => s.startsWith("sb.session="))
-      .split(";")[0];
-    const second = new Auth(directory);
-    await second.init();
-    const authenticated = { ...request, headers: { cookie } };
-    assert.ok(second.authenticated(authenticated));
-    await second.logout(authenticated, response);
-    const third = new Auth(directory);
-    await third.init();
-    assert.equal(third.authenticated(authenticated), false);
-  }));
 test("reports duplicate native block IDs instead of silently editing the wrong note", () =>
   fixture(async ({ vault, write }) => {
     const id = randomUUID();
@@ -744,35 +404,6 @@ test("malformed external property types remain visible without breaking the whol
     assert.ok(record.validationErrors.length);
     assert.match(record.body, /Contenido conservado/);
     assert.equal((await vault.ledger()).length, 0);
-  }));
-
-test("a malformed request target gets a 400 and the server stays up", () =>
-  fixture(async ({ root }) => {
-    const app = await createApplication({
-      vaultRoot: root,
-      dataDirectory: path.join(root, ".data"),
-      auth: false,
-    });
-    await new Promise((r) => app.server.listen(0, "127.0.0.1", r));
-    try {
-      const { port } = app.server.address();
-      const reply = await new Promise((resolve, reject) => {
-        const socket = connect(port, "127.0.0.1", () =>
-          socket.write(
-            "GET // HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
-          ),
-        );
-        let text = "";
-        socket.on("data", (d) => (text += d));
-        socket.on("end", () => resolve(text));
-        socket.on("error", reject);
-      });
-      assert.match(reply, /^HTTP\/1\.1 400/);
-      const health = await fetch(`http://127.0.0.1:${port}/api/v1/health`);
-      assert.equal(health.status, 200);
-    } finally {
-      await app.close();
-    }
   }));
 
 test("a task survives text that would close its HTML comment", () =>
