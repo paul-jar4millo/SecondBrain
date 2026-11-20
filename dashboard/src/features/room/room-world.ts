@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { fadeWalls } from "./room-walls";
+import { fadeWalls, type FadingWall } from "./room-walls";
 
 // Scene dressing for the Blender map: toon materials, ink lines, the faceted sea,
 // glow halos and the small animated pieces. Group names are set in ops/room-refuge.py.
@@ -60,7 +60,7 @@ function crearMar() {
 function texturaHalo() {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
-  const g = c.getContext("2d");
+  const g = c.getContext("2d") as CanvasRenderingContext2D;
   const r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
   r.addColorStop(0, "rgba(255,255,255,.9)");
   r.addColorStop(0.22, "rgba(255,255,255,.34)");
@@ -72,11 +72,23 @@ function texturaHalo() {
 }
 
 // One LineSegments per visibility group keeps the ink pass at three draw calls.
-function lineasDeTinta(mapa) {
-  const grupos = new Map();
+type WorldMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+type Wall = FadingWall;
+interface Halo {
+  color: string;
+  x: number;
+  y: number;
+  z: number;
+  size: number;
+  wall?: "WallN" | "WallW";
+}
+
+function lineasDeTinta(mapa: THREE.Object3D) {
+  const grupos = new Map<string, ArrayLike<number>[]>();
   mapa.updateMatrixWorld(true);
-  mapa.traverse((o) => {
-    if (!o.isMesh) return;
+  mapa.traverse((object) => {
+    if (!(object as THREE.Mesh).isMesh) return;
+    const o = object as WorldMesh;
     const nombre = o.name;
     const material = o.material.name || "";
     if (
@@ -89,7 +101,7 @@ function lineasDeTinta(mapa) {
     const aristas = new THREE.EdgesGeometry(o.geometry, 38);
     aristas.applyMatrix4(o.matrixWorld);
     if (!grupos.has(grupo)) grupos.set(grupo, []);
-    grupos.get(grupo).push(aristas.attributes.position.array);
+    grupos.get(grupo)?.push(aristas.attributes.position.array);
     aristas.dispose();
   });
   const material = new THREE.LineBasicMaterial({
@@ -119,11 +131,20 @@ function lineasDeTinta(mapa) {
   return lineas;
 }
 
-export function dressWorld(scene, mapa, manifiesto, { quieto = false } = {}) {
+export function dressWorld(
+  scene: THREE.Scene,
+  mapa: THREE.Object3D,
+  manifiesto: { halos?: Halo[] },
+  { quieto = false } = {},
+) {
   const rampa = gradiente();
-  const reemplazos = new Map();
-  const propio = (original) => {
-    if (reemplazos.has(original)) return reemplazos.get(original);
+  const reemplazos = new Map<
+    THREE.Material,
+    THREE.MeshBasicMaterial | THREE.MeshToonMaterial
+  >();
+  const propio = (original: THREE.MeshStandardMaterial) => {
+    const known = reemplazos.get(original);
+    if (known) return known;
     const nombre = original.name || "";
     const material = nombre.startsWith("glow_")
       ? new THREE.MeshBasicMaterial({ color: original.color })
@@ -138,12 +159,18 @@ export function dressWorld(scene, mapa, manifiesto, { quieto = false } = {}) {
     original.dispose();
     return material;
   };
-  const muros = { WallN: [], WallW: [], norte: null, oeste: null };
-  const giran = [],
-    flotan = [];
-  mapa.traverse((o) => {
-    if (!o.isMesh) return;
-    o.material = propio(o.material);
+  const muros: {
+    WallN: Wall[];
+    WallW: Wall[];
+    norte: boolean | null;
+    oeste: boolean | null;
+  } = { WallN: [], WallW: [], norte: null, oeste: null };
+  const giran: THREE.Object3D[] = [],
+    flotan: { o: THREE.Object3D; y: number; fase: number }[] = [];
+  mapa.traverse((object) => {
+    if (!(object as THREE.Mesh).isMesh) return;
+    const o = object as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+    o.material = propio(o.material as THREE.MeshStandardMaterial);
     const brilla = o.material.name.startsWith("glow_");
     o.castShadow = !brilla && !/^(Mar|Anim_Bob)/.test(o.name);
     o.receiveShadow = !brilla;
@@ -153,7 +180,9 @@ export function dressWorld(scene, mapa, manifiesto, { quieto = false } = {}) {
     if (o.name.startsWith("Anim_Bob"))
       flotan.push({ o, y: o.position.y, fase: o.name.includes("_b") ? 2 : 0 });
   });
-  const material = mapa.getObjectByName("World_floor")?.material;
+  const material = (
+    mapa.getObjectByName("World_floor") as WorldMesh | undefined
+  )?.material;
   if (material?.map) material.map.anisotropy = 4;
   const tinta = lineasDeTinta(mapa);
   for (const linea of tinta) {
@@ -202,10 +231,14 @@ export function dressWorld(scene, mapa, manifiesto, { quieto = false } = {}) {
   );
   trail.visible = false;
   scene.add(trail);
-  let relay = null;
+  let relay: {
+    from: THREE.Object3D;
+    to: THREE.Object3D;
+    elapsed: number;
+  } | null = null;
   const a = new THREE.Vector3(),
     b = new THREE.Vector3();
-  function relayPoint(t, target) {
+  function relayPoint(t: number, target: THREE.Vector3) {
     target.lerpVectors(a, b, t);
     target.y += Math.sin(t * Math.PI) * 2;
     if (a.distanceToSquared(b) < 0.1)
@@ -214,7 +247,7 @@ export function dressWorld(scene, mapa, manifiesto, { quieto = false } = {}) {
   }
   const point = new THREE.Vector3();
   return {
-    relevo(from, to) {
+    relevo(from: THREE.Object3D, to: THREE.Object3D) {
       relay = { from, to, elapsed: 0 };
       paper.visible = true;
       trail.visible = !quieto;
@@ -224,7 +257,12 @@ export function dressWorld(scene, mapa, manifiesto, { quieto = false } = {}) {
       paper.visible = false;
       trail.visible = false;
     },
-    actualizar(t, dt, camera, target) {
+    actualizar(
+      t: number,
+      dt: number,
+      camera: THREE.Camera,
+      target: THREE.Vector3,
+    ) {
       // Walls stand only behind the action, never between camera and floor.
       const norte = camera.position.z > target.z,
         oeste = camera.position.x > target.x;
