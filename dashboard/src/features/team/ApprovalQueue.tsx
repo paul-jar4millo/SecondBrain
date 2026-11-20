@@ -28,7 +28,7 @@ const etiquetas: Record<string, string> = {
   last4: "Últimos cuatro dígitos",
   note: "Nota",
 };
-const operaciones: Record<string, string> = {
+const operations: Record<string, string> = {
   init: "Crear datos financieros",
   charge: "Registrar cargo",
   payment: "Registrar pago",
@@ -39,27 +39,27 @@ const operaciones: Record<string, string> = {
 };
 
 export function ApprovalQueue({
-  solicitudes,
+  solicitudes: requests,
   onDecision,
 }: {
   solicitudes: Approval[];
-  onDecision: (id: string, aprobar: boolean) => Promise<void>;
+  onDecision: (id: string, approve: boolean) => Promise<void>;
 }) {
   const [revisada, setRevisada] = useState<Record<string, boolean>>({});
   const [ocupada, setOcupada] = useState("");
   const [error, setError] = useState("");
-  const [ahora, setAhora] = useState(Date.now());
+  const [ahora, setNow] = useState(Date.now());
   useEffect(() => {
-    const reloj = setInterval(() => setAhora(Date.now()), 1000);
-    return () => clearInterval(reloj);
+    const clock = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(clock);
   }, []);
-  const pendientes = solicitudes.filter((s) => s.estado === "pendiente");
-  if (!pendientes.length) return null;
-  const decidir = async (id: string, aprobar: boolean) => {
+  const pending = requests.filter((s) => s.estado === "pendiente");
+  if (!pending.length) return null;
+  const decide = async (id: string, approve: boolean) => {
     setOcupada(id);
     setError("");
     try {
-      await onDecision(id, aprobar);
+      await onDecision(id, approve);
     } catch (caught) {
       setError((caught as Error).message || "No se pudo guardar la decisión.");
     } finally {
@@ -76,18 +76,16 @@ export function ApprovalQueue({
         </p>
       )}
       <ul>
-        {pendientes.map((s) => {
-          const segundos = Math.max(0, Math.ceil((s.vence - ahora) / 1000));
-          const tiempo = `${Math.floor(segundos / 60)}:${String(segundos % 60).padStart(2, "0")}`;
+        {pending.map((s) => {
+          const seconds = Math.max(0, Math.ceil((s.vence - ahora) / 1000));
+          const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
           return (
             <li key={s.id}>
               <div className="section-heading">
                 <strong>
                   {s.actor.replace("agente:", "")} solicita una operación
                 </strong>
-                <span>
-                  {segundos ? `Vence en ${tiempo}` : "Tiempo agotado"}
-                </span>
+                <span>{seconds ? `Vence en ${time}` : "Tiempo agotado"}</span>
               </div>
               <button
                 className="button"
@@ -105,7 +103,7 @@ export function ApprovalQueue({
                       <dt>{etiquetas[key] || key}</dt>
                       <dd>
                         {key === "op" && typeof value === "string"
-                          ? operaciones[value] || value
+                          ? operations[value] || value
                           : typeof value === "object"
                             ? JSON.stringify(value)
                             : String(value)}
@@ -118,16 +116,16 @@ export function ApprovalQueue({
                 <button
                   className="button primary"
                   type="button"
-                  disabled={!revisada[s.id] || !segundos || !!ocupada}
-                  onClick={() => void decidir(s.id, true)}
+                  disabled={!revisada[s.id] || !seconds || !!ocupada}
+                  onClick={() => void decide(s.id, true)}
                 >
                   Aprobar
                 </button>
                 <button
                   className="button"
                   type="button"
-                  disabled={!segundos || !!ocupada}
-                  onClick={() => void decidir(s.id, false)}
+                  disabled={!seconds || !!ocupada}
+                  onClick={() => void decide(s.id, false)}
                 >
                   Rechazar
                 </button>

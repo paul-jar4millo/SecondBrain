@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ventanasAgy, ventanasClaude, ventanasCodex } from "./engines.mjs";
+import { agyWindows, claudeWindows, codexWindows } from "./engines.mjs";
 
 /** @import { Dirent } from "node:fs" */
 /** @import { AgyQuota, ClaudeUsageSnapshot, CodexUsageSnapshot, UsageWindowId, UsageWindows } from "./engine-types.d.ts" */
@@ -35,34 +35,34 @@ import { ventanasAgy, ventanasClaude, ventanasCodex } from "./engines.mjs";
 /** @typedef {{ timestamp?: string, payload?: { rate_limits?: CodexUsageSnapshot & { limit_id?: string, plan_type?: string } } }} CodexUsageEvent */
 
 // Only the end of a rollout matters: Codex writes its limits after every turn.
-const COLA = 512 * 1024;
-const MAX_ARCHIVOS = 6;
-const VIGENCIA = 30_000;
+const QUEUE = 512 * 1024;
+const MAX_FILES = 6;
+const VALIDITY = 30_000;
 
 /**
  * Latest account limits in a rollout; only numbers leave this function.
- * @param {string} texto
+ * @param {string} text
  * @returns {UsageSnapshot | null}
  */
-export function latestCodexUsage(texto) {
-  const lineas = texto.split("\n");
-  for (let i = lineas.length - 1; i >= 0; i--) {
-    if (!lineas[i].includes('"rate_limits"')) continue;
+export function latestCodexUsage(text) {
+  const lines = text.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i].includes('"rate_limits"')) continue;
     /** @type {CodexUsageEvent} */
-    let evento;
+    let event;
     try {
-      evento = JSON.parse(lineas[i]);
+      event = JSON.parse(lines[i]);
     } catch {
       continue; // The tail can start in the middle of a line.
     }
-    const limites = evento.payload?.rate_limits;
+    const limites = event.payload?.rate_limits;
     if (!limites || (limites.limit_id && limites.limit_id !== "codex"))
       continue;
-    const ventanas = ventanasCodex(limites);
-    if (Object.keys(ventanas).length)
+    const windows = codexWindows(limites);
+    if (Object.keys(windows).length)
       return {
-        ventanas,
-        actualizado: evento.timestamp || null,
+        ventanas: windows,
+        actualizado: event.timestamp || null,
         plan: typeof limites.plan_type === "string" ? limites.plan_type : null,
       };
   }
@@ -71,56 +71,54 @@ export function latestCodexUsage(texto) {
 
 /**
  * A window that already reset is empty, even if no session has said so yet.
- * @param {UsageSnapshot | null} uso
+ * @param {UsageSnapshot | null} usage
  */
-export function vigente(uso, ahora = Date.now()) {
-  if (!uso) return null;
+export function current(usage, ahora = Date.now()) {
+  if (!usage) return null;
   /** @type {UsageWindows} */
-  const ventanas = {};
-  for (const [id, v] of Object.entries(uso.ventanas))
-    ventanas[/** @type {UsageWindowId} */ (id)] =
+  const windows = {};
+  for (const [id, v] of Object.entries(usage.ventanas))
+    windows[/** @type {UsageWindowId} */ (id)] =
       v.reinicia && Date.parse(v.reinicia) <= ahora
         ? { usado: 0, reinicia: null, agotada: false }
         : v;
-  return { ...uso, ventanas };
+  return { ...usage, ventanas: windows };
 }
 
 /**
  * @param {string} dir
- * @param {number} profundidad
+ * @param {number} depth
  * @returns {Promise<string[]>}
  */
-async function carpetasRecientes(dir, profundidad) {
-  const nombres = await readdir(dir, { withFileTypes: true }).catch(
+async function recentFolders(dir, depth) {
+  const names = await readdir(dir, { withFileTypes: true }).catch(
     /** @returns {Dirent[]} */ () => [],
   );
-  const carpetas = nombres
+  const folders = names
     .filter((e) => e.isDirectory() && !e.isSymbolicLink())
     .map((e) => e.name)
     .sort()
     .reverse();
-  if (profundidad === 0) return [dir];
-  const halladas = [];
-  for (const nombre of carpetas) {
-    halladas.push(
-      ...(await carpetasRecientes(path.join(dir, nombre), profundidad - 1)),
-    );
-    if (halladas.length >= 2) break;
+  if (depth === 0) return [dir];
+  const found = [];
+  for (const nombre of folders) {
+    found.push(...(await recentFolders(path.join(dir, nombre), depth - 1)));
+    if (found.length >= 2) break;
   }
-  return halladas;
+  return found;
 }
 
-/** @param {string} archivo */
-async function cola(archivo) {
-  const manejador = await open(archivo, "r");
+/** @param {string} file */
+async function queue(file) {
+  const handler = await open(file, "r");
   try {
-    const { size } = await manejador.stat();
-    const largo = Math.min(size, COLA);
-    const buffer = Buffer.alloc(largo);
-    await manejador.read(buffer, 0, largo, size - largo);
+    const { size } = await handler.stat();
+    const long = Math.min(size, QUEUE);
+    const buffer = Buffer.alloc(long);
+    await handler.read(buffer, 0, long, size - long);
     return buffer.toString("utf8");
   } finally {
-    await manejador.close();
+    await handler.close();
   }
 }
 
@@ -130,82 +128,83 @@ async function cola(archivo) {
  */
 export async function readCodexUsage(sesiones) {
   // sessions/YYYY/MM/DD/rollout-*.jsonl
-  const archivos = [];
-  for (const dir of await carpetasRecientes(sesiones, 3))
-    for (const nombre of await readdir(dir).catch(
+  const files = [];
+  for (const dir of await recentFolders(sesiones, 3))
+    for (const name of await readdir(dir).catch(
       /** @returns {string[]} */ () => [],
     ))
-      if (/^rollout-.*\.jsonl$/.test(nombre)) {
-        const completo = path.join(dir, nombre);
-        const info = await stat(completo).catch(
+      if (/^rollout-.*\.jsonl$/.test(name)) {
+        const complete = path.join(dir, name);
+        const info = await stat(complete).catch(
           /** @returns {null} */ () => null,
         );
-        if (info?.isFile()) archivos.push({ completo, cambio: info.mtimeMs });
+        if (info?.isFile())
+          files.push({ completo: complete, cambio: info.mtimeMs });
       }
-  archivos.sort((a, b) => b.cambio - a.cambio);
-  for (const { completo } of archivos.slice(0, MAX_ARCHIVOS)) {
-    const uso = latestCodexUsage(await cola(completo).catch(() => ""));
-    if (uso) return uso;
+  files.sort((a, b) => b.cambio - a.cambio);
+  for (const { completo } of files.slice(0, MAX_FILES)) {
+    const usage = latestCodexUsage(await queue(completo).catch(() => ""));
+    if (usage) return usage;
   }
   return null;
 }
 
 // Claude Code and Antigravity only hand their limits to the status line, so a
 // small command keeps the numbers next to each CLI's own configuration.
-const ARCHIVO_LINEA = "sb-uso.json";
+const LINE_FILE = "sb-uso.json";
 /** @type {Record<"claude" | "agy", (datos: StatusLinePayload | null) => UsageWindows>} */
-const LECTORES_LINEA = {
-  claude: (datos) => ventanasClaude(datos?.rate_limits),
-  agy: (datos) => ventanasAgy(datos?.quota, datos?.model?.id),
+const LINE_READERS = {
+  claude: (data) => claudeWindows(data?.rate_limits),
+  agy: (data) => agyWindows(data?.quota, data?.model?.id),
 };
-/** @param {StatusLinePayload | null} datos */
-export function contextoLinea(datos) {
-  const ventana = datos?.context_window;
-  const uso = ventana?.current_usage;
-  let usados =
-    uso &&
+/** @param {StatusLinePayload | null} data */
+export function lineContext(data) {
+  const window = data?.context_window;
+  const usage = window?.current_usage;
+  let used =
+    usage &&
     [
       "input_tokens",
       "cache_read_input_tokens",
       "cache_creation_input_tokens",
       "output_tokens",
-    ].reduce((n, k) => n + (Number(uso[k]) || 0), 0);
-  const size = ventana?.context_window_size;
-  const percent = ventana?.used_percentage;
+    ].reduce((n, k) => n + (Number(usage[k]) || 0), 0);
+  const size = window?.context_window_size;
+  const percent = window?.used_percentage;
   if (
-    !usados &&
+    !used &&
     size !== undefined &&
     percent !== undefined &&
     Number.isFinite(size) &&
     Number.isFinite(percent)
   )
-    usados = Math.round((size * percent) / 100);
-  return usados !== undefined && Number.isFinite(usados) && usados > 0
-    ? { usados, limite: 400000 }
+    used = Math.round((size * percent) / 100);
+  return used !== undefined && Number.isFinite(used) && used > 0
+    ? { usados: used, limite: 400000 }
     : null;
 }
-/** @param {unknown} texto */
-const comillas = (texto) => `'${String(texto).replace(/'/g, "")}'`;
+/** @param {unknown} text */
+const quotes = (text) => `'${String(text).replace(/'/g, "")}'`;
 
 /** @param {string} home */
-export const carpetaAgy = (home) => path.join(home, ".gemini/antigravity-cli");
+export const agyFolder = (home) => path.join(home, ".gemini/antigravity-cli");
 
 /**
  * The status line command for an agent; it only runs locally and spends no quota.
- * @param {string} motor
- * @param {string} carpeta
- * @param {string} [firma]
+ * @param {string} engine
+ * @param {string} folder
+ * @param {string} [signature]
  */
-export const usageLine = (motor, carpeta, firma) => ({
+export const usageLine = (engine, folder, signature) => ({
   type: "command",
   command: [
     process.execPath,
     fileURLToPath(new URL("./usage-line.mjs", import.meta.url)),
-    motor,
-    path.join(carpeta, ARCHIVO_LINEA),
-    firma,
+    engine,
+    path.join(folder, LINE_FILE),
+    signature,
   ]
-    .map(comillas)
+    .map(quotes)
     .join(" "),
 });
 
@@ -216,41 +215,41 @@ export const isUsageLine = (linea) =>
   /(?:usage-line|uso-linea)\.mjs/.test(String(linea?.command));
 
 /**
- * @param {string} archivo
+ * @param {string} file
  * @returns {Promise<UsageSnapshot | null>}
  */
-export async function readUsageLine(archivo) {
+export async function readUsageLine(file) {
   /** @type {Partial<UsageSnapshot>} */
-  let datos;
+  let data;
   try {
-    datos = JSON.parse(await readFile(archivo, "utf8"));
+    data = JSON.parse(await readFile(file, "utf8"));
   } catch {
     return null;
   }
   /** @type {UsageWindows} */
-  const ventanas = {};
+  const windows = {};
   for (const id of /** @type {const} */ (["5h", "semanal"])) {
-    const v = datos?.ventanas?.[id];
+    const v = data?.ventanas?.[id];
     if (typeof v?.usado === "number" && Number.isFinite(v.usado))
-      ventanas[id] = {
+      windows[id] = {
         usado: v.usado,
         reinicia: typeof v.reinicia === "string" ? v.reinicia : null,
         agotada: v.usado >= 100,
       };
   }
-  const usados = datos?.contexto?.usados;
-  const contexto =
-    usados !== undefined && Number.isFinite(usados) && usados > 0
-      ? { usados, limite: 400000 }
+  const used = data?.contexto?.usados;
+  const context =
+    used !== undefined && Number.isFinite(used) && used > 0
+      ? { usados: used, limite: 400000 }
       : null;
-  return Object.keys(ventanas).length || contexto
+  return Object.keys(windows).length || context
     ? {
-        ventanas,
-        ...(contexto
-          ? { contexto, contextoActualizado: datos.contextoActualizado }
+        ventanas: windows,
+        ...(context
+          ? { contexto: context, contextoActualizado: data.contextoActualizado }
           : {}),
         actualizado:
-          typeof datos.actualizado === "string" ? datos.actualizado : null,
+          typeof data.actualizado === "string" ? data.actualizado : null,
       }
     : null;
 }
@@ -258,70 +257,71 @@ export async function readUsageLine(archivo) {
 /**
  * Keeps only the numbers of a status line payload, which also carries paths and
  * the account's email. A window the CLI stopped sending stays: `vigente` empties it.
- * @param {string} motor
- * @param {StatusLinePayload | null} datos
- * @param {string} archivo
+ * @param {string} engine
+ * @param {StatusLinePayload | null} data
+ * @param {string} file
  */
-export async function saveUsageLine(motor, datos, archivo, ahora = Date.now()) {
-  const ventanas =
-    LECTORES_LINEA[/** @type {keyof typeof LECTORES_LINEA} */ (motor)]?.(datos);
-  const contexto = contextoLinea(datos);
-  if ((!ventanas || !Object.keys(ventanas).length) && !contexto) return false;
-  const previo = await readUsageLine(archivo);
-  const temporal = `${archivo}.tmp`;
-  await mkdir(path.dirname(archivo), { recursive: true });
+export async function saveUsageLine(engine, data, file, ahora = Date.now()) {
+  const windows =
+    LINE_READERS[/** @type {keyof typeof LINE_READERS} */ (engine)]?.(data);
+  const context = lineContext(data);
+  if ((!windows || !Object.keys(windows).length) && !context) return false;
+  const previous = await readUsageLine(file);
+  const temporary = `${file}.tmp`;
+  await mkdir(path.dirname(file), { recursive: true });
   await writeFile(
-    temporal,
+    temporary,
     JSON.stringify({
-      ventanas: { ...previo?.ventanas, ...ventanas },
-      actualizado: Object.keys(ventanas || {}).length
+      ventanas: { ...previous?.ventanas, ...windows },
+      actualizado: Object.keys(windows || {}).length
         ? new Date(ahora).toISOString()
-        : previo?.actualizado,
-      ...(contexto
-        ? { contexto, contextoActualizado: new Date(ahora).toISOString() }
-        : previo?.contexto
+        : previous?.actualizado,
+      ...(context
+        ? {
+            contexto: context,
+            contextoActualizado: new Date(ahora).toISOString(),
+          }
+        : previous?.contexto
           ? {
-              contexto: previo.contexto,
-              contextoActualizado: previo.contextoActualizado,
+              contexto: previous.contexto,
+              contextoActualizado: previous.contextoActualizado,
             }
           : {}),
     }),
     { mode: 0o600 },
   );
-  await rename(temporal, archivo);
+  await rename(temporary, file);
   return true;
 }
 
 export function createUsage({ env = process.env, ahora = Date.now } = {}) {
   /** @type {UsageCache | null} */
-  let memoria = null;
+  let memory = null;
   return async function uso() {
-    if (!memoria || ahora() - memoria.en > VIGENCIA) {
-      const raiz =
+    if (!memory || ahora() - memory.en > VALIDITY) {
+      const root =
         env.CODEX_HOME || (env.HOME && path.join(env.HOME, ".codex"));
-      memoria = {
+      memory = {
         en: ahora(),
-        codex: raiz
-          ? await readCodexUsage(path.join(raiz, "sessions")).catch(
+        codex: root
+          ? await readCodexUsage(path.join(root, "sessions")).catch(
               /** @returns {null} */ () => null,
             )
           : null,
         claude: env.AGENTES_CLAUDE_DIR
-          ? await readUsageLine(
-              path.join(env.AGENTES_CLAUDE_DIR, ARCHIVO_LINEA),
-            )
+          ? await readUsageLine(path.join(env.AGENTES_CLAUDE_DIR, LINE_FILE))
           : null,
         agy: env.HOME
-          ? await readUsageLine(path.join(carpetaAgy(env.HOME), ARCHIVO_LINEA))
+          ? await readUsageLine(path.join(agyFolder(env.HOME), LINE_FILE))
           : null,
       };
     }
     /** @type {Partial<Record<UsageEngine, UsageSnapshot>>} */
-    const resultado = {};
-    for (const motor of /** @type {const} */ (["codex", "claude", "agy"])) {
-      const actual = vigente(memoria[motor], ahora());
-      if (actual) resultado[motor] = actual;
+    const result = {};
+    for (const engine of /** @type {const} */ (["codex", "claude", "agy"])) {
+      const actual = current(memory[engine], ahora());
+      if (actual) result[engine] = actual;
     }
-    return resultado;
+    return result;
   };
 }

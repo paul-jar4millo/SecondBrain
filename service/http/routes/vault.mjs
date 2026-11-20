@@ -10,13 +10,13 @@ import { strToU8, zip } from "fflate";
 /** @type {RouteModule} */
 export const vaultRoutes = (ctx, req) => {
   const { auth, change, root, vault } = ctx;
-  const { consulta, request, response } = req;
+  const { consulta: query, request, response } = req;
   return {
     "GET /vault/files": async () => {
       return send(response, 200, await vault.files());
     },
     "GET /vault/note": async () => {
-      const relative = consulta.get("path");
+      const relative = query.get("path");
       validateNotePath(relative);
       await vault.queue;
       const content = await readFile(await vault.safe(relative), "utf8");

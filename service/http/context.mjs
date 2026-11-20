@@ -87,7 +87,7 @@ export async function createContext(options) {
   });
   await auth.init();
   const sala = await createRoom(dataDirectory, Failure);
-  const mundo = createWorld(
+  const world = createWorld(
     dataDirectory,
     Failure,
     options.mundoPaquete ?? process.env.MUNDO_PAQUETE,
@@ -107,23 +107,23 @@ export async function createContext(options) {
     }, 150);
     changeTimer.unref();
   };
-  const stopLanzadorEvents = lanzador.subscribe(change);
+  const stopLauncherEvents = lanzador.subscribe(change);
   /** @type {import("node:http").Server} */
-  let servidorHttp;
-  const mcpRemoto = await createRemoteMcp({
+  let serverHttp;
+  const mcpRemote = await createRemoteMcp({
     directory: path.join(dataDirectory, "oauth"),
     auth,
     Failure,
     baseUrl: () => {
       const address = /** @type {import("node:net").AddressInfo} */ (
-        servidorHttp.address()
+        serverHttp.address()
       );
       return `http://127.0.0.1:${address.port}/api/v1`;
     },
     now: options.mcpRemoto?.now,
     onChange: change,
   });
-  const aprobaciones = await createApprovalQueue(
+  const approvals = await createApprovalQueue(
     path.join(dataDirectory, "aprobaciones"),
     { ...options.aprobaciones, onChange: change },
   );
@@ -152,13 +152,13 @@ export async function createContext(options) {
    * The launcher lists sessions as an array; older fixtures wrap it.
    * @returns {Promise<LauncherSessionSummary[]>}
    */
-  const sesionesLanzador = async () => {
-    const estado = await lanzador.leer().catch(
+  const launcherSessions = async () => {
+    const state = await lanzador.leer().catch(
       /** @returns {null} */
       () => null,
     );
-    if (Array.isArray(estado)) return estado;
-    return Array.isArray(estado?.sesiones) ? estado.sesiones : [];
+    if (Array.isArray(state)) return state;
+    return Array.isArray(state?.sesiones) ? state.sesiones : [];
   };
   /**
    * @template T
@@ -448,8 +448,8 @@ export async function createContext(options) {
       return /^[a-z]{1,20}$/.test(id || "") ? "agente:" + id : "agente";
     }
     if (auth.isAgent(request)) {
-      const cliente = request.headers["x-sb-cliente"];
-      return /^[a-z0-9-]{1,30}$/.test(cliente || "") ? "mcp:" + cliente : "mcp";
+      const client = request.headers["x-sb-cliente"];
+      return /^[a-z0-9-]{1,30}$/.test(client || "") ? "mcp:" + client : "mcp";
     }
     return "app";
   };
@@ -474,18 +474,18 @@ export async function createContext(options) {
     finance,
     auth,
     sala,
-    mundo,
+    mundo: world,
     lanzador,
     clients,
     watchers,
     change,
-    stopLanzadorEvents,
-    mcpRemoto,
-    aprobaciones,
+    stopLanzadorEvents: stopLauncherEvents,
+    mcpRemoto: mcpRemote,
+    aprobaciones: approvals,
     workOrders,
     userRequests,
     effects,
-    sesionesLanzador,
+    sesionesLanzador: launcherSessions,
     runStoreOp,
     resolveServerProfile,
     hasVerifiedBillingGrant,
@@ -497,7 +497,7 @@ export async function createContext(options) {
     logger,
     /** The OAuth metadata needs the listening port, known after createServer. */
     setServer(/** @type {import("node:http").Server} */ server) {
-      servidorHttp = server;
+      serverHttp = server;
     },
     cancelPendingChange() {
       clearTimeout(changeTimer ?? undefined);

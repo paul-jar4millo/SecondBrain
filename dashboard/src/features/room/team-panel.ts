@@ -1,5 +1,5 @@
 // The team desk is a view of recorded work. Scene cues and handoffs cost no model calls.
-const ESTADOS: Record<string, string> = {
+const STATES: Record<string, string> = {
   trabajando: "En curso",
   compactando: "Compactando",
   listo: "Terminado",
@@ -56,7 +56,7 @@ export function characterState(a: RosterAgent): CharacterState {
   return {
     trabajando: false,
     atencion: false,
-    etiqueta: ESTADOS[a.ultimo?.estado ?? ""] || "Disponible",
+    etiqueta: STATES[a.ultimo?.estado ?? ""] || "Disponible",
     jobId: a.ultimo?.jobId,
   };
 }
@@ -65,20 +65,20 @@ export function characterState(a: RosterAgent): CharacterState {
  * Roster line: real work, waits and failures win; otherwise the scene routine,
  * prefixed with the last delivery so "Terminado" never reads as the current action.
  */
-export function etiquetaRoster(
-  estado: CharacterState | null | undefined,
-  actividad?: string,
+export function rosterLabel(
+  state: CharacterState | null | undefined,
+  activity?: string,
 ) {
-  if (!estado) return actividad || "";
-  if (estado.trabajando || estado.esperando || estado.atencion || !actividad)
-    return estado.etiqueta;
-  const previo = (
+  if (!state) return activity || "";
+  if (state.trabajando || state.esperando || state.atencion || !activity)
+    return state.etiqueta;
+  const previous = (
     {
       Terminado: "Encargo terminado",
       Cancelado: "Encargo cancelado",
     } as Record<string, string>
-  )[estado.etiqueta];
-  return previo
-    ? `${previo} · ${actividad.charAt(0).toLocaleLowerCase("es")}${actividad.slice(1)}`
-    : actividad;
+  )[state.etiqueta];
+  return previous
+    ? `${previous} · ${activity.charAt(0).toLocaleLowerCase("es")}${activity.slice(1)}`
+    : activity;
 }

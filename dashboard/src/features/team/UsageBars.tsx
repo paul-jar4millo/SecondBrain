@@ -30,14 +30,14 @@ const time = (iso: string, withDay: boolean) =>
 
 /** What is left of a provider's plan. Reads what the CLI recorded; it costs no quota. */
 export function UsageBars({
-  motor,
-  contexto,
+  motor: engine,
+  contexto: context,
 }: {
   motor: string;
   contexto?: { usados: number; limite: number };
 }) {
   const [usage, setUsage] = useState<Record<string, ProviderUsage>>({});
-  const measured = MEASURED.has(motor);
+  const measured = MEASURED.has(engine);
   useEffect(() => {
     if (isDemo || !measured) return;
     let live = true;
@@ -59,9 +59,9 @@ export function UsageBars({
       document.removeEventListener("visibilitychange", read);
     };
   }, [measured]);
-  const current = usage[motor];
+  const current = usage[engine];
   const staleClaude =
-    motor === "claude" &&
+    engine === "claude" &&
     !!current?.actualizado &&
     Date.now() - Date.parse(current.actualizado) > 3 * 60_000;
   const rows = WINDOWS.flatMap(([id, label]) => {
@@ -75,7 +75,7 @@ export function UsageBars({
     current?.contextoActualizado &&
     Date.now() - Date.parse(current.contextoActualizado) < 3 * 60_000
       ? current.contexto
-      : contexto;
+      : context;
   const contextUsed =
     measuredContext && Number.isFinite(measuredContext.usados)
       ? Math.max(0, measuredContext.usados)

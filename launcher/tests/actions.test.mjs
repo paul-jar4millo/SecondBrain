@@ -17,22 +17,22 @@ import { createLauncherServer } from "../index.mjs";
 import { openSessionRegistry } from "../sessions.mjs";
 import { createGit } from "../git.mjs";
 import { createCheckpoints, createTracking } from "../checkpoints.mjs";
-import { createPrClient, nombreRama, propuestaPr, slug } from "../pr.mjs";
+import { createPrClient, branchName, proposalPr, slug } from "../pr.mjs";
 import { createActions } from "../actions.mjs";
-import { CAPACIDADES, capacidadesDe, economyModel } from "../engines.mjs";
+import { CAPABILITIES, capabilitiesOf, economyModel } from "../engines.mjs";
 import { git, repoSintetico } from "./helpers-git.mjs";
 
-const huella = (token) => createHash("sha256").update(token).digest("hex");
+const fingerprint = (token) => createHash("sha256").update(token).digest("hex");
 
 /** A gh that records its arguments and answers like the real one, with no network. */
-async function ghFalso(dir) {
-  const archivo = path.join(dir, "gh-falso.mjs");
-  const registro = path.join(dir, "gh-llamadas.jsonl");
+async function ghFake(dir) {
+  const file = path.join(dir, "gh-falso.mjs");
+  const registry = path.join(dir, "gh-llamadas.jsonl");
   await writeFile(
-    archivo,
+    file,
     `import { appendFileSync, existsSync } from "node:fs";
 const args = process.argv.slice(2);
-appendFileSync(${JSON.stringify(registro)}, JSON.stringify(args) + "\\n");
+appendFileSync(${JSON.stringify(registry)}, JSON.stringify(args) + "\\n");
 if (args[0] === "pr" && args[1] === "view") {
   if (existsSync(${JSON.stringify(path.join(dir, "pr-existente"))})) {
     console.log(JSON.stringify({ url: "https://github.com/test/repo/pull/3", state: "OPEN" }));
@@ -49,16 +49,19 @@ process.exit(2);
 `,
   );
   return {
-    comando: [process.execPath, archivo],
+    comando: [process.execPath, file],
     llamadas: async () =>
-      (await readFile(registro, "utf8").catch(() => ""))
+      (await readFile(registry, "utf8").catch(() => ""))
         .split("\n")
         .filter(Boolean)
         .map((l) => JSON.parse(l)),
   };
 }
 
-async function entorno(t, { remoto = true, motor = "claude", estado } = {}) {
+async function environment(
+  t,
+  { remoto = true, motor: engine = "claude", estado: state } = {},
+) {
   const cwd = await repoSintetico(t);
   const dir = await mkdtemp(path.join(tmpdir(), "sb-acc-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
@@ -75,57 +78,57 @@ async function entorno(t, { remoto = true, motor = "claude", estado } = {}) {
     );
     git(cwd, "push", "-q", "-u", "origin", "main");
   }
-  const gh = await ghFalso(dir);
-  const ejecutorGit = createGit({ ghComando: gh.comando });
-  const checkpoints = createCheckpoints({ git: ejecutorGit });
-  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
-  const sesion = await registro.crear({
-    motor,
+  const gh = await ghFake(dir);
+  const gitExecutor = createGit({ ghComando: gh.comando });
+  const checkpoints = createCheckpoints({ git: gitExecutor });
+  const registry = await openSessionRegistry(path.join(dir, "sesiones.json"));
+  const session = await registry.crear({
+    motor: engine,
     origen: "sala",
     proyecto: "repo",
     encargo: "Corrige el error en login",
     directorio: cwd,
     harness: true,
   });
-  await registro.actualizar(sesion.id, { estado: estado ?? "terminada" });
-  const seguimiento = createTracking({
-    registro,
+  await registry.actualizar(session.id, { estado: state ?? "terminada" });
+  const tracking = createTracking({
+    registro: registry,
     checkpoints,
     cwdDe: (s) => s.directorio,
   });
-  const falsoMotor = path.join(dir, "motor-falso.mjs");
+  const fakeEngine = path.join(dir, "motor-falso.mjs");
   await writeFile(
-    falsoMotor,
+    fakeEngine,
     `console.log(JSON.stringify({type:"result",result:JSON.stringify({titulo:"feat(login): redacta el PR",descripcion:"## Resumen\\nRedactado"})}));`,
   );
-  const acciones = createActions({
-    registro,
-    seguimiento,
+  const actions = createActions({
+    registro: registry,
+    seguimiento: tracking,
     checkpoints,
     pr: createPrClient({
-      git: ejecutorGit,
+      git: gitExecutor,
       info: checkpoints.info,
       // Internal runs leave a mark under HOME: never the developer's own.
       env: { ...process.env, HOME: dir },
-      comando: () => ({ bin: process.execPath, args: [falsoMotor] }),
+      comando: () => ({ bin: process.execPath, args: [fakeEngine] }),
     }),
     catalogo: { modelos: async () => ({}) },
     proyectos: { repo: cwd },
   });
-  const servidor = createLauncherServer({
-    registro,
+  const server = createLauncherServer({
+    registro: registry,
     ejecutor: { entrada: () => ({ ok: true }) },
-    acciones,
+    acciones: actions,
     proyectos: { repo: cwd },
-    controlHash: huella("control"),
-    hookHash: huella("hook"),
+    controlHash: fingerprint("control"),
+    hookHash: fingerprint("hook"),
   });
-  servidor.listen(0, "127.0.0.1");
-  await once(servidor, "listening");
-  t.after(() => servidor.close());
-  const base = `http://127.0.0.1:${servidor.address().port}`;
-  const pedir = async (ruta, cuerpo) => {
-    const r = await fetch(base + ruta, {
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const request = async (path, cuerpo) => {
+    const r = await fetch(base + path, {
       method: cuerpo === undefined ? "GET" : "POST",
       headers: {
         authorization: "Bearer control",
@@ -139,46 +142,46 @@ async function entorno(t, { remoto = true, motor = "claude", estado } = {}) {
     cwd,
     dir,
     gh,
-    registro,
-    sesion,
-    seguimiento,
-    pedir,
+    registro: registry,
+    sesion: session,
+    seguimiento: tracking,
+    pedir: request,
     bare: path.join(dir, "remoto.git"),
   };
 }
 
 test("las capacidades salen del código real de cada motor y se estrechan por repositorio", () => {
-  assert.equal(CAPACIDADES.codex.reanudar, false);
-  assert.equal(CAPACIDADES.agy.herramientasEstructuradas, "parcial");
-  assert.equal(CAPACIDADES.deepseek.reportaUso, false);
+  assert.equal(CAPABILITIES.codex.reanudar, false);
+  assert.equal(CAPABILITIES.agy.herramientasEstructuradas, "parcial");
+  assert.equal(CAPABILITIES.deepseek.reportaUso, false);
   assert.ok(
-    Object.values(CAPACIDADES).every((c) => c.revertirConversacion === false),
+    Object.values(CAPABILITIES).every((c) => c.revertirConversacion === false),
   );
-  assert.equal(CAPACIDADES.codex.teclaInterrumpir, "Ctrl+C");
-  const sinRepo = capacidadesDe({ motor: "claude", harness: true }, {});
+  assert.equal(CAPABILITIES.codex.teclaInterrumpir, "Ctrl+C");
+  const withoutRepo = capabilitiesOf({ motor: "claude", harness: true }, {});
   assert.deepEqual(
     [
-      sinRepo.esRepo,
-      sinRepo.revertirArchivos,
-      sinRepo.crearPr,
-      sinRepo.continuar,
+      withoutRepo.esRepo,
+      withoutRepo.revertirArchivos,
+      withoutRepo.crearPr,
+      withoutRepo.continuar,
     ],
     [false, false, false, true],
   );
-  const conRepo = capacidadesDe(
+  const withRepo = capabilitiesOf(
     { motor: "codex", harness: false },
     { esRepo: true, tieneRemoto: true, remotoGithub: true },
   );
   assert.deepEqual(
     [
-      conRepo.revertirArchivos,
-      conRepo.crearPr,
-      conRepo.continuar,
-      conRepo.interrumpir,
+      withRepo.revertirArchivos,
+      withRepo.crearPr,
+      withRepo.continuar,
+      withRepo.interrumpir,
     ],
     [true, true, false, false],
   );
-  assert.equal(capacidadesDe({ motor: "otro" }), null);
+  assert.equal(capabilitiesOf({ motor: "otro" }), null);
   assert.equal(
     economyModel("claude", [{ id: "opus" }, { id: "haiku" }]),
     "haiku",
@@ -192,7 +195,7 @@ test("la propuesta es determinista: título convencional, archivos y cambios por
     "corrige-el-error-en-login",
   );
   assert.equal(slug("***"), "cambios");
-  const sesion = {
+  const session = {
     id: "abcdef12-0000-4000-8000-000000000000",
     motor: "menta",
     encargo: "Corrige el error en login\nmás detalles",
@@ -211,11 +214,11 @@ test("la propuesta es determinista: título convencional, archivos y cambios por
     ],
   };
   assert.equal(
-    nombreRama({ ...sesion, motor: "codex" }),
+    branchName({ ...session, motor: "codex" }),
     "sb/menta-corrige-el-error-en-login-abcdef",
   );
-  const p = propuestaPr({
-    sesion: { ...sesion, motor: "codex" },
+  const p = proposalPr({
+    sesion: { ...session, motor: "codex" },
     archivos: [
       {
         ruta: "a.txt",
@@ -238,7 +241,7 @@ test("la propuesta es determinista: título convencional, archivos y cambios por
 });
 
 test("hilo a rama a PR: crea la rama, el commit, empuja al remoto y abre el PR sin tokens en argumentos", async (t) => {
-  const e = await entorno(t);
+  const e = await environment(t);
   await e.seguimiento.marcar(e.sesion.id, "Corrige el error en login");
   await writeFile(path.join(e.cwd, "a.txt"), "arreglado\n");
   await writeFile(path.join(e.cwd, "nuevo.txt"), "nuevo\n");
@@ -264,10 +267,10 @@ test("hilo a rama a PR: crea la rama, el commit, empuja al remoto y abre el PR s
   assert.equal(git(e.cwd, "branch", "--show-current"), r.datos.rama);
   assert.equal(git(e.cwd, "log", "-1", "--format=%s"), "fix: corrige el login");
   assert.equal(git(e.bare, "rev-parse", r.datos.rama), r.datos.commit);
-  const archivos = git(e.cwd, "show", "--name-only", "--format=", "HEAD");
-  assert.match(archivos, /a\.txt/);
-  assert.match(archivos, /nuevo\.txt/);
-  assert.doesNotMatch(archivos, /ignorado/);
+  const files = git(e.cwd, "show", "--name-only", "--format=", "HEAD");
+  assert.match(files, /a\.txt/);
+  assert.match(files, /nuevo\.txt/);
+  assert.doesNotMatch(files, /ignorado/);
 
   const crear = (await e.gh.llamadas()).find((a) => a[1] === "create");
   assert.ok(crear.includes("--draft"));
@@ -284,7 +287,7 @@ test("hilo a rama a PR: crea la rama, el commit, empuja al remoto y abre el PR s
 });
 
 test("sin cambios en la rama por defecto el PR se bloquea", async (t) => {
-  const e = await entorno(t);
+  const e = await environment(t);
   const r = await e.pedir(`/sesiones/${e.sesion.id}/pr`, {});
   assert.equal(r.status, 409);
   assert.match(r.datos.error, /No hay cambios/);
@@ -292,7 +295,7 @@ test("sin cambios en la rama por defecto el PR se bloquea", async (t) => {
 });
 
 test("reutiliza la rama actual y devuelve el PR abierto en vez de crear otro", async (t) => {
-  const e = await entorno(t);
+  const e = await environment(t);
   git(e.cwd, "checkout", "-q", "-b", "mi-rama");
   await writeFile(path.join(e.cwd, "a.txt"), "cambio\n");
   await writeFile(path.join(e.dir, "pr-existente"), "1");
@@ -309,7 +312,7 @@ test("reutiliza la rama actual y devuelve el PR abierto en vez de crear otro", a
 });
 
 test("revertir, pr y diff validan estado y capacidades antes de actuar", async (t) => {
-  const trabajando = await entorno(t, { estado: "trabajando" });
+  const trabajando = await environment(t, { estado: "trabajando" });
   let r = await trabajando.pedir(`/sesiones/${trabajando.sesion.id}/revertir`, {
     n: 1,
   });
@@ -318,45 +321,51 @@ test("revertir, pr y diff validan estado y capacidades antes de actuar", async (
   r = await trabajando.pedir(`/sesiones/${trabajando.sesion.id}/pr`, {});
   assert.equal(r.status, 409);
 
-  const sinRemoto = await entorno(t, { remoto: false });
-  r = await sinRemoto.pedir(`/sesiones/${sinRemoto.sesion.id}/pr`, {});
+  const withoutRemote = await environment(t, { remoto: false });
+  r = await withoutRemote.pedir(`/sesiones/${withoutRemote.sesion.id}/pr`, {});
   assert.equal(r.status, 409);
   assert.match(r.datos.error, /GitHub/);
-  r = await sinRemoto.pedir(`/sesiones/${sinRemoto.sesion.id}/revertir`, {
-    n: 9,
-  });
+  r = await withoutRemote.pedir(
+    `/sesiones/${withoutRemote.sesion.id}/revertir`,
+    {
+      n: 9,
+    },
+  );
   assert.equal(r.status, 404);
-  r = await sinRemoto.pedir(`/sesiones/${sinRemoto.sesion.id}/diff?desde=abc`);
+  r = await withoutRemote.pedir(
+    `/sesiones/${withoutRemote.sesion.id}/diff?desde=abc`,
+  );
   assert.equal(r.status, 400);
 
   // Outside a repository there is nothing to revert.
-  const carpeta = await mkdtemp(path.join(tmpdir(), "sb-plano-"));
-  t.after(() => rm(carpeta, { recursive: true, force: true }));
-  await mkdir(carpeta, { recursive: true });
-  await sinRemoto.registro.actualizar(sinRemoto.sesion.id, {});
-  const plano = await sinRemoto.registro.crear({
+  const folder = await mkdtemp(path.join(tmpdir(), "sb-plano-"));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  await mkdir(folder, { recursive: true });
+  await withoutRemote.registro.actualizar(withoutRemote.sesion.id, {});
+  const plain = await withoutRemote.registro.crear({
     motor: "claude",
     origen: "sala",
     proyecto: "x",
-    directorio: carpeta,
+    directorio: folder,
   });
-  await sinRemoto.registro.actualizar(plano.id, { estado: "terminada" });
-  r = await sinRemoto.pedir(`/sesiones/${plano.id}/revertir`, { n: 1 });
+  await withoutRemote.registro.actualizar(plain.id, { estado: "terminada" });
+  r = await withoutRemote.pedir(`/sesiones/${plain.id}/revertir`, { n: 1 });
   assert.equal(r.status, 409);
   assert.match(r.datos.error, /repositorio git/);
-  const estado = await sinRemoto.pedir("/estado");
-  const suya = estado.datos.find((s) => s.id === plano.id);
+  const state = await withoutRemote.pedir("/estado");
+  const suya = state.datos.find((s) => s.id === plain.id);
   assert.equal(suya.capacidades.esRepo, false);
   assert.equal(
-    estado.datos.find((s) => s.id === sinRemoto.sesion.id).capacidades.esRepo,
+    state.datos.find((s) => s.id === withoutRemote.sesion.id).capacidades
+      .esRepo,
     true,
   );
-  const caps = await sinRemoto.pedir("/capacidades");
+  const caps = await withoutRemote.pedir("/capacidades");
   assert.equal(caps.datos.motores.claude.revertirConversacion, false);
 });
 
 test("revertir por HTTP restaura el árbol y el diff por turno lo refleja", async (t) => {
-  const e = await entorno(t);
+  const e = await environment(t);
   await e.seguimiento.marcar(e.sesion.id, "turno 1");
   await writeFile(path.join(e.cwd, "a.txt"), "turno 1\n");
   await e.seguimiento.marcar(e.sesion.id, "turno 2");
@@ -377,16 +386,16 @@ test("revertir por HTTP restaura el árbol y el diff por turno lo refleja", asyn
 });
 
 test("redactar usa la ejecución corta del motor y falla sin romper la propuesta", async (t) => {
-  const e = await entorno(t);
+  const e = await environment(t);
   await e.seguimiento.marcar(e.sesion.id, "x");
   await writeFile(path.join(e.cwd, "a.txt"), "cambio\n");
   const r = await e.pedir(`/sesiones/${e.sesion.id}/pr/redactar`, {});
   assert.equal(r.status, 200, JSON.stringify(r.datos));
   assert.equal(r.datos.titulo, "feat(login): redacta el PR");
   assert.equal(r.datos.fuente, "agente");
-  const sinRepo = await entorno(t, { remoto: false });
-  const f = await sinRepo.pedir(
-    `/sesiones/${sinRepo.sesion.id}/pr/redactar`,
+  const withoutRepo = await environment(t, { remoto: false });
+  const f = await withoutRepo.pedir(
+    `/sesiones/${withoutRepo.sesion.id}/pr/redactar`,
     {},
   );
   assert.equal(f.status, 409);
@@ -418,13 +427,13 @@ test("redactar no usa el id de la sesión y marca su conversación como interna"
   const dir = await mkdtemp(path.join(tmpdir(), "sb-redactar-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const traza = path.join(dir, "traza.json");
-  const falso = path.join(dir, "motor.mjs");
-  const nativo = "c3333333-3333-4333-8333-333333333333";
+  const fake = path.join(dir, "motor.mjs");
+  const native = "c3333333-3333-4333-8333-333333333333";
   await writeFile(
-    falso,
+    fake,
     `import { writeFileSync } from "node:fs";
 writeFileSync(${JSON.stringify(traza)}, JSON.stringify({ args: process.argv.slice(2), sesion: process.env.SB_SESSION_ID }));
-console.log(JSON.stringify({ type: "thread.started", thread_id: ${JSON.stringify(nativo)} }));
+console.log(JSON.stringify({ type: "thread.started", thread_id: ${JSON.stringify(native)} }));
 console.log(JSON.stringify({ type: "result", result: JSON.stringify({ titulo: "feat: x", descripcion: "y" }) }));`,
   );
   const sesion = {
@@ -436,7 +445,7 @@ console.log(JSON.stringify({ type: "result", result: JSON.stringify({ titulo: "f
     git: createGit(),
     info: async () => ({}),
     env: { PATH: process.env.PATH, HOME: dir },
-    comando: () => ({ bin: process.execPath, args: [falso] }),
+    comando: () => ({ bin: process.execPath, args: [fake] }),
   });
   const r = await pr.redactar({
     sesion,
@@ -448,7 +457,7 @@ console.log(JSON.stringify({ type: "result", result: JSON.stringify({ titulo: "f
   assert.notEqual(usada, sesion.id);
   assert.equal(args.at(-2), "--session-id");
   assert.equal(args.at(-1), usada);
-  const internas = path.join(dir, "estado/lanzador/internas");
-  for (const id of [usada, nativo])
-    assert.ok((await stat(path.join(internas, id + ".json"))).isFile(), id);
+  const internal = path.join(dir, "estado/lanzador/internas");
+  for (const id of [usada, native])
+    assert.ok((await stat(path.join(internal, id + ".json"))).isFile(), id);
 });

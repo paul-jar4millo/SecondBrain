@@ -32,22 +32,22 @@ async function fixture(t) {
 test("continuar absorbe rechazos del checkpoint en harness y headless", async (t) => {
   const dir = await fixture(t);
   for (const harness of [false, true]) {
-    const registro = await openSessionRegistry(
+    const registry = await openSessionRegistry(
       path.join(dir, `sessions-${harness}.json`),
     );
-    const s = await registro.crear({
+    const s = await registry.crear({
       motor: "claude",
       origen: "sala",
       proyecto: "p",
       directorio: dir,
       harness,
     });
-    await registro.actualizar(s.id, {
+    await registry.actualizar(s.id, {
       estado: "terminada",
       conversacionId: "native",
     });
     const runner = createExecutor({
-      registro,
+      registro: registry,
       proyectos: { p: dir },
       seguimiento: {
         marcar: async () => {
@@ -57,19 +57,19 @@ test("continuar absorbe rechazos del checkpoint en harness y headless", async (t
     });
     await runner.continuar(s.id, "seguir");
     await assert.doesNotReject(runner.esperar(s.id));
-    assert.equal(registro.leer()[0].estado, "error");
+    assert.equal(registry.leer()[0].estado, "error");
     assert.equal(runner.activos(), 0);
   }
 });
 
 test("HTTP conserva un acento dividido entre dos buffers", async (t) => {
-  let recibido;
+  let received;
   const hash = createHash("sha256").update("control").digest("hex");
   const server = createLauncherServer({
     registro: { leer: () => [], subscribe: () => () => {} },
     ejecutor: {
-      encargar: async (datos) => {
-        recibido = datos.brief;
+      encargar: async (data) => {
+        received = data.brief;
         return { id: "ok" };
       },
     },
@@ -101,12 +101,12 @@ test("HTTP conserva un acento dividido entre dos buffers", async (t) => {
   res.resume();
   await once(res, "end");
   assert.equal(res.statusCode, 202);
-  assert.equal(recibido, "México");
+  assert.equal(received, "México");
 });
 
 test("el replay PTY conserva UTF-8 dividido", async (t) => {
   const dir = await fixture(t);
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
   const child = new EventEmitter();
   Object.assign(child, {
     stdout: new PassThrough(),
@@ -115,7 +115,7 @@ test("el replay PTY conserva UTF-8 dividido", async (t) => {
     kill() {},
   });
   const runner = createExecutor({
-    registro,
+    registro: registry,
     proyectos: { p: dir },
     comandoInteractivo: () => ({ bin: "fake", args: [] }),
     lanzarPty: () => child,
@@ -127,12 +127,12 @@ test("el replay PTY conserva UTF-8 dividido", async (t) => {
     harness: true,
     brief: "x",
   });
-  for (let i = 0; i < 100 && !registro.leer()[0]?.interactiva; i++)
+  for (let i = 0; i < 100 && !registry.leer()[0]?.interactiva; i++)
     await new Promise((resolve) => setTimeout(resolve, 5));
   assert.equal(
-    registro.leer()[0].interactiva,
+    registry.leer()[0].interactiva,
     true,
-    JSON.stringify(registro.leer()[0]),
+    JSON.stringify(registry.leer()[0]),
   );
   const bytes = Buffer.from("México 🧠");
   for (const byte of bytes) child.stdout.write(Buffer.from([byte]));
@@ -148,8 +148,8 @@ test("errores inesperados son 500 y el diagnóstico oculta encargo y token", asy
   const server = createLauncherServer({
     registro: { leer: () => [], subscribe: () => () => {} },
     ejecutor: {
-      encargar: async (datos) => {
-        throw new Error(`EIO: ${datos.brief}; Bearer credencial-sintetica`);
+      encargar: async (data) => {
+        throw new Error(`EIO: ${data.brief}; Bearer credencial-sintetica`);
       },
     },
     controlHash: createHash("sha256").update("control").digest("hex"),
@@ -197,12 +197,12 @@ test("migra mensajes y terminal a detalle por sesión y los recupera", async (t)
     mensajes: [{ rol: "user", texto: "mensaje antiguo" }],
   };
   await writeFile(file, JSON.stringify([old]));
-  const registro = await openSessionRegistry(file);
-  assert.deepEqual(registro.leer()[0].mensajes, old.mensajes);
+  const registry = await openSessionRegistry(file);
+  assert.deepEqual(registry.leer()[0].mensajes, old.mensajes);
   const metadata = JSON.parse(await readFile(file, "utf8"));
   assert.equal(metadata[0].terminal, undefined);
   assert.equal(metadata[0].mensajes, undefined);
-  await registro.actualizar("legacy", { ultimaAccion: "Listo" });
+  await registry.actualizar("legacy", { ultimaAccion: "Listo" });
   const reopened = await openSessionRegistry(file);
   assert.equal(reopened.leer()[0].terminal, "pantalla México");
   assert.deepEqual(reopened.leer()[0].mensajes, old.mensajes);
@@ -239,12 +239,12 @@ test("retiene activas y recientes, poda terminadas y lápidas antiguas", async (
       { id: "new", estado: "terminada", creada: reciente },
     ]),
   );
-  const registro = await openSessionRegistry(file);
+  const registry = await openSessionRegistry(file);
   assert.deepEqual(
-    registro.leer().map((s) => s.id),
+    registry.leer().map((s) => s.id),
     ["active", "new"],
   );
-  assert.equal(registro.leer()[0].estado, "interrumpida");
+  assert.equal(registry.leer()[0].estado, "interrumpida");
 });
 
 test("conserva sesiones legacy cuya fecha final no se conoce", async (t) => {
@@ -256,14 +256,14 @@ test("conserva sesiones legacy cuya fecha final no se conoce", async (t) => {
       { id: "legacy", estado: "terminada", creada: "2020-01-01T00:00:00.000Z" },
     ]),
   );
-  const registro = await openSessionRegistry(file);
-  assert.equal(registro.leer()[0]?.id, "legacy");
-  assert.ok(Date.parse(registro.leer()[0].finalizada) > Date.now() - 60000);
+  const registry = await openSessionRegistry(file);
+  assert.equal(registry.leer()[0]?.id, "legacy");
+  assert.ok(Date.parse(registry.leer()[0].finalizada) > Date.now() - 60000);
 });
 
 test("un error al señalar el proceso no escapa del vigilante", async (t) => {
   const dir = await fixture(t);
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
   const child = new EventEmitter();
   Object.assign(child, {
     stdout: new PassThrough(),
@@ -277,7 +277,7 @@ test("un error al señalar el proceso no escapa del vigilante", async (t) => {
   });
   const timers = [];
   const runner = createExecutor({
-    registro,
+    registro: registry,
     proyectos: { p: dir },
     comandoInteractivo: () => ({ bin: "fake", args: [] }),
     lanzarPty: () => child,
@@ -313,13 +313,13 @@ test("una sesión sin salida avisa y se cancela al agotar el tope", async (t) =>
   const dir = await fixture(t);
   const fake = path.join(dir, "fake.mjs");
   await writeFile(fake, "setInterval(() => {}, 1000);");
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
   const notices = [];
-  registro.subscribe((ss) => {
+  registry.subscribe((ss) => {
     if (ss[0]?.ultimaAccion) notices.push(ss[0].ultimaAccion);
   });
   const runner = createExecutor({
-    registro,
+    registro: registry,
     proyectos: { p: dir },
     comando: () => ({ bin: process.execPath, args: [fake] }),
     limiteMs: 200,
@@ -332,8 +332,8 @@ test("una sesión sin salida avisa y se cancela al agotar el tope", async (t) =>
     brief: "x",
   });
   await runner.esperar(s.id);
-  assert.equal(registro.leer()[0].estado, "error");
-  assert.match(registro.leer()[0].error, /tiempo máximo/);
+  assert.equal(registry.leer()[0].estado, "error");
+  assert.match(registry.leer()[0].error, /tiempo máximo/);
   assert.ok(notices.some((text) => /Sin actividad/.test(text)));
   assert.equal(runner.activos(), 0);
 });
@@ -341,12 +341,12 @@ test("una sesión sin salida avisa y se cancela al agotar el tope", async (t) =>
 test("un fallo al confirmar el índice conserva el detalle anterior", async (t) => {
   const dir = await fixture(t);
   const file = path.join(dir, "sessions.json");
-  const registro = await openSessionRegistry(file);
-  const s = await registro.crear({ motor: "codex", origen: "sala" });
-  await registro.actualizar(s.id, { estado: "terminada", terminal: "antes" });
+  const registry = await openSessionRegistry(file);
+  const s = await registry.crear({ motor: "codex", origen: "sala" });
+  await registry.actualizar(s.id, { estado: "terminada", terminal: "antes" });
   await mkdir(file + ".tmp");
-  await assert.rejects(registro.actualizar(s.id, { terminal: "después" }));
-  assert.equal(registro.leer()[0].terminal, "antes");
+  await assert.rejects(registry.actualizar(s.id, { terminal: "después" }));
+  assert.equal(registry.leer()[0].terminal, "antes");
   const restored = await openSessionRegistry(file);
   assert.equal(restored.leer()[0].terminal, "antes");
   assert.equal((await readdir(file + ".d")).length, 1);
@@ -354,7 +354,7 @@ test("un fallo al confirmar el índice conserva el detalle anterior", async (t) 
 
 test("el observador no resucita transcripts vencidos al podar lápidas", async (t) => {
   const dir = await fixture(t);
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
   const folder = path.join(dir, "claude/projects/p");
   await mkdir(folder, { recursive: true });
   const transcript = (text) =>
@@ -366,7 +366,7 @@ test("el observador no resucita transcripts vencidos al podar lápidas", async (
   await utimes(oldFile, new Date("2020-01-01"), new Date("2020-01-01"));
   await writeFile(path.join(folder, newId + ".jsonl"), transcript("Actual"));
   const stop = watchConversations({
-    registro,
+    registro: registry,
     env: { HOME: dir },
     proyectos: {},
     intervalo: 10,
@@ -374,12 +374,12 @@ test("el observador no resucita transcripts vencidos al podar lápidas", async (
   t.after(stop);
   for (
     let i = 0;
-    i < 100 && !registro.leer().some((s) => s.conversacionId === newId);
+    i < 100 && !registry.leer().some((s) => s.conversacionId === newId);
     i++
   )
     await new Promise((resolve) => setTimeout(resolve, 10));
   assert.deepEqual(
-    registro.leer().map((s) => s.conversacionId),
+    registry.leer().map((s) => s.conversacionId),
     [newId],
   );
   stop();
@@ -393,10 +393,10 @@ test("conserva stderr acotado sin secretos ni el encargo", async (t) => {
     fake,
     `process.stderr.write('x'.repeat(10000) + ' EIO ${brief} token-sintetico');process.exit(1);`,
   );
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
   const logs = [];
   const runner = createExecutor({
-    registro,
+    registro: registry,
     proyectos: { p: dir },
     env: { ...process.env, DEEPSEEK_API_KEY: "token-sintetico" },
     comando: () => ({ bin: process.execPath, args: [fake] }),
@@ -409,7 +409,7 @@ test("conserva stderr acotado sin secretos ni el encargo", async (t) => {
     brief,
   });
   await runner.esperar(s.id);
-  assert.equal(registro.leer()[0].estado, "error");
+  assert.equal(registry.leer()[0].estado, "error");
   assert.equal(logs.length, 1);
   const log = JSON.parse(logs[0]);
   assert.match(log.diagnostico, /EIO/);
@@ -420,7 +420,7 @@ test("conserva stderr acotado sin secretos ni el encargo", async (t) => {
 
 test("el tope también termina un harness inactivo", async (t) => {
   const dir = await fixture(t);
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
   const child = new EventEmitter();
   const signals = [];
   Object.assign(child, {
@@ -437,7 +437,7 @@ test("el tope también termina un harness inactivo", async (t) => {
     },
   });
   const runner = createExecutor({
-    registro,
+    registro: registry,
     proyectos: { p: dir },
     comandoInteractivo: () => ({ bin: "fake", args: [] }),
     lanzarPty: () => child,
@@ -453,8 +453,8 @@ test("el tope también termina un harness inactivo", async (t) => {
   });
   await runner.esperar(s.id);
   assert.deepEqual(signals, ["SIGTERM"]);
-  assert.equal(registro.leer()[0].interactiva, false);
-  assert.equal(registro.leer()[0].estado, "error");
-  assert.match(registro.leer()[0].error, /tiempo máximo/);
+  assert.equal(registry.leer()[0].interactiva, false);
+  assert.equal(registry.leer()[0].estado, "error");
+  assert.match(registry.leer()[0].error, /tiempo máximo/);
   assert.equal(runner.activos(), 0);
 });

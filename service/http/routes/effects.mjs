@@ -12,12 +12,12 @@ export const effectRoutes = (ctx, req) => {
     runStoreOp,
     workOrders,
   } = ctx;
-  const { callerCap, consulta, request, required, response } = req;
+  const { callerCap, consulta: query, request, required, response } = req;
   return {
     "GET /efectos": async () => {
       const items = effects.list({
-        workOrderId: consulta.get("workOrderId") || undefined,
-        status: consulta.get("status") || undefined,
+        workOrderId: query.get("workOrderId") || undefined,
+        status: query.get("status") || undefined,
         includeSensitive: true,
       });
       return send(response, 200, {
@@ -27,22 +27,22 @@ export const effectRoutes = (ctx, req) => {
       });
     },
     "GET /efectos/detalle": async () => {
-      const operacion = effects.get(required("id"), {
+      const operation = effects.get(required("id"), {
         includeSensitive: true,
       });
-      if (!operacion) {
+      if (!operation) {
         throw new Failure("Operación protegida no encontrada.", 404);
       }
       if (
         auth.isAgent(request) &&
-        !canAgentAccessScopedRecord(request, operacion)
+        !canAgentAccessScopedRecord(request, operation)
       ) {
         throw new Failure(
           "No puedes inspeccionar contenido sensible de efectos de otro miembro.",
           403,
         );
       }
-      return send(response, 200, { operacion });
+      return send(response, 200, { operacion: operation });
     },
     "POST /efectos/preparar": async () => {
       const data = await body(request);
@@ -73,7 +73,7 @@ export const effectRoutes = (ctx, req) => {
         }
       }
       const { billingAuthorized: _ignoredClientBilling, ...safeData } = data;
-      const resultado = await runStoreOp(() =>
+      const result = await runStoreOp(() =>
         effects.prepareEffect({
           ...safeData,
           fromAgent: isAgentCall,
@@ -86,7 +86,7 @@ export const effectRoutes = (ctx, req) => {
             : {}),
         }),
       );
-      return send(response, 201, { ok: true, ...resultado });
+      return send(response, 201, { ok: true, ...result });
     },
     "POST /efectos/ejecutar": async () => {
       const data = await body(request);
@@ -101,23 +101,23 @@ export const effectRoutes = (ctx, req) => {
           );
         }
       }
-      const resultado = await runStoreOp(() =>
+      const result = await runStoreOp(() =>
         effects.executeEffect(data.id, {
           ...data,
           actor: auth.state?.username || actorOf(request),
         }),
       );
-      return send(response, 200, resultado);
+      return send(response, 200, result);
     },
     "POST /efectos/conciliar": async () => {
       const data = await body(request);
-      const resultado = await runStoreOp(() =>
+      const result = await runStoreOp(() =>
         effects.reconcileEffect(data.id, {
           ...data,
           actor: auth.state?.username || actorOf(request),
         }),
       );
-      return send(response, 200, resultado);
+      return send(response, 200, result);
     },
   };
 };

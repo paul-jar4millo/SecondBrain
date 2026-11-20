@@ -13,9 +13,15 @@ import { rm } from "node:fs/promises";
  *   Pick<ReturnType<typeof import("./secrets.mjs").createSessionSecrets>, "cleanupSessionRuntimeSecrets">} deps
  */
 export function createCapacity(config, state, deps) {
-  const { conversations, env, idleControllerMs, maxActivos, registro } = config;
   const {
-    activos,
+    conversations,
+    env,
+    idleControllerMs,
+    maxActivos: maxActive,
+    registro: registry,
+  } = config;
+  const {
+    activos: active,
     idleTimers,
     liveProcesses,
     materializedSkillCleanups,
@@ -24,7 +30,7 @@ export function createCapacity(config, state, deps) {
   } = state;
   const { acpGeminiDirFor, cleanupSessionRuntimeSecrets } = deps;
   /** @param {string} id */
-  function limpiarEviccionOciosa(id) {
+  function cleanIdleEviction(id) {
     const timer = idleTimers.get(id);
     if (timer) {
       clearTimeout(timer);
@@ -32,14 +38,14 @@ export function createCapacity(config, state, deps) {
     }
   }
   /** @param {string} id */
-  function armarEviccionOciosa(id) {
-    limpiarEviccionOciosa(id);
+  function buildIdleEviction(id) {
+    cleanIdleEviction(id);
     if (!Number.isFinite(idleControllerMs) || idleControllerMs <= 0) return;
     const timer = setTimeout(() => {
       idleTimers.delete(id);
-      if (activos.has(id) || !conversations?.hasLiveController?.(id)) return;
+      if (active.has(id) || !conversations?.hasLiveController?.(id)) return;
       void serial(() =>
-        cerrarConexion(id, "Evictada por inactividad", {
+        closeConnection(id, "Evictada por inactividad", {
           estadoConexion: "evictada",
         }),
       ).catch(() => {});
@@ -47,8 +53,8 @@ export function createCapacity(config, state, deps) {
     timer.unref?.();
     idleTimers.set(id, timer);
   }
-  function sesionesOcupandoCupo() {
-    const ids = new Set(activos.keys());
+  function sessionsOccupyingSlot() {
+    const ids = new Set(active.keys());
     if (conversations?.liveSessions) {
       for (const live of conversations.liveSessions()) {
         ids.add(live.id);
@@ -57,13 +63,13 @@ export function createCapacity(config, state, deps) {
     return ids;
   }
   /** @param {string} id */
-  async function cerrarConexion(
+  async function closeConnection(
     id,
     reason = "Cierre explícito",
-    { estadoConexion = "cerrada" } = {},
+    { estadoConexion: connectionState = "cerrada" } = {},
   ) {
-    limpiarEviccionOciosa(id);
-    if (activos.has(id)) {
+    cleanIdleEviction(id);
+    if (active.has(id)) {
       throw new LauncherError(
         "Detén la sesión antes de cerrar su conexión.",
         409,
@@ -72,19 +78,19 @@ export function createCapacity(config, state, deps) {
     const closed = await conversations?.shutdown?.(id, { reason });
     await stopSessionScope(id, env).catch(() => {});
     liveProcesses.delete(id);
-    const exists = registro.leer().some((s) => s.id === id && !s.eliminada);
+    const exists = registry.leer().some((s) => s.id === id && !s.eliminada);
     if (exists) {
-      await registro
+      await registry
         .actualizar(id, {
           conexion: {
-            estado: estadoConexion,
+            estado: connectionState,
             pid: null,
             motivo: reason,
           },
         })
         .catch(() => {});
     }
-    registro.notificar?.();
+    registry.notificar?.();
     return closed || { closed: false, id, pid: null, reason };
   }
   /** @param {string[]} [excludeIds] */
@@ -94,14 +100,14 @@ export function createCapacity(config, state, deps) {
   ) {
     if (!conversations?.evictOldestIdle) return null;
     const evicted = await conversations.evictOldestIdle(reason, [
-      ...activos.keys(),
+      ...active.keys(),
       ...excludeIds,
     ]);
     if (!evicted?.closed) return null;
-    limpiarEviccionOciosa(evicted.id);
+    cleanIdleEviction(evicted.id);
     await stopSessionScope(evicted.id, env).catch(() => {});
     liveProcesses.delete(evicted.id);
-    await registro
+    await registry
       .actualizar(evicted.id, {
         conexion: {
           estado: "evictada",
@@ -113,10 +119,10 @@ export function createCapacity(config, state, deps) {
     return evicted;
   }
   /** @param {string | null} [sessionId] */
-  async function asegurarCupo(sessionId = null) {
-    const ocupadas = sesionesOcupandoCupo();
-    if (sessionId && ocupadas.has(sessionId)) return;
-    while (sesionesOcupandoCupo().size >= maxActivos) {
+  async function ensureSlot(sessionId = null) {
+    const busy = sessionsOccupyingSlot();
+    if (sessionId && busy.has(sessionId)) return;
+    while (sessionsOccupyingSlot().size >= maxActive) {
       const evicted = await evictOneIdle(
         "Evictada por límite de procesos activos",
         sessionId ? [sessionId] : [],
@@ -124,10 +130,10 @@ export function createCapacity(config, state, deps) {
       if (!evicted) throw new Error("Límite de sesiones activas");
     }
   }
-  async function cerrarTodo(reason = "Apagado del lanzador") {
-    for (const id of [...idleTimers.keys()]) limpiarEviccionOciosa(id);
+  async function closeAll(reason = "Apagado del lanzador") {
+    for (const id of [...idleTimers.keys()]) cleanIdleEviction(id);
     const ids = new Set([
-      ...sesionesOcupandoCupo(),
+      ...sessionsOccupyingSlot(),
       ...sessionTokenFiles.keys(),
       ...materializedSkillCleanups.keys(),
     ]);
@@ -144,12 +150,12 @@ export function createCapacity(config, state, deps) {
     );
   }
   return {
-    limpiarEviccionOciosa,
-    armarEviccionOciosa,
-    sesionesOcupandoCupo,
-    cerrarConexion,
+    limpiarEviccionOciosa: cleanIdleEviction,
+    armarEviccionOciosa: buildIdleEviction,
+    sesionesOcupandoCupo: sessionsOccupyingSlot,
+    cerrarConexion: closeConnection,
     evictOneIdle,
-    asegurarCupo,
-    cerrarTodo,
+    asegurarCupo: ensureSlot,
+    cerrarTodo: closeAll,
   };
 }

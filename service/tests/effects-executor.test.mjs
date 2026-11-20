@@ -72,9 +72,9 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
     }),
   });
   assert.equal(prepRes.status, 201);
-  const { operacion, solicitud } = await prepRes.json();
-  assert.equal(operacion.status, "preparada");
-  assert.equal(operacion.approvalId, solicitud.id);
+  const { operacion: operation, solicitud: request } = await prepRes.json();
+  assert.equal(operation.status, "preparada");
+  assert.equal(operation.approvalId, request.id);
   assert.equal(externalCalls, 0);
 
   // 2) User approves via CSRF-authenticated endpoint
@@ -82,7 +82,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
-      id: solicitud.id,
+      id: request.id,
       requestId: randomUUID(),
       approve: true,
     }),
@@ -94,7 +94,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
   const exec1 = await fetch(`${base}/efectos/ejecutar`, {
     method: "POST",
     headers: agentHeaders,
-    body: JSON.stringify({ id: operacion.id, requestId: execReqId }),
+    body: JSON.stringify({ id: operation.id, requestId: execReqId }),
   });
   assert.equal(exec1.status, 200);
   const body1 = await exec1.json();
@@ -106,7 +106,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
   const execRetry = await fetch(`${base}/efectos/ejecutar`, {
     method: "POST",
     headers: agentHeaders,
-    body: JSON.stringify({ id: operacion.id, requestId: execReqId }),
+    body: JSON.stringify({ id: operation.id, requestId: execReqId }),
   });
   assert.equal(execRetry.status, 200);
   const retryBody = await execRetry.json();
@@ -353,7 +353,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   assert.match(billedErr.error, /suscripci/i);
 
   // Bypass 8: Agent with "investigacion" profile in WorkOrder CANNOT spoof "coordinacion" to prepare external effect
-  const { encargo } = await fetch(`${base}/encargos`, {
+  const { encargo: task } = await fetch(`${base}/encargos`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -379,7 +379,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
     method: "POST",
     headers: agentHeaders("lira"),
     body: JSON.stringify({
-      workOrderId: encargo.id,
+      workOrderId: task.id,
       toolProfileId: "coordinacion", // tries to self-escalate despite WorkOrder assigning "investigacion"
       category: "external_message",
       action: "send_email",

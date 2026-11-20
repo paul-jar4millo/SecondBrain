@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
  * @param {string | undefined} argv1
  * @param {string} url
  */
-export function esPrincipal(argv1, url) {
+export function isMain(argv1, url) {
   if (!argv1) return false;
   try {
     return url === pathToFileURL(realpathSync(argv1)).href;
@@ -26,11 +26,11 @@ const AGENTS_BY_ID = {
   lira: "agy",
   marina: "deepseek",
 };
-const NOMBRES = Object.fromEntries(
+const NAMES = Object.fromEntries(
   Object.entries(AGENTS_BY_ID).map(([a, m]) => [m, a]),
 );
-const FINALES = new Set(["terminada", "error", "cancelada", "interrumpida"]);
-const VALORES = new Set([
+const FINAL = new Set(["terminada", "error", "cancelada", "interrumpida"]);
+const VALUES = new Set([
   "agente",
   "proyecto",
   "modelo",
@@ -41,7 +41,7 @@ const VALORES = new Set([
   "titulo",
   "descripcion",
 ]);
-const BOOLEANOS = new Set(["harness", "wait", "json", "borrador", "help"]);
+const BOOLEANS = new Set(["harness", "wait", "json", "borrador", "help"]);
 
 /**
  * @typedef {Record<string, string | boolean> & {
@@ -84,7 +84,7 @@ const BOOLEANOS = new Set(["harness", "wait", "json", "borrador", "help"]);
  *   Record<`/sesiones/${string}/cancelar`, unknown>} CliResponses
  */
 
-export const AYUDA = `Uso: sb-hilo <comando> [opciones]
+export const HELP = `Uso: sb-hilo <comando> [opciones]
 
 Comandos:
   iniciar --agente ambar|menta|lira|marina --proyecto <id> [--modelo m] [--esfuerzo e]
@@ -106,37 +106,36 @@ Entorno: LANZADOR_URL (http://127.0.0.1:8092) y LANZADOR_TOKEN_FILE.
 `;
 
 /** @param {string[]} argv */
-export function analizar(argv) {
+export function analyze(argv) {
   /** @type {CliFlags} */
-  const opciones = {};
-  const posicionales = [];
+  const options = {};
+  const positional = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--") {
-      posicionales.push(...argv.slice(i + 1));
+      positional.push(...argv.slice(i + 1));
       break;
     }
     const m = /^--([a-z]+)(?:=(.*))?$/s.exec(a);
     if (!m) {
-      posicionales.push(a);
+      positional.push(a);
       continue;
     }
-    const [, nombre, inline] = m;
-    if (BOOLEANOS.has(nombre)) opciones[nombre] = true;
-    else if (VALORES.has(nombre)) {
-      const valor = inline ?? argv[++i];
-      if (valor === undefined)
-        throw new Error(`Falta el valor de --${nombre}.`);
-      opciones[nombre] = valor;
-    } else throw new Error(`Opción desconocida: --${nombre}.`);
+    const [, name, inline] = m;
+    if (BOOLEANS.has(name)) options[name] = true;
+    else if (VALUES.has(name)) {
+      const value = inline ?? argv[++i];
+      if (value === undefined) throw new Error(`Falta el valor de --${name}.`);
+      options[name] = value;
+    } else throw new Error(`Opción desconocida: --${name}.`);
   }
-  return { opciones, posicionales };
+  return { opciones: options, posicionales: positional };
 }
 
 const ID = /^[a-f0-9-]{36}$/i;
 
 /** @param {NodeJS.ProcessEnv} env */
-function conectar(env) {
+function connect(env) {
   const url = new URL(env.LANZADOR_URL || "http://127.0.0.1:8092");
   if (
     url.protocol !== "http:" ||
@@ -155,7 +154,7 @@ function conectar(env) {
  * @param {string[]} argv
  * @param {CliExecutionOptions} [options]
  */
-export async function ejecutarCli(
+export async function runCli(
   argv,
   {
     env = process.env,
@@ -163,41 +162,41 @@ export async function ejecutarCli(
     error = (t) => process.stderr.write(t),
     fetchFn = fetch,
     espera = (ms) => new Promise((r) => setTimeout(r, ms)),
-    sondeo = 2000,
+    sondeo: poll = 2000,
   } = {},
 ) {
-  let analisis;
+  let analysis;
   try {
-    analisis = analizar(argv);
+    analysis = analyze(argv);
   } catch (e) {
     error(e.message + "\n");
     return 2;
   }
-  const { opciones, posicionales } = analisis;
-  const [comando, ...resto] = posicionales;
+  const { opciones, posicionales: positional } = analysis;
+  const [comando, ...rest] = positional;
   const json = !!opciones.json;
   if (opciones.help || !comando || comando === "ayuda") {
-    salida(AYUDA);
+    salida(HELP);
     return comando || opciones.help ? 0 : 2;
   }
-  /** @param {string} mensaje */
-  const falla = (mensaje, codigo = 1) => {
-    if (json) salida(JSON.stringify({ error: mensaje }) + "\n");
-    else error(mensaje + "\n");
-    return codigo;
+  /** @param {string} message */
+  const failure = (message, code = 1) => {
+    if (json) salida(JSON.stringify({ error: message }) + "\n");
+    else error(message + "\n");
+    return code;
   };
   /** @param {string} m */
-  const uso = (m) => falla(`${m}\n\n${AYUDA}`.trim(), 2);
+  const usage = (m) => failure(`${m}\n\n${HELP}`.trim(), 2);
 
   /** @type {string} */
   let base;
   let token;
   try {
-    const conexion = conectar(env);
-    base = conexion.base;
-    token = (await readFile(conexion.tokenFile, "utf8")).trim();
+    const connection = connect(env);
+    base = connection.base;
+    token = (await readFile(connection.tokenFile, "utf8")).trim();
   } catch (e) {
-    return falla(
+    return failure(
       e.code === "ENOENT" ? "No se pudo leer LANZADOR_TOKEN_FILE." : e.message,
     );
   }
@@ -207,14 +206,14 @@ export async function ejecutarCli(
   };
   /**
    * @template {keyof CliResponses} Route
-   * @param {Route} ruta
+   * @param {Route} path
    * @param {object} [cuerpo]
    * @returns {Promise<CliResponses[Route]>}
    */
-  async function pedir(ruta, cuerpo) {
-    let respuesta;
+  async function request(path, cuerpo) {
+    let response;
     try {
-      respuesta = await fetchFn(base + ruta, {
+      response = await fetchFn(base + path, {
         method: cuerpo === undefined ? "GET" : "POST",
         headers: cabeceras,
         ...(cuerpo === undefined ? {} : { body: JSON.stringify(cuerpo) }),
@@ -224,60 +223,60 @@ export async function ejecutarCli(
       throw new Error("El lanzador no responde.");
     }
     /** @type {unknown} */
-    const datos = await respuesta.json().catch(() => ({}));
-    if (!respuesta.ok)
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok)
       throw new Error(
-        /** @type {{ error?: string }} */ (datos).error ||
-          `El lanzador rechazó la petición (${respuesta.status}).`,
+        /** @type {{ error?: string }} */ (data).error ||
+          `El lanzador rechazó la petición (${response.status}).`,
       );
-    return /** @type {CliResponses[Route]} */ (datos);
+    return /** @type {CliResponses[Route]} */ (data);
   }
   /** @param {string} id */
   const buscar = async (id) => {
-    const sesion = (await pedir("/estado")).find((s) => s.id === id);
-    if (!sesion) throw new Error("Sesión inexistente.");
-    return sesion;
+    const session = (await request("/estado")).find((s) => s.id === id);
+    if (!session) throw new Error("Sesión inexistente.");
+    return session;
   };
 
   /**
    * Last agent reply: the saved result, the chat transcript or, for harnesses, the stream.
-   * @param {CliSession} sesion
+   * @param {CliSession} session
    */
-  async function respuestaDe(sesion) {
-    if (sesion.resultado) return sesion.resultado;
-    const mensajes = (sesion.mensajes ?? []).filter(
+  async function responseOf(session) {
+    if (session.resultado) return session.resultado;
+    const messages = (session.mensajes ?? []).filter(
       (m) => m.rol === "assistant",
     );
-    if (mensajes.length) return mensajes[mensajes.length - 1].texto;
-    if (!sesion.harness) return "";
+    if (messages.length) return messages[messages.length - 1].texto;
+    if (!session.harness) return "";
     const control = new AbortController();
-    const reloj = setTimeout(() => control.abort(), 5000);
+    const clock = setTimeout(() => control.abort(), 5000);
     try {
-      const r = await fetchFn(`${base}/sesiones/${sesion.id}/stream`, {
+      const r = await fetchFn(`${base}/sesiones/${session.id}/stream`, {
         headers: cabeceras,
         signal: control.signal,
       });
       if (!r.ok || !r.body) return "";
-      let pendiente = "";
-      for await (const trozo of r.body) {
-        pendiente += new TextDecoder().decode(trozo, { stream: true });
-        const eventos = pendiente.split("\n\n");
-        pendiente = eventos.pop() ?? "";
-        for (const evento of eventos) {
+      let pending = "";
+      for await (const chunk of r.body) {
+        pending += new TextDecoder().decode(chunk, { stream: true });
+        const events = pending.split("\n\n");
+        pending = events.pop() ?? "";
+        for (const evento of events) {
           if (!/^event: items/m.test(evento)) continue;
           /** @type {{ items?: { tipo: string, texto?: string }[] }} */
           const datos = JSON.parse(/^data: (.*)$/m.exec(evento)?.[1] ?? "{}");
-          const ultimo = (datos.items ?? [])
+          const last = (datos.items ?? [])
             .filter((i) => i.tipo === "asistente")
             .at(-1);
           control.abort();
-          return ultimo?.texto ?? "";
+          return last?.texto ?? "";
         }
       }
     } catch {
       /* the answer is optional */
     } finally {
-      clearTimeout(reloj);
+      clearTimeout(clock);
       control.abort();
     }
     return "";
@@ -286,24 +285,24 @@ export async function ejecutarCli(
   /**
    * Waits for the session to leave pendiente/trabajando; SSE wakes it, polling backs it up.
    * @param {string} id
-   * @param {number} segundos
+   * @param {number} seconds
    */
-  async function esperar(id, segundos) {
-    const limite = Date.now() + segundos * 1000;
+  async function wait(id, seconds) {
+    const limit = Date.now() + seconds * 1000;
     const control = new AbortController();
     /** @type {(value?: unknown) => void} */
-    let despertar = () => {};
-    let dormir = new Promise((r) => (despertar = r));
+    let wake = () => {};
+    let sleep = new Promise((r) => (wake = r));
     (async () => {
       try {
         const r = await fetchFn(base + "/events", {
           headers: cabeceras,
           signal: control.signal,
         });
-        for await (const trozo of r.body ?? []) {
-          if (/^data:/m.test(new TextDecoder().decode(trozo))) {
-            despertar();
-            dormir = new Promise((x) => (despertar = x));
+        for await (const chunk of r.body ?? []) {
+          if (/^data:/m.test(new TextDecoder().decode(chunk))) {
+            wake();
+            sleep = new Promise((x) => (wake = x));
           }
         }
       } catch {
@@ -313,12 +312,9 @@ export async function ejecutarCli(
     try {
       for (;;) {
         const sesion = await buscar(id);
-        if (FINALES.has(sesion.estado)) return { sesion, vencio: false };
-        if (Date.now() >= limite) return { sesion, vencio: true };
-        await Promise.race([
-          dormir,
-          espera(Math.min(sondeo, limite - Date.now())),
-        ]);
+        if (FINAL.has(sesion.estado)) return { sesion, vencio: false };
+        if (Date.now() >= limit) return { sesion, vencio: true };
+        await Promise.race([sleep, espera(Math.min(poll, limit - Date.now()))]);
       }
     } finally {
       control.abort();
@@ -326,9 +322,9 @@ export async function ejecutarCli(
   }
 
   /** @param {CliSession} s */
-  const resumen = (s) => ({
+  const summary = (s) => ({
     id: s.id,
-    agente: NOMBRES[s.motor] ?? s.motor,
+    agente: NAMES[s.motor] ?? s.motor,
     estado: s.estado,
     proyecto: s.proyecto ?? null,
     modelo: s.modelo ?? null,
@@ -336,101 +332,103 @@ export async function ejecutarCli(
     creada: s.creada ?? null,
   });
   /** @param {CliSession} s */
-  const linea = (s) =>
-    `${s.id}  ${(NOMBRES[s.motor] ?? s.motor).padEnd(7)} ${String(s.estado).padEnd(12)} ${s.proyecto ?? "-"}  ${(s.encargo ?? "").replace(/\s+/g, " ").slice(0, 60)}`;
+  const line = (s) =>
+    `${s.id}  ${(NAMES[s.motor] ?? s.motor).padEnd(7)} ${String(s.estado).padEnd(12)} ${s.proyecto ?? "-"}  ${(s.encargo ?? "").replace(/\s+/g, " ").slice(0, 60)}`;
 
   /**
    * Finishes a command that started a turn: optionally waits and shows the last reply.
-   * @param {CliSession} sesion
+   * @param {CliSession} session
    */
-  async function cerrar(sesion) {
-    let final = sesion;
-    let codigo = 0;
-    let vencio = false;
+  async function close(session) {
+    let final = session;
+    let code = 0;
+    let expired = false;
     if (opciones.wait) {
-      const segundos = Number(opciones.timeout ?? 1800);
-      if (!Number.isFinite(segundos) || segundos <= 0)
-        return falla(
+      const seconds = Number(opciones.timeout ?? 1800);
+      if (!Number.isFinite(seconds) || seconds <= 0)
+        return failure(
           "--timeout debe ser un número de segundos mayor que cero.",
           2,
         );
-      const r = await esperar(sesion.id, segundos);
+      const r = await wait(session.id, seconds);
       final = r.sesion;
-      vencio = r.vencio;
-      codigo = r.vencio ? 124 : final.estado === "terminada" ? 0 : 1;
+      expired = r.vencio;
+      code = r.vencio ? 124 : final.estado === "terminada" ? 0 : 1;
     }
-    const respuesta = opciones.wait ? await respuestaDe(final) : undefined;
+    const response = opciones.wait ? await responseOf(final) : undefined;
     if (json)
       salida(
         JSON.stringify({
-          ...resumen(final),
-          ...(opciones.wait ? { respuesta, vencio } : {}),
+          ...summary(final),
+          ...(opciones.wait ? { respuesta: response, vencio: expired } : {}),
           ...(final.error ? { error: final.error } : {}),
         }) + "\n",
       );
     else {
       salida(
-        `Hilo ${final.id} (${NOMBRES[final.motor] ?? final.motor}): ${final.estado}\n`,
+        `Hilo ${final.id} (${NAMES[final.motor] ?? final.motor}): ${final.estado}\n`,
       );
-      if (vencio)
+      if (expired)
         salida("Se agotó el tiempo de espera; el hilo sigue en marcha.\n");
       if (final.error) salida(`Error: ${final.error}\n`);
-      if (respuesta) salida(`\n${respuesta}\n`);
+      if (response) salida(`\n${response}\n`);
     }
-    return codigo;
+    return code;
   }
 
   try {
     if (comando === "iniciar") {
-      const motor = opciones.agente ? AGENTS_BY_ID[opciones.agente] : undefined;
-      if (!motor) return uso("Elige --agente ambar, menta, lira o marina.");
-      if (!opciones.proyecto) return uso("Falta --proyecto.");
-      const brief = resto.join(" ").trim();
-      if (!brief) return uso("Falta el brief.");
-      const origen = opciones.origen ?? "equipo";
-      if (!["cron", "equipo"].includes(origen))
-        return uso("--origen admite cron o equipo.");
-      const sesion = await pedir("/sesiones", {
-        motor,
-        origen,
+      const engine = opciones.agente
+        ? AGENTS_BY_ID[opciones.agente]
+        : undefined;
+      if (!engine) return usage("Elige --agente ambar, menta, lira o marina.");
+      if (!opciones.proyecto) return usage("Falta --proyecto.");
+      const brief = rest.join(" ").trim();
+      if (!brief) return usage("Falta el brief.");
+      const origin = opciones.origen ?? "equipo";
+      if (!["cron", "equipo"].includes(origin))
+        return usage("--origen admite cron o equipo.");
+      const sesion = await request("/sesiones", {
+        motor: engine,
+        origen: origin,
         proyecto: opciones.proyecto,
         brief,
         ...(opciones.modelo ? { modelo: opciones.modelo } : {}),
         ...(opciones.esfuerzo ? { esfuerzo: opciones.esfuerzo } : {}),
         ...(opciones.harness ? { harness: true } : {}),
       });
-      return await cerrar(sesion);
+      return await close(sesion);
     }
     if (["enviar", "ver", "detener", "diff", "pr"].includes(comando)) {
-      const id = resto[0];
-      if (!ID.test(id ?? "")) return uso("Indica el id del hilo.");
+      const id = rest[0];
+      if (!ID.test(id ?? "")) return usage("Indica el id del hilo.");
       if (comando === "enviar") {
-        const texto = resto.slice(1).join(" ").trim();
-        if (!texto) return uso("Falta el texto.");
-        return await cerrar(
-          await pedir("/sesiones", { continuar: id, brief: texto }),
+        const text = rest.slice(1).join(" ").trim();
+        if (!text) return usage("Falta el texto.");
+        return await close(
+          await request("/sesiones", { continuar: id, brief: text }),
         );
       }
       if (comando === "ver") {
         const sesion = await buscar(id);
-        const respuesta = await respuestaDe(sesion);
+        const respuesta = await responseOf(sesion);
         if (json)
           salida(
             JSON.stringify({
-              ...resumen(sesion),
+              ...summary(sesion),
               respuesta,
               error: sesion.error ?? null,
             }) + "\n",
           );
         else {
-          salida(`${linea(sesion)}\n`);
+          salida(`${line(sesion)}\n`);
           if (sesion.error) salida(`Error: ${sesion.error}\n`);
           if (respuesta) salida(`\n${respuesta}\n`);
         }
         return 0;
       }
       if (comando === "detener") {
-        await pedir(`/sesiones/${id}/cancelar`, {});
+        await request(`/sesiones/${id}/cancelar`, {});
         salida(
           json
             ? JSON.stringify({ id, detenida: true }) + "\n"
@@ -439,7 +437,7 @@ export async function ejecutarCli(
         return 0;
       }
       if (comando === "diff") {
-        const d = await pedir(`/sesiones/${id}/diff`);
+        const d = await request(`/sesiones/${id}/diff`);
         if (json) salida(JSON.stringify(d) + "\n");
         else {
           salida(`${d.archivos.length} archivos cambiados\n`);
@@ -452,7 +450,7 @@ export async function ejecutarCli(
         }
         return 0;
       }
-      const r = await pedir(`/sesiones/${id}/pr`, {
+      const r = await request(`/sesiones/${id}/pr`, {
         ...(opciones.titulo ? { titulo: opciones.titulo } : {}),
         ...(opciones.descripcion ? { descripcion: opciones.descripcion } : {}),
         borrador: !!opciones.borrador,
@@ -465,27 +463,27 @@ export async function ejecutarCli(
       return 0;
     }
     if (comando === "listar") {
-      let lista = (await pedir("/estado")).filter(
+      let list = (await request("/estado")).filter(
         (s) =>
           (!opciones.proyecto || s.proyecto === opciones.proyecto) &&
           (!opciones.estado || s.estado === opciones.estado),
       );
-      lista = lista.sort((a, b) =>
+      list = list.sort((a, b) =>
         String(b.creada).localeCompare(String(a.creada)),
       );
-      if (json) salida(JSON.stringify(lista.map(resumen)) + "\n");
+      if (json) salida(JSON.stringify(list.map(summary)) + "\n");
       else
         salida(
-          lista.length ? lista.map(linea).join("\n") + "\n" : "No hay hilos.\n",
+          list.length ? list.map(line).join("\n") + "\n" : "No hay hilos.\n",
         );
       return 0;
     }
-    return uso(`Comando desconocido: ${comando}.`);
+    return usage(`Comando desconocido: ${comando}.`);
   } catch (e) {
-    return falla(e.message || "No se pudo completar el comando.");
+    return failure(e.message || "No se pudo completar el comando.");
   }
 }
 
 // The LXC runs it through /opt/secondbrain/current, a symlink to the release.
-if (esPrincipal(process.argv[1], import.meta.url))
-  process.exitCode = await ejecutarCli(process.argv.slice(2));
+if (isMain(process.argv[1], import.meta.url))
+  process.exitCode = await runCli(process.argv.slice(2));

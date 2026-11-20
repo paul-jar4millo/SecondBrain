@@ -20,14 +20,14 @@ import path from "node:path";
  */
 /** @typedef {{ agents: Record<string, MundoAgentConfig>, tasks: MundoTask[], briefs: MundoBrief[] }} MundoState */
 
-const FORMATO = 1;
+const FORMAT = 1;
 /** @type {Record<string, string>} */
-const IMAGENES = {
+const IMAGES = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
 };
-const DOCUMENTOS = [".md", ".json", ".csv"];
+const DOCUMENTS = [".md", ".json", ".csv"];
 
 /**
  * Proyecto Mundo Hipotético. Solo lee el paquete que publica el repositorio del
@@ -35,17 +35,17 @@ const DOCUMENTOS = [".md", ".json", ".csv"];
  * Briefs, encargos y notas de agentes son de Second Brain y viven en DATA_DIR.
  * @param {string} dataDirectory
  * @param {new (message: string, status?: number) => Error} Failure
- * @param {string} [paqueteDirectory]
+ * @param {string} [packageDirectory]
  */
-export function createWorld(dataDirectory, Failure, paqueteDirectory) {
-  const directorio = paqueteDirectory || path.join(dataDirectory, "mundo");
-  const estadoFile = path.join(dataDirectory, "mundo-estado.json");
+export function createWorld(dataDirectory, Failure, packageDirectory) {
+  const directory = packageDirectory || path.join(dataDirectory, "mundo");
+  const stateFile = path.join(dataDirectory, "mundo-estado.json");
   /** @type {MundoState | null} */
   let estado = null;
 
-  async function leerEstado() {
+  async function readState() {
     if (estado) return estado;
-    const texto = await readFile(estadoFile, "utf8").catch(
+    const text = await readFile(stateFile, "utf8").catch(
       /** @returns {null} */ (e) => {
         if (e.code === "ENOENT") return null;
         throw e;
@@ -56,81 +56,81 @@ export function createWorld(dataDirectory, Failure, paqueteDirectory) {
       agents: {},
       tasks: [],
       briefs: [],
-      ...(texto ? /** @type {Partial<MundoState>} */ (JSON.parse(texto)) : {}),
+      ...(text ? /** @type {Partial<MundoState>} */ (JSON.parse(text)) : {}),
     };
     return estado;
   }
   let writes = Promise.resolve();
-  function guardarEstado() {
+  function saveState() {
     const content = JSON.stringify(estado, null, 2);
     const writing = writes.then(async () => {
       await mkdir(dataDirectory, { recursive: true });
-      await writeFile(estadoFile + ".tmp", content);
-      await rename(estadoFile + ".tmp", estadoFile);
+      await writeFile(stateFile + ".tmp", content);
+      await rename(stateFile + ".tmp", stateFile);
     });
     writes = writing.catch(() => {});
     return writing;
   }
   async function paquete() {
-    const texto = await readFile(
-      path.join(directorio, "paquete.json"),
+    const text = await readFile(
+      path.join(directory, "paquete.json"),
       "utf8",
     ).catch(/** @returns {null} */ () => null);
-    if (!texto)
+    if (!text)
       throw new Failure(
         "Aún no hay datos del canal. Publícalos con npm run publicar:panel en Mundo Hipotético.",
         503,
       );
-    const datos = /** @type {MundoPackage} */ (JSON.parse(texto));
-    if (datos.formato !== FORMATO)
+    const data = /** @type {MundoPackage} */ (JSON.parse(text));
+    if (data.formato !== FORMAT)
       throw new Failure(
         "El paquete del canal tiene otro formato. Actualiza Second Brain o vuelve a publicarlo.",
         503,
       );
-    return datos;
+    return data;
   }
-  /** @param {unknown} ruta @param {string[]} extensiones */
-  async function archivo(ruta, extensiones) {
+  /** @param {unknown} ruta @param {string[]} extensions */
+  async function file(ruta, extensions) {
     if (typeof ruta !== "string" || !ruta || ruta.includes("\0"))
       throw new Failure("Ruta inválida.", 400);
-    const noDisponible = () => {
+    const unavailable = () => {
       throw new Failure("El archivo no está en el paquete.", 404);
     };
-    const base = await realpath(path.join(directorio, "archivos")).catch(
-      noDisponible,
+    const base = await realpath(path.join(directory, "archivos")).catch(
+      unavailable,
     );
-    const real = await realpath(path.resolve(base, ruta)).catch(noDisponible);
+    const real = await realpath(path.resolve(base, ruta)).catch(unavailable);
     if (!real.startsWith(base + path.sep))
       throw new Failure("Archivo fuera del paquete.", 403);
-    if (!extensiones.includes(path.extname(real).toLowerCase()))
+    if (!extensions.includes(path.extname(real).toLowerCase()))
       throw new Failure("Formato no permitido.", 403);
     return real;
   }
-  /** @param {unknown} valor */
-  const texto = (valor, maximo = 2000) => {
-    if (typeof valor !== "string" || !valor.trim() || valor.length > maximo)
+  /** @param {unknown} value */
+  const texto = (value, max = 2000) => {
+    if (typeof value !== "string" || !value.trim() || value.length > max)
       throw new Failure(
         "Completa el texto y respeta el límite de caracteres.",
         400,
       );
-    return valor.trim();
+    return value.trim();
   };
 
   return {
     async leer() {
-      const datos = await paquete();
-      const state = await leerEstado();
+      const data = await paquete();
+      const state = await readState();
       return {
-        ...datos,
-        scannedAt: datos.generado,
+        ...data,
+        scannedAt: data.generado,
         state,
-        videos: datos.videos.map((v) => ({
+        videos: data.videos.map((v) => ({
           ...v,
           poster: v.poster
             ? "/api/v1/mundo/media?path=" + encodeURIComponent(v.poster)
             : null,
         })),
-        agents: datos.agents.map((a) => ({
+        agents: data.agents.map((a) => ({
           ...a,
           enabled: state.agents[a.id]?.enabled !== false,
           notes: state.agents[a.id]?.notes || "",
@@ -139,7 +139,7 @@ export function createWorld(dataDirectory, Failure, paqueteDirectory) {
     },
     /** @param {string | null} ruta */
     async documento(ruta) {
-      const real = await archivo(ruta, DOCUMENTOS);
+      const real = await file(ruta, DOCUMENTS);
       return {
         path: ruta,
         text: (await readFile(real, "utf8")).slice(0, 150000),
@@ -147,20 +147,20 @@ export function createWorld(dataDirectory, Failure, paqueteDirectory) {
     },
     /** @param {string | null} ruta @param {ServerResponse} response */
     async imagen(ruta, response) {
-      const real = await archivo(ruta, Object.keys(IMAGENES));
+      const real = await file(ruta, Object.keys(IMAGES));
       response.writeHead(200, {
-        "Content-Type": IMAGENES[path.extname(real).toLowerCase()],
+        "Content-Type": IMAGES[path.extname(real).toLowerCase()],
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, max-age=3600",
       });
-      const flujo = createReadStream(real);
-      flujo.on("error", () => response.destroy());
-      response.on("close", () => flujo.destroy());
-      flujo.pipe(response);
+      const flow = createReadStream(real);
+      flow.on("error", () => response.destroy());
+      response.on("close", () => flow.destroy());
+      flow.pipe(response);
     },
     /** @param {{ title?: unknown, brief?: unknown, slug?: unknown }} b */
     async crearBrief(b) {
-      const state = await leerEstado();
+      const state = await readState();
       const title = texto(b.title, 180),
         brief = texto(b.brief, 8000),
         slug = texto(b.slug, 80);
@@ -170,7 +170,7 @@ export function createWorld(dataDirectory, Failure, paqueteDirectory) {
           400,
         );
       /** @type {MundoBrief} */
-      const entrada = {
+      const entry = {
         id: randomUUID(),
         title,
         brief,
@@ -178,13 +178,13 @@ export function createWorld(dataDirectory, Failure, paqueteDirectory) {
         createdAt: new Date().toISOString(),
         status: "draft",
       };
-      state.briefs.unshift(entrada);
-      await guardarEstado();
-      return entrada;
+      state.briefs.unshift(entry);
+      await saveState();
+      return entry;
     },
     /** @param {{ id: string, enabled?: unknown, notes?: unknown }} b */
     async configurarAgente(b) {
-      const state = await leerEstado();
+      const state = await readState();
       if (!(await paquete()).agents.some((a) => a.id === b.id))
         throw new Failure("Agente no encontrado.", 404);
       if (
@@ -194,21 +194,21 @@ export function createWorld(dataDirectory, Failure, paqueteDirectory) {
       )
         throw new Failure("Configuración inválida.", 400);
       state.agents[b.id] = { enabled: b.enabled, notes: b.notes };
-      await guardarEstado();
+      await saveState();
       return { ok: true };
     },
     /** @param {{ agentId: string, videoId?: string | null, instruction?: unknown }} b */
     async crearEncargo(b) {
-      const state = await leerEstado();
-      const datos = await paquete();
-      if (!datos.agents.some((a) => a.id === b.agentId))
+      const state = await readState();
+      const data = await paquete();
+      if (!data.agents.some((a) => a.id === b.agentId))
         throw new Failure("Elige un agente válido.", 400);
       if (state.agents[b.agentId]?.enabled === false)
         throw new Failure("Activa el agente antes de asignarle trabajo.", 409);
-      if (b.videoId && !datos.videos.some((v) => v.id === b.videoId))
+      if (b.videoId && !data.videos.some((v) => v.id === b.videoId))
         throw new Failure("No se encontró el video. Actualiza el panel.", 404);
       /** @type {MundoTask} */
-      const encargo = {
+      const task = {
         id: randomUUID(),
         agentId: b.agentId,
         videoId: b.videoId || null,
@@ -216,21 +216,21 @@ export function createWorld(dataDirectory, Failure, paqueteDirectory) {
         status: "queued",
         createdAt: new Date().toISOString(),
       };
-      state.tasks.unshift(encargo);
-      await guardarEstado();
-      return encargo;
+      state.tasks.unshift(task);
+      await saveState();
+      return task;
     },
     /** @param {{ id: string, status: MundoTaskStatus }} b */
     async cambiarEncargo(b) {
-      const state = await leerEstado();
-      const encargo = state.tasks.find((t) => t.id === b.id);
-      if (!encargo || !["completed", "cancelled", "queued"].includes(b.status))
+      const state = await readState();
+      const task = state.tasks.find((t) => t.id === b.id);
+      if (!task || !["completed", "cancelled", "queued"].includes(b.status))
         throw new Failure("No se puede cambiar este encargo.", 400);
-      encargo.status = b.status;
-      if (b.status === "completed") encargo.completionSource = "manual";
-      else delete encargo.completionSource;
-      await guardarEstado();
-      return encargo;
+      task.status = b.status;
+      if (b.status === "completed") task.completionSource = "manual";
+      else delete task.completionSource;
+      await saveState();
+      return task;
     },
   };
 }

@@ -149,10 +149,10 @@ test("regresión: Claude reporta callback_returned sin fingir rpc_write_flushed;
   let releaseTurn = null;
   let capturedInterruptCount = 0;
 
-  const registro = await openSessionRegistry(path.join(dir, "ses.json"));
+  const registry = await openSessionRegistry(path.join(dir, "ses.json"));
   const conv = createProviderConversations({
     directory: path.join(dir, "conv"),
-    registro,
+    registro: registry,
     adapters: {
       claude: {
         createController: () =>
@@ -223,7 +223,7 @@ test("regresión: Claude reporta callback_returned sin fingir rpc_write_flushed;
   });
 
   // Subcase A: callback returns -> status is "entregando" / callback_returned (NOT rpc_write_flushed or delivered=true), then promotes on progress
-  const s1 = await registro.crear({
+  const s1 = await registry.crear({
     motor: "claude",
     origen: "sala",
     proyecto: "demo",
@@ -264,7 +264,7 @@ test("regresión: Claude reporta callback_returned sin fingir rpc_write_flushed;
 
   // Subcase B: SDK receives callback then fails before emitting progress -> reconciles to entrega_incierta keeping answer
   mode = "fail_before_progress";
-  const s2 = await registro.crear({
+  const s2 = await registry.crear({
     motor: "claude",
     origen: "sala",
     proyecto: "demo",

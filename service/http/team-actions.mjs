@@ -17,16 +17,16 @@ export const TEAM_ACTION =
 /**
  * @param {AppContext} ctx
  * @param {Pick<RouteRequest, "request" | "response" | "callerCap">} req
- * @param {string} accion
+ * @param {string} action
  */
-export async function handleTeamAction(ctx, req, accion) {
+export async function handleTeamAction(ctx, req, action) {
   const {
     auth,
     bridges,
-    lanzador,
+    lanzador: launcher,
     resolveServerProfile,
     runStoreOp,
-    sesionesLanzador,
+    sesionesLanzador: launcherSessions,
     workOrders,
   } = ctx;
   const { callerCap, request, response } = req;
@@ -38,14 +38,14 @@ export async function handleTeamAction(ctx, req, accion) {
     !/^(ambar|menta|lira|marina)$/.test(actor || "")
   )
     throw new Failure("Se requiere una sesión de agente activa.", 403);
-  const datos = await body(request);
-  let forwarded = datos;
-  let associatedWoId = datos.workOrderId || null;
-  if (["encargar", "entregar", "integrar"].includes(accion)) {
+  const data = await body(request);
+  let forwarded = data;
+  let associatedWoId = data.workOrderId || null;
+  if (["encargar", "entregar", "integrar"].includes(action)) {
     if (callerCap?.sessionId && sesion !== callerCap.sessionId) {
       throw new Failure("La sesión padre no coincide con tu credencial.", 403);
     }
-    const parentSession = (await sesionesLanzador()).find(
+    const parentSession = (await launcherSessions()).find(
       (s) => s.id === sesion,
     );
     const sessionWoId =
@@ -56,7 +56,7 @@ export async function handleTeamAction(ctx, req, accion) {
     if (!associatedWoId && sessionWoId) {
       associatedWoId = sessionWoId;
     }
-    if (accion === "encargar" && associatedWoId) {
+    if (action === "encargar" && associatedWoId) {
       const wo = workOrders.get(associatedWoId);
       if (!wo) throw new Failure("Encargo no encontrado.", 404);
       if (!wo.manifest) {
@@ -65,22 +65,22 @@ export async function handleTeamAction(ctx, req, accion) {
           409,
         );
       }
-      if (datos.manifestSha256 && datos.manifestSha256 !== wo.manifest.sha256) {
+      if (data.manifestSha256 && data.manifestSha256 !== wo.manifest.sha256) {
         throw new Failure(
           "Manifiesto del encargo desactualizado; recarga el equipo.",
           409,
         );
       }
       forwarded = {
-        ...datos,
+        ...data,
         workOrderId: wo.id,
         manifest: wo.manifest,
-        manifestSha256: datos.manifestSha256 || wo.manifest.sha256,
+        manifestSha256: data.manifestSha256 || wo.manifest.sha256,
       };
     }
   }
   let mintedChild = null;
-  if (accion === "encargar" && callerCap) {
+  if (action === "encargar" && callerCap) {
     /** @type {ToolProfile} */
     let parentProfile = callerCap;
     const capWo = callerCap.workOrderId
@@ -96,23 +96,23 @@ export async function handleTeamAction(ctx, req, accion) {
     /** @type {WorkOrderManifest | undefined} */
     const manifest = forwarded.manifest;
     const manifestCard =
-      datos.memberId && manifest?.team
-        ? manifest.team.find((c) => c.id === datos.memberId)
+      data.memberId && manifest?.team
+        ? manifest.team.find((c) => c.id === data.memberId)
         : null;
     const childProfile = await resolveServerProfile(
-      datos.toolProfileId ||
+      data.toolProfileId ||
         manifestCard?.toolProfileId ||
         callerCap.profileId ||
         "investigacion",
       parentProfile,
     );
     const preassignedSessionId = randomUUID();
-    const childActor = ENGINE_ACTOR[datos.motor] || null;
+    const childActor = ENGINE_ACTOR[data.motor] || null;
     mintedChild = await auth.issueCapability({
       sessionId: preassignedSessionId,
       parentSessionId: callerCap.sessionId || sesion,
       workOrderId: associatedWoId ?? callerCap.workOrderId ?? null,
-      memberId: datos.memberId || childActor || preassignedSessionId,
+      memberId: data.memberId || childActor || preassignedSessionId,
       actor: childActor,
       profileId: childProfile.id,
       allowedMcps: childProfile.allowedMcps,
@@ -132,24 +132,24 @@ export async function handleTeamAction(ctx, req, accion) {
       billingAuthorized: false,
     };
   }
-  let resultado;
+  let result;
   try {
     // Both headers were validated against their patterns above.
-    resultado = await lanzador.equipo(
-      accion,
+    result = await launcher.equipo(
+      action,
       /** @type {string} */ (sesion),
       /** @type {string} */ (actor),
       forwarded,
     );
-    if (mintedChild && resultado?.id) {
-      if (resultado.repetido) {
+    if (mintedChild && result?.id) {
+      if (result.repetido) {
         // Idempotent replay: the existing child keeps its own
         // credential; the one minted for this call is not used.
         await auth.revokeCapability({
           tokenId: mintedChild.record.id,
         });
-      } else if (resultado.id !== forwarded.id) {
-        await auth.bindCapabilitySession(mintedChild.record.id, resultado.id, {
+      } else if (result.id !== forwarded.id) {
+        await auth.bindCapabilitySession(mintedChild.record.id, result.id, {
           rebind: true,
         });
       }
@@ -159,80 +159,78 @@ export async function handleTeamAction(ctx, req, accion) {
       await auth.revokeCapability({ tokenId: mintedChild.record.id });
     throw err;
   }
-  if (accion === "encargar" && associatedWoId && resultado?.id) {
-    if (resultado.structured) {
+  if (action === "encargar" && associatedWoId && result?.id) {
+    if (result.structured) {
       bridges.bridge(
-        resultado.id,
+        result.id,
         associatedWoId,
-        resultado.memberId || datos.memberId || resultado.motor,
+        result.memberId || data.memberId || result.motor,
       );
     }
-    if (!resultado.repetido) {
+    if (!result.repetido) {
       await runStoreOp(() =>
         workOrders.appendEvent(associatedWoId, {
           sourceId: actor,
-          sessionId: resultado.id,
-          idempotencyKey: `wo-child:${resultado.id}`,
+          sessionId: result.id,
+          idempotencyKey: `wo-child:${result.id}`,
           type: "member.status",
           provenance: "observed",
           payload: {
-            memberId: resultado.memberId || null,
-            motor: resultado.motor,
-            modelo: resultado.modelo || null,
-            esfuerzo: resultado.esfuerzo || null,
-            role: resultado.role || null,
-            status: resultado.estado,
-            workspaceKind: resultado.workspaceKind || null,
-            enColaRecursos: Boolean(resultado.enColaRecursos),
+            memberId: result.memberId || null,
+            motor: result.motor,
+            modelo: result.modelo || null,
+            esfuerzo: result.esfuerzo || null,
+            role: result.role || null,
+            status: result.estado,
+            workspaceKind: result.workspaceKind || null,
+            enColaRecursos: Boolean(result.enColaRecursos),
           },
         }),
       ).catch(() => {});
     }
-  } else if (accion === "entregar" && associatedWoId && resultado?.id) {
+  } else if (action === "entregar" && associatedWoId && result?.id) {
     await runStoreOp(() =>
       workOrders.appendEvent(associatedWoId, {
-        sourceId: resultado.memberId || actor,
+        sourceId: result.memberId || actor,
         sessionId: sesion,
-        idempotencyKey: `wo-artifact:${resultado.id}`,
+        idempotencyKey: `wo-artifact:${result.id}`,
         type: "artifact.published",
         provenance: "observed",
         payload: {
-          artifactId: resultado.id,
-          authorId: resultado.memberId || actor,
-          fileRef: resultado.ruta || `entregable/${resultado.id}`,
-          fileName: resultado.ruta
-            ? path.basename(resultado.ruta)
-            : resultado.titulo,
-          hash: resultado.sha256 || "",
-          version: resultado.version || 1,
+          artifactId: result.id,
+          authorId: result.memberId || actor,
+          fileRef: result.ruta || `entregable/${result.id}`,
+          fileName: result.ruta ? path.basename(result.ruta) : result.titulo,
+          hash: result.sha256 || "",
+          version: result.version || 1,
         },
       }),
     ).catch(() => {});
-  } else if (accion === "integrar" && associatedWoId && resultado) {
+  } else if (action === "integrar" && associatedWoId && result) {
     await runStoreOp(() =>
       workOrders.appendEvent(associatedWoId, {
         sourceId: actor,
         sessionId: sesion,
-        idempotencyKey: resultado.integracion?.id
-          ? `wo-integ:${resultado.integracion.id}`
+        idempotencyKey: result.integracion?.id
+          ? `wo-integ:${result.integracion.id}`
           : undefined,
         type: "member.status",
         provenance: "observed",
         payload: {
           reason:
-            resultado.estado === "conflicto"
+            result.estado === "conflicto"
               ? "integration_conflict"
               : "integration_completed",
-          estado: resultado.estado,
-          conflictos: resultado.conflictos || [],
+          estado: result.estado,
+          conflictos: result.conflictos || [],
           // Local paths stay in the lanzador; events carry hashes.
-          integrados: (resultado.integrados || []).map(
+          integrados: (result.integrados || []).map(
             /** @param {Record<string, unknown>} entry */
-            ({ destino: _destino, ...item }) => item,
+            ({ destino: _target, ...item }) => item,
           ),
         },
       }),
     ).catch(() => {});
   }
-  return send(response, 200, resultado);
+  return send(response, 200, result);
 }

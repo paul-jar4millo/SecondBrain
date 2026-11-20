@@ -50,15 +50,15 @@ export function createSessionSecrets(config, state, deps) {
       await rm(file, { force: true }).catch(() => {});
     }
   }
-  /** @param {LauncherSession} sesion */
-  function resolveSessionEffectiveProfile(sesion) {
-    const baseId = sesion.toolProfileId || "ejecucion";
+  /** @param {LauncherSession} session */
+  function resolveSessionEffectiveProfile(session) {
+    const baseId = session.toolProfileId || "ejecucion";
     const baseCatalogProfile =
       toolCatalog?.getProfile(baseId) ||
       TOOL_PROFILES_BASE[baseId] ||
       TOOL_PROFILES_BASE.ejecucion;
     const override =
-      sessionProfiles.get(sesion.id) || sesion.effectiveProfile || null;
+      sessionProfiles.get(session.id) || session.effectiveProfile || null;
     return override
       ? narrowChildProfile(baseCatalogProfile, override)
       : structuredClone(baseCatalogProfile);

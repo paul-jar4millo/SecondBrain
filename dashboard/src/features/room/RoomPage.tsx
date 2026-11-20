@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUI } from "../../components/ui";
 import { api, isDemo } from "../../core/store";
-import { montar } from "./room";
+import { mount } from "./room";
 import { teamApi, teamController } from "../team/team-store";
 import { today } from "../../core/model";
 import { useFinance } from "../finance/useFinance";
@@ -10,7 +10,7 @@ import { roomSummary } from "./room-summary";
 import "./room.css";
 import "./agents-panel.css";
 
-const apiSala = (path: string, body?: unknown) =>
+const apiRoom = (path: string, body?: unknown) =>
   api(path, body ? { method: "POST", body: JSON.stringify(body) } : undefined);
 
 export default function RoomPage() {
@@ -58,11 +58,11 @@ export default function RoomPage() {
   }, [summary]);
   useEffect(
     () =>
-      montar(root.current!, {
+      mount(root.current!, {
         api: isDemo
           ? async (path, body) =>
               (await import("./room-demo")).apiDemo(path, body)
-          : apiSala,
+          : apiRoom,
         toast: (message) => latest.current.notify(message),
         team: teamController,
         openAgent: (target) => latest.current.openAgent(target),

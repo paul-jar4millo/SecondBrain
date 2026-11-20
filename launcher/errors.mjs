@@ -3,9 +3,9 @@
  * show as is. The HTTP layer answers with `status`; anything else stays generic.
  */
 export class LauncherError extends Error {
-  /** @param {string} mensaje */
-  constructor(mensaje, status = 409) {
-    super(mensaje);
+  /** @param {string} message */
+  constructor(message, status = 409) {
+    super(message);
     this.name = "LauncherError";
     this.status = status;
   }

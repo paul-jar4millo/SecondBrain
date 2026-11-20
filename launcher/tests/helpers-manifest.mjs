@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
-export const sha = (texto) =>
-  createHash("sha256").update(texto, "utf8").digest("hex");
+export const sha = (text) =>
+  createHash("sha256").update(text, "utf8").digest("hex");
 
 /** Synthetic manifest with the same shape the service freezes at start. */
 export function manifiesto(team) {

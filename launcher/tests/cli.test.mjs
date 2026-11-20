@@ -10,13 +10,13 @@ import { fileURLToPath } from "node:url";
 import { createLauncherServer } from "../index.mjs";
 import { openSessionRegistry } from "../sessions.mjs";
 import { createExecutor } from "../executor.mjs";
-import { ejecutarCli, analizar } from "../cli.mjs";
+import { runCli, analyze } from "../cli.mjs";
 
-const huella = (token) => createHash("sha256").update(token).digest("hex");
+const fingerprint = (token) => createHash("sha256").update(token).digest("hex");
 const CLI = fileURLToPath(new URL("../cli.mjs", import.meta.url));
 
 /** An in-memory launcher: real registry and executor, a fake CLI as the engine. */
-async function lanzadorDePrueba(t) {
+async function testLauncher(t) {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-cli-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const falso = path.join(dir, "falso.mjs");
@@ -31,43 +31,43 @@ else setTimeout(() => { console.log(JSON.stringify({ type: "result", session_id:
   const ejecutor = createExecutor({
     registro,
     proyectos: { demo: dir },
-    comando: (_motor, brief) => ({
+    comando: (_engine, brief) => ({
       bin: process.execPath,
       args: [falso, brief],
     }),
   });
-  const servidor = createLauncherServer({
+  const server = createLauncherServer({
     registro,
     ejecutor,
     proyectos: { demo: dir },
-    controlHash: huella("control-secreto"),
-    hookHash: huella("hook"),
+    controlHash: fingerprint("control-secreto"),
+    hookHash: fingerprint("hook"),
   });
-  servidor.listen(0, "127.0.0.1");
-  await once(servidor, "listening");
-  t.after(() => servidor.close());
-  const archivoToken = path.join(dir, "token");
-  await writeFile(archivoToken, "control-secreto\n");
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => server.close());
+  const fileToken = path.join(dir, "token");
+  await writeFile(fileToken, "control-secreto\n");
   const env = {
-    LANZADOR_URL: `http://127.0.0.1:${servidor.address().port}`,
-    LANZADOR_TOKEN_FILE: archivoToken,
+    LANZADOR_URL: `http://127.0.0.1:${server.address().port}`,
+    LANZADOR_TOKEN_FILE: fileToken,
   };
-  const correr = async (...argv) => {
-    let salida = "";
+  const run = async (...argv) => {
+    let output = "";
     let error = "";
-    const codigo = await ejecutarCli(argv, {
+    const code = await runCli(argv, {
       env,
-      salida: (x) => (salida += x),
+      salida: (x) => (output += x),
       error: (x) => (error += x),
       sondeo: 50,
     });
-    return { codigo, salida, error };
+    return { codigo: code, salida: output, error };
   };
-  return { correr, registro, ejecutor, env, dir };
+  return { correr: run, registro, ejecutor, env, dir };
 }
 
 test("analiza opciones con valor, booleanas, = y -- sin tragarse el brief", () => {
-  const r = analizar([
+  const r = analyze([
     "--agente=lira",
     "--wait",
     "iniciar",
@@ -77,13 +77,13 @@ test("analiza opciones con valor, booleanas, = y -- sin tragarse el brief", () =
   ]);
   assert.deepEqual(r.opciones, { agente: "lira", wait: true });
   assert.deepEqual(r.posicionales, ["iniciar", "--no-es-opcion", "texto"]);
-  assert.throws(() => analizar(["--inventada"]), /desconocida/);
-  assert.throws(() => analizar(["--agente"]), /Falta el valor/);
+  assert.throws(() => analyze(["--inventada"]), /desconocida/);
+  assert.throws(() => analyze(["--agente"]), /Falta el valor/);
 });
 
 test("iniciar --wait --json espera al turno, devuelve una línea JSON y sale con 0", async (t) => {
-  const { correr } = await lanzadorDePrueba(t);
-  const r = await correr(
+  const { correr: run } = await testLauncher(t);
+  const r = await run(
     "iniciar",
     "--agente",
     "ambar",
@@ -95,16 +95,16 @@ test("iniciar --wait --json espera al turno, devuelve una línea JSON y sale con
   );
   assert.equal(r.codigo, 0, r.error + r.salida);
   assert.equal(r.salida.trim().split("\n").length, 1);
-  const datos = JSON.parse(r.salida);
-  assert.equal(datos.estado, "terminada");
-  assert.equal(datos.agente, "ambar");
-  assert.equal(datos.respuesta, "Respuesta para: Haz algo");
+  const data = JSON.parse(r.salida);
+  assert.equal(data.estado, "terminada");
+  assert.equal(data.agente, "ambar");
+  assert.equal(data.respuesta, "Respuesta para: Haz algo");
   assert.ok(!r.salida.includes("control-secreto"));
 });
 
 test("sin --json imprime texto en español con la última respuesta; ver, listar y enviar", async (t) => {
-  const { correr } = await lanzadorDePrueba(t);
-  const ini = await correr(
+  const { correr: run } = await testLauncher(t);
+  const ini = await run(
     "iniciar",
     "--agente",
     "ambar",
@@ -118,11 +118,11 @@ test("sin --json imprime texto en español con la última respuesta; ver, listar
   assert.match(ini.salida, /Respuesta para: Primero/);
   const id = /Hilo ([a-f0-9-]{36})/.exec(ini.salida)[1];
 
-  const ver = await correr("ver", id);
+  const ver = await run("ver", id);
   assert.equal(ver.codigo, 0);
   assert.match(ver.salida, /Respuesta para: Primero/);
 
-  const listado = await correr(
+  const listado = await run(
     "listar",
     "--proyecto",
     "demo",
@@ -131,19 +131,23 @@ test("sin --json imprime texto en español con la última respuesta; ver, listar
   );
   assert.match(listado.salida, new RegExp(id));
   assert.equal(
-    (await correr("listar", "--proyecto", "otro")).salida,
+    (await run("listar", "--proyecto", "otro")).salida,
     "No hay hilos.\n",
   );
-  assert.equal(JSON.parse((await correr("listar", "--json")).salida)[0].id, id);
+  assert.equal(JSON.parse((await run("listar", "--json")).salida)[0].id, id);
 
-  const sig = await correr("enviar", id, "Segundo", "mensaje", "--wait");
+  const sig = await run("enviar", id, "Segundo", "mensaje", "--wait");
   assert.equal(sig.codigo, 0, sig.error + sig.salida);
   assert.match(sig.salida, /Respuesta para: Segundo mensaje/);
 });
 
 test("códigos de salida: 1 si el turno falla, 124 al vencer --timeout, 2 por uso incorrecto", async (t) => {
-  const { correr, ejecutor, registro } = await lanzadorDePrueba(t);
-  const mala = await correr(
+  const {
+    correr: run,
+    ejecutor: executor,
+    registro: registry,
+  } = await testLauncher(t);
+  const mala = await run(
     "iniciar",
     "--agente",
     "menta",
@@ -156,7 +160,7 @@ test("códigos de salida: 1 si el turno falla, 124 al vencer --timeout, 2 por us
   assert.equal(mala.codigo, 1);
   assert.equal(JSON.parse(mala.salida).estado, "error");
 
-  const lenta = await correr(
+  const lenta = await run(
     "iniciar",
     "--agente",
     "ambar",
@@ -169,31 +173,31 @@ test("códigos de salida: 1 si el turno falla, 124 al vencer --timeout, 2 por us
     "DORMIR",
   );
   assert.equal(lenta.codigo, 124);
-  const datos = JSON.parse(lenta.salida);
-  assert.equal(datos.vencio, true);
-  const det = await correr("detener", datos.id);
+  const data = JSON.parse(lenta.salida);
+  assert.equal(data.vencio, true);
+  const det = await run("detener", data.id);
   assert.equal(det.codigo, 0);
-  await ejecutor.esperar(datos.id);
+  await executor.esperar(data.id);
   assert.equal(
-    registro.leer().find((s) => s.id === datos.id).estado,
+    registry.leer().find((s) => s.id === data.id).estado,
     "cancelada",
   );
 
-  assert.equal((await correr("iniciar", "--proyecto", "demo", "x")).codigo, 2);
+  assert.equal((await run("iniciar", "--proyecto", "demo", "x")).codigo, 2);
   assert.equal(
-    (await correr("iniciar", "--agente", "ambar", "--proyecto", "demo")).codigo,
+    (await run("iniciar", "--agente", "ambar", "--proyecto", "demo")).codigo,
     2,
   );
-  assert.equal((await correr("ver", "no-es-id")).codigo, 2);
-  assert.equal((await correr("inventado")).codigo, 2);
-  const noExiste = await correr("ver", "00000000-0000-4000-8000-000000000000");
-  assert.equal(noExiste.codigo, 1);
-  assert.match(noExiste.error, /inexistente/);
+  assert.equal((await run("ver", "no-es-id")).codigo, 2);
+  assert.equal((await run("inventado")).codigo, 2);
+  const missing = await run("ver", "00000000-0000-4000-8000-000000000000");
+  assert.equal(missing.codigo, 1);
+  assert.match(missing.error, /inexistente/);
 });
 
 test("el origen cron se acepta, un proyecto desconocido falla sin filtrar el token y --help funciona", async (t) => {
-  const { correr, registro } = await lanzadorDePrueba(t);
-  const cron = await correr(
+  const { correr: run, registro: registry } = await testLauncher(t);
+  const cron = await run(
     "iniciar",
     "--agente",
     "lira",
@@ -206,9 +210,9 @@ test("el origen cron se acepta, un proyecto desconocido falla sin filtrar el tok
     "Tarea",
   );
   assert.equal(cron.codigo, 0);
-  assert.equal(registro.leer().at(-1).origen, "cron");
-  assert.equal(registro.leer().at(-1).motor, "agy");
-  const raro = await correr(
+  assert.equal(registry.leer().at(-1).origen, "cron");
+  assert.equal(registry.leer().at(-1).motor, "agy");
+  const raro = await run(
     "iniciar",
     "--agente",
     "ambar",
@@ -218,21 +222,21 @@ test("el origen cron se acepta, un proyecto desconocido falla sin filtrar el tok
   );
   assert.equal(raro.codigo, 1);
   assert.ok(!raro.error.includes("control-secreto"));
-  const ayuda = await correr("--help");
+  const ayuda = await run("--help");
   assert.equal(ayuda.codigo, 0);
   assert.match(ayuda.salida, /sb-hilo/);
 });
 
 test("rechaza un lanzador fuera de loopback y falla con claridad si no hay token", async () => {
   let error = "";
-  const cod = await ejecutarCli(["listar"], {
+  const cod = await runCli(["listar"], {
     env: { LANZADOR_URL: "http://10.0.0.5:8092", LANZADOR_TOKEN_FILE: "/x" },
     error: (x) => (error += x),
   });
   assert.equal(cod, 1);
   assert.match(error, /loopback/);
   error = "";
-  const sin = await ejecutarCli(["listar"], {
+  const sin = await runCli(["listar"], {
     env: {},
     error: (x) => (error += x),
   });
@@ -241,7 +245,7 @@ test("rechaza un lanzador fuera de loopback y falla con claridad si no hay token
 });
 
 test("el binario se ejecuta de verdad: --help sale con 0 y sin argumentos con 2", async () => {
-  const correr = (args) =>
+  const run = (args) =>
     new Promise((resolve) =>
       execFile(
         process.execPath,
@@ -250,8 +254,8 @@ test("el binario se ejecuta de verdad: --help sale con 0 y sin argumentos con 2"
         (e) => resolve({ codigo: e ? e.code : 0 }),
       ),
     );
-  assert.equal((await correr(["--help"])).codigo, 0);
-  assert.equal((await correr([])).codigo, 2);
+  assert.equal((await run(["--help"])).codigo, 0);
+  assert.equal((await run([])).codigo, 2);
 });
 
 test("arranca también desde una ruta enlazada, como /opt/secondbrain/current", async (t) => {
@@ -265,12 +269,12 @@ test("arranca también desde una ruta enlazada, como /opt/secondbrain/current", 
     enlace,
     process.platform === "win32" ? "junction" : "dir",
   );
-  const salida = await new Promise((resolve, reject) =>
+  const output = await new Promise((resolve, reject) =>
     execFile(
       process.execPath,
       [path.join(enlace, "cli.mjs"), "--help"],
       (error, stdout) => (error ? reject(error) : resolve(stdout)),
     ),
   );
-  assert.match(salida, /iniciar/);
+  assert.match(output, /iniciar/);
 });

@@ -201,15 +201,15 @@ test("mensajería estructurada: idempotencia, steer en vivo, cola cancelable y l
     },
   });
 
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
-  const ejecutor = createExecutor({
-    registro,
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const executor = createExecutor({
+    registro: registry,
     proyectos: { demo: dir },
     conversations,
     env: {},
   });
 
-  const s = await ejecutor.encargar({
+  const s = await executor.encargar({
     motor: "codex",
     origen: "encargo",
     proyecto: "demo",
@@ -221,12 +221,12 @@ test("mensajería estructurada: idempotencia, steer en vivo, cola cancelable y l
   }
 
   // Idempotent steer during execution
-  const steer1 = await ejecutor.enviarMensaje(s.id, {
+  const steer1 = await executor.enviarMensaje(s.id, {
     clientMessageId: "cm-steer-1",
     text: "Cambia prioridad",
     mode: "steer",
   });
-  const steerDup = await ejecutor.enviarMensaje(s.id, {
+  const steerDup = await executor.enviarMensaje(s.id, {
     clientMessageId: "cm-steer-1",
     text: "Cambia prioridad",
     mode: "steer",
@@ -236,31 +236,31 @@ test("mensajería estructurada: idempotencia, steer en vivo, cola cancelable y l
   assert.equal(steerDup.repetido, true);
 
   // Queue two messages, cancel the second before dispatch, keep the first
-  const q1 = await ejecutor.enviarMensaje(s.id, {
+  const q1 = await executor.enviarMensaje(s.id, {
     clientMessageId: "cm-queue-1",
     text: "Segundo turno en cola",
     mode: "queue",
   });
-  const q2 = await ejecutor.enviarMensaje(s.id, {
+  const q2 = await executor.enviarMensaje(s.id, {
     clientMessageId: "cm-queue-2",
     text: "Cancelable",
     mode: "queue",
   });
   assert.equal(q1.command.deliveryStatus, "en_cola");
-  assert.equal((await ejecutor.listarCola(s.id)).length, 2);
-  await ejecutor.cancelarCola(s.id, q2.command.clientMessageId);
-  assert.equal((await ejecutor.listarCola(s.id)).length, 1);
+  assert.equal((await executor.listarCola(s.id)).length, 2);
+  await executor.cancelarCola(s.id, q2.command.clientMessageId);
+  assert.equal((await executor.listarCola(s.id)).length, 1);
 
   releaseTurn1();
-  await ejecutor.esperar(s.id);
+  await executor.esperar(s.id);
   // Wait briefly for queued dispatch
   for (let i = 0; i < 60 && prompts.length < 2; i++) {
     await new Promise((r) => setTimeout(r, 15));
   }
-  await ejecutor.esperar(s.id);
+  await executor.esperar(s.id);
   assert.deepEqual(prompts, ["Turno inicial", "Segundo turno en cola"]);
   assert.equal(
-    registro.leer().find((x) => x.id === s.id).resultado,
+    registry.leer().find((x) => x.id === s.id).resultado,
     "Turno cola: Segundo turno en cola",
   );
 });
@@ -295,9 +295,9 @@ async function turnBoundary(t) {
       return result;
     },
   };
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
   const ejecutor = createExecutor({
-    registro,
+    registro: registry,
     proyectos: { demo: dir },
     conversations,
     env: {},
@@ -321,7 +321,7 @@ async function turnBoundary(t) {
   };
   return {
     prompts,
-    registro,
+    registro: registry,
     ejecutor,
     inner,
     conversations,
@@ -401,7 +401,7 @@ test("recorrido vertical completo con puente service <-> lanzador: pregunta, res
   await mkdir(path.join(vault, "00-Inbox"), { recursive: true });
   await writeFile(path.join(vault, "Home.md"), "# Sintético\n");
 
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
   let askReady;
   let askBarrier = new Promise((r) => {
     askReady = r;
@@ -455,16 +455,16 @@ test("recorrido vertical completo con puente service <-> lanzador: pregunta, res
     },
   });
 
-  const ejecutor = createExecutor({
-    registro,
+  const executor = createExecutor({
+    registro: registry,
     proyectos: { demo: dir },
     conversations,
     env: {},
   });
   const h = (v) => createHash("sha256").update(v).digest("hex");
   const launcher = createLauncherServer({
-    registro,
-    ejecutor,
+    registro: registry,
+    ejecutor: executor,
     conversations,
     controlHash: h("ctrl"),
     hookHash: h("hook"),
@@ -504,7 +504,7 @@ test("recorrido vertical completo con puente service <-> lanzador: pregunta, res
   };
 
   // Create WorkOrder and launch bridged session
-  const { encargo } = await fetch(`${base}/encargos`, {
+  const { encargo: task } = await fetch(`${base}/encargos`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -533,7 +533,7 @@ test("recorrido vertical completo con puente service <-> lanzador: pregunta, res
       origen: "encargo",
       proyecto: "demo",
       structured: true,
-      workOrderId: encargo.id,
+      workOrderId: task.id,
       memberId: "menta-1",
       toolProfileId: "ejecucion",
       brief: "Ejecuta recorrido vertical",
@@ -547,7 +547,7 @@ test("recorrido vertical completo con puente service <-> lanzador: pregunta, res
     liveSnap = await conversations.snapshot(session.id);
     if (
       liveSnap.requests.length > 0 &&
-      app.userRequests.list({ workOrderId: encargo.id }).length > 0
+      app.userRequests.list({ workOrderId: task.id }).length > 0
     ) {
       break;
     }
@@ -564,14 +564,14 @@ test("recorrido vertical completo con puente service <-> lanzador: pregunta, res
       answers: { ruta: "Opción A" },
     }),
   });
-  await ejecutor.esperar(session.id);
+  await executor.esperar(session.id);
 
   // Allow SSE bridge to flush artifact & turn.completed to WorkOrder
   for (let i = 0; i < 60; i++) {
-    if (app.workOrders.get(encargo.id).artifacts.length > 0) break;
+    if (app.workOrders.get(task.id).artifacts.length > 0) break;
     await new Promise((r) => setTimeout(r, 20));
   }
-  const afterTurn1 = app.workOrders.get(encargo.id);
+  const afterTurn1 = app.workOrders.get(task.id);
   assert.equal(afterTurn1.artifacts.length, 1);
   assert.ok(afterTurn1.artifacts[0].hash.length === 64);
 
@@ -591,9 +591,9 @@ test("recorrido vertical completo con puente service <-> lanzador: pregunta, res
   });
   await askBarrier;
   const staleReq = (await conversations.snapshot(session.id)).requests.at(-1);
-  await ejecutor.cancelar(session.id);
+  await executor.cancelar(session.id);
   releaseInterrupt();
-  await ejecutor.esperar(session.id);
+  await executor.esperar(session.id);
 
   const lateRes = await fetch(`${base}/agentes/conversacion/responder`, {
     method: "POST",
@@ -608,10 +608,10 @@ test("recorrido vertical completo con puente service <-> lanzador: pregunta, res
   assert.equal(lateRes.status, 409);
 
   // Turn 3: resume cleanly without contamination from cancelled turn 2 callback
-  await ejecutor.continuar(session.id, "Reanuda paso final");
-  await ejecutor.esperar(session.id);
+  await executor.continuar(session.id, "Reanuda paso final");
+  await executor.esperar(session.id);
   assert.equal(
-    registro.leer().find((x) => x.id === session.id).resultado,
+    registry.leer().find((x) => x.id === session.id).resultado,
     "Reanudado limpio tras interrupción",
   );
 });

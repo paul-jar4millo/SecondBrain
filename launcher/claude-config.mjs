@@ -1,6 +1,6 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { carpetaAgy, isUsageLine, usageLine } from "./usage.mjs";
+import { agyFolder, isUsageLine, usageLine } from "./usage.mjs";
 
 /** @typedef {{ command?: string, type?: string, stack_with_default?: boolean }} StatusLine */
 /**
@@ -16,12 +16,12 @@ import { carpetaAgy, isUsageLine, usageLine } from "./usage.mjs";
 /**
  * The owner's own status line wins: without it the agent just shows no bars.
  * @param {StatusLine | undefined} actual
- * @param {string} motor
- * @param {string} carpeta
- * @param {string | undefined} firma
+ * @param {string} engine
+ * @param {string} folder
+ * @param {string | undefined} signature
  */
-const lineaMedidora = (actual, motor, carpeta, firma) =>
-  actual && !isUsageLine(actual) ? null : usageLine(motor, carpeta, firma);
+const meterLine = (actual, engine, folder, signature) =>
+  actual && !isUsageLine(actual) ? null : usageLine(engine, folder, signature);
 
 /**
  * An unattended harness cannot answer Claude Code's first-run dialogs, so the
@@ -33,32 +33,36 @@ const lineaMedidora = (actual, motor, carpeta, firma) =>
  * @param {string} cwd
  * @param {{ firma?: string, medir?: boolean }} [options]
  */
-export async function prepareClaude(configDir, cwd, { firma, medir } = {}) {
+export async function prepareClaude(
+  configDir,
+  cwd,
+  { firma: signature, medir: measure } = {},
+) {
   if (!configDir || !cwd) return;
-  await modificar(path.join(configDir, ".claude.json"), (datos) => {
-    const proyecto = datos.projects?.[cwd] || {};
-    if (datos.hasCompletedOnboarding && proyecto.hasTrustDialogAccepted)
+  await modify(path.join(configDir, ".claude.json"), (data) => {
+    const project = data.projects?.[cwd] || {};
+    if (data.hasCompletedOnboarding && project.hasTrustDialogAccepted)
       return false;
-    datos.hasCompletedOnboarding = true;
-    datos.projects = {
-      ...datos.projects,
-      [cwd]: { ...proyecto, hasTrustDialogAccepted: true },
+    data.hasCompletedOnboarding = true;
+    data.projects = {
+      ...data.projects,
+      [cwd]: { ...project, hasTrustDialogAccepted: true },
     };
   });
-  await modificar(path.join(configDir, "settings.json"), (datos) => {
-    const linea = medir
-      ? lineaMedidora(datos.statusLine, "claude", configDir, firma)
-      : firma && {
+  await modify(path.join(configDir, "settings.json"), (data) => {
+    const line = measure
+      ? meterLine(data.statusLine, "claude", configDir, signature)
+      : signature && {
           type: "command",
-          command: `printf '%s' '${firma.replace(/'/g, "")}'`,
+          command: `printf '%s' '${signature.replace(/'/g, "")}'`,
         };
     if (
-      datos.skipDangerousModePermissionPrompt &&
-      (!linea || JSON.stringify(datos.statusLine) === JSON.stringify(linea))
+      data.skipDangerousModePermissionPrompt &&
+      (!line || JSON.stringify(data.statusLine) === JSON.stringify(line))
     )
       return false;
-    datos.skipDangerousModePermissionPrompt = true;
-    if (linea) datos.statusLine = linea;
+    data.skipDangerousModePermissionPrompt = true;
+    if (line) data.statusLine = line;
   });
 }
 
@@ -71,44 +75,43 @@ export async function prepareClaude(configDir, cwd, { firma, medir } = {}) {
  */
 export async function prepareAgy(home, cwd) {
   if (!home || !cwd) return;
-  const carpeta = carpetaAgy(home);
-  await modificar(path.join(carpeta, "settings.json"), (datos) => {
-    const confiables = Array.isArray(datos.trustedWorkspaces)
-      ? datos.trustedWorkspaces
+  const carpeta = agyFolder(home);
+  await modify(path.join(carpeta, "settings.json"), (data) => {
+    const trusted = Array.isArray(data.trustedWorkspaces)
+      ? data.trustedWorkspaces
       : [];
-    const base = lineaMedidora(
-      datos.statusLine,
+    const base = meterLine(
+      data.statusLine,
       "agy",
       carpeta,
       "Lira · Antigravity",
     );
-    const linea = base && { ...base, stack_with_default: true };
+    const line = base && { ...base, stack_with_default: true };
     if (
-      confiables.includes(cwd) &&
-      (!linea || JSON.stringify(datos.statusLine) === JSON.stringify(linea))
+      trusted.includes(cwd) &&
+      (!line || JSON.stringify(data.statusLine) === JSON.stringify(line))
     )
       return false;
-    if (!confiables.includes(cwd))
-      datos.trustedWorkspaces = [...confiables, cwd];
-    if (linea) datos.statusLine = linea;
+    if (!trusted.includes(cwd)) data.trustedWorkspaces = [...trusted, cwd];
+    if (line) data.statusLine = line;
   });
 }
 
 /**
- * @param {string} archivo
- * @param {(config: ProviderConfig) => boolean | void} cambiar
+ * @param {string} file
+ * @param {(config: ProviderConfig) => boolean | void} change
  */
-async function modificar(archivo, cambiar) {
-  let datos = {};
+async function modify(file, change) {
+  let data = {};
   try {
-    datos = JSON.parse(await readFile(archivo, "utf8"));
+    data = JSON.parse(await readFile(file, "utf8"));
   } catch (e) {
     if (e.code !== "ENOENT") return; // never overwrite a config we cannot parse
   }
-  if (cambiar(datos) === false) return;
-  const temporal = `${archivo}.${process.pid}.tmp`;
-  await writeFile(temporal, JSON.stringify(datos, null, 2) + "\n", {
+  if (change(data) === false) return;
+  const temporary = `${file}.${process.pid}.tmp`;
+  await writeFile(temporary, JSON.stringify(data, null, 2) + "\n", {
     mode: 0o600,
   });
-  await rename(temporal, archivo);
+  await rename(temporary, file);
 }

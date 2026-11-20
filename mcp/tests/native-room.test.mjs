@@ -48,9 +48,9 @@ test("el MCP stdio usa la credencial de sala y atribuye la agente", async (t) =>
   ]);
   const herramientas = await client.listTools();
   assert.ok(herramientas.tools.some((tool) => tool.name === "equipo_encargar"));
-  const equipo = await client.callTool({
+  const team = await client.callTool({
     name: "equipo_estado",
     arguments: {},
   });
-  assert.notEqual(equipo.isError, true);
+  assert.notEqual(team.isError, true);
 });

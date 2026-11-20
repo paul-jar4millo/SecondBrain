@@ -53,31 +53,31 @@ describe("picking in the refuge", () => {
     );
   });
   it("still picks an agent through her invisible hit cylinder", () => {
-    const raiz = new THREE.Group();
+    const root = new THREE.Group();
     const toque = new THREE.Mesh(
       new THREE.CylinderGeometry(0.4, 0.4, 2, 6),
       new THREE.MeshBasicMaterial(),
     );
     toque.visible = false;
-    raiz.add(toque);
-    raiz.updateMatrixWorld();
-    const actor = { spec: { id: "lira" }, toque, raiz };
+    root.add(toque);
+    root.updateMatrixWorld();
+    const actor = { spec: { id: "lira" }, toque, raiz: root };
     expect(
       pickTarget(rayThroughOrigin(), { actors: [actor], labels: [] }),
     ).toEqual({ kind: "agent", id: "lira" });
   });
   it("does not pick an agent whose whole figure is hidden", () => {
-    const raiz = new THREE.Group();
+    const root = new THREE.Group();
     const toque = new THREE.Mesh(
       new THREE.CylinderGeometry(0.4, 0.4, 2, 6),
       new THREE.MeshBasicMaterial(),
     );
-    raiz.add(toque);
-    raiz.visible = false;
-    raiz.updateMatrixWorld();
+    root.add(toque);
+    root.visible = false;
+    root.updateMatrixWorld();
     expect(
       pickTarget(rayThroughOrigin(), {
-        actors: [{ spec: { id: "lira" }, toque, raiz }],
+        actors: [{ spec: { id: "lira" }, toque, raiz: root }],
         labels: [],
       }),
     ).toBe(null);

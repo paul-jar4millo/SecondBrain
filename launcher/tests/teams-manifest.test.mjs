@@ -16,9 +16,9 @@ const coordinadora = {
   coordinator: true,
   toolProfileId: "coordinacion",
 };
-const tarjeta = (id, motor, extra = {}) => ({
+const tarjeta = (id, engine, extra = {}) => ({
   id,
-  motor,
+  motor: engine,
   model: `modelo-${id}`,
   effort: "medium",
   role: `Rol ${id}`,
@@ -28,32 +28,32 @@ const tarjeta = (id, motor, extra = {}) => ({
   ...extra,
 });
 
-async function almacen(t, opciones) {
+async function almacen(t, options) {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-team-mf-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  return { dir, equipos: await openTeams(dir, opciones) };
+  return { dir, equipos: await openTeams(dir, options) };
 }
 
 test("el manifiesto transporta modelo, esfuerzo y rol a cada hija, también con el mismo motor repetido", async (t) => {
-  const { dir, equipos } = await almacen(t);
+  const { dir, equipos: teams } = await almacen(t);
   const mf = manifiesto([
     coordinadora,
     tarjeta("m-a", "codex"),
     tarjeta("m-b", "codex", { model: "otro", effort: "low" }),
     tarjeta("m-c", "agy"),
   ]);
-  const equipo = await equipos.crear("lider", { manifest: mf });
-  const lider = equipo.miembros[0];
-  assert.equal(lider.memberId, "m-coord");
-  assert.equal(lider.modelo, "modelo-coord");
-  assert.equal(equipo.manifestSha256, mf.sha256);
+  const team = await teams.crear("lider", { manifest: mf });
+  const lead = team.miembros[0];
+  assert.equal(lead.memberId, "m-coord");
+  assert.equal(lead.modelo, "modelo-coord");
+  assert.equal(team.manifestSha256, mf.sha256);
 
-  const a = await equipos.agregar(equipo.id, "lider", "h1", "codex", {
+  const a = await teams.agregar(team.id, "lider", "h1", "codex", {
     memberId: "m-a",
   });
   // Without memberId the next free card of that engine is chosen.
-  const b = await equipos.agregar(equipo.id, "lider", "h2", "codex");
-  const c = await equipos.agregar(equipo.id, "lider", "h3", "agy", {
+  const b = await teams.agregar(team.id, "lider", "h2", "codex");
+  const c = await teams.agregar(team.id, "lider", "h3", "agy", {
     memberId: "m-c",
   });
   assert.deepEqual(
@@ -70,11 +70,11 @@ test("el manifiesto transporta modelo, esfuerzo y rol a cada hija, también con 
 });
 
 test("la coordinadora no cambia modelos, motores, perfiles ni añade integrantes fuera del manifiesto", async (t) => {
-  const { equipos } = await almacen(t);
+  const { equipos: teams } = await almacen(t);
   const mf = manifiesto([coordinadora, tarjeta("m-a", "codex")]);
-  const equipo = await equipos.crear("lider", { manifest: mf });
-  const intento = (hijo, motor, meta) =>
-    equipos.agregar(equipo.id, "lider", hijo, motor, meta);
+  const team = await teams.crear("lider", { manifest: mf });
+  const intento = (child, engine, meta) =>
+    teams.agregar(team.id, "lider", child, engine, meta);
 
   await assert.rejects(
     intento("x1", "codex", { memberId: "m-a", modelo: "barato" }),
@@ -106,7 +106,7 @@ test("la coordinadora no cambia modelos, motores, perfiles ni añade integrantes
     intento("x7", "codex", { memberId: "m-a", manifestSha256: "f".repeat(64) }),
     { status: 409, message: /desactualizado/ },
   );
-  assert.equal(equipos.estado("lider").miembros.length, 1);
+  assert.equal(teams.estado("lider").miembros.length, 1);
 
   await intento("h1", "codex", { memberId: "m-a" });
   await assert.rejects(intento("h2", "codex", { memberId: "m-a" }), {
@@ -116,24 +116,24 @@ test("la coordinadora no cambia modelos, motores, perfiles ni añade integrantes
 });
 
 test("equipos de una, dos y cuatro tarjetas respetan exactamente su tamaño", async (t) => {
-  const { equipos } = await almacen(t);
-  const solo = await equipos.crear("solo", {
+  const { equipos: teams } = await almacen(t);
+  const solo = await teams.crear("solo", {
     manifest: manifiesto([coordinadora]),
   });
-  await assert.rejects(equipos.agregar(solo.id, "solo", "s1", "codex"), {
+  await assert.rejects(teams.agregar(solo.id, "solo", "s1", "codex"), {
     status: 403,
   });
 
-  const dos = await equipos.crear("dos", {
+  const dos = await teams.crear("dos", {
     manifest: manifiesto([coordinadora, tarjeta("m-a", "agy")]),
   });
-  await equipos.agregar(dos.id, "dos", "d1", "agy");
+  await teams.agregar(dos.id, "dos", "d1", "agy");
   await assert.rejects(
-    equipos.agregar(dos.id, "dos", "d2", "agy"),
+    teams.agregar(dos.id, "dos", "d2", "agy"),
     /límite|activas/i,
   );
 
-  const cuatro = await equipos.crear("cuatro", {
+  const cuatro = await teams.crear("cuatro", {
     manifest: manifiesto([
       coordinadora,
       tarjeta("m-1", "codex"),
@@ -141,75 +141,75 @@ test("equipos de una, dos y cuatro tarjetas respetan exactamente su tamaño", as
       tarjeta("m-3", "codex"),
     ]),
   });
-  for (const hijo of ["c1", "c2", "c3"])
-    await equipos.agregar(cuatro.id, "cuatro", hijo, "codex");
+  for (const child of ["c1", "c2", "c3"])
+    await teams.agregar(cuatro.id, "cuatro", child, "codex");
   assert.deepEqual(
-    equipos
+    teams
       .estado("cuatro")
       .miembros.slice(1)
       .map((m) => m.memberId),
     ["m-1", "m-2", "m-3"],
   );
   await assert.rejects(
-    equipos.agregar(cuatro.id, "cuatro", "c4", "codex"),
+    teams.agregar(cuatro.id, "cuatro", "c4", "codex"),
     /límite/i,
   );
 });
 
 test("un requestId repetido devuelve la misma integrante sin crear otra", async (t) => {
-  const { equipos } = await almacen(t);
-  const equipo = await equipos.crear("lider", {
+  const { equipos: teams } = await almacen(t);
+  const team = await teams.crear("lider", {
     manifest: manifiesto([coordinadora, tarjeta("m-a", "codex")]),
   });
-  const primera = await equipos.agregar(equipo.id, "lider", "h1", "codex", {
+  const first = await teams.agregar(team.id, "lider", "h1", "codex", {
     requestId: "pedido-1",
   });
-  const repetida = await equipos.agregar(equipo.id, "lider", "h9", "codex", {
+  const repetida = await teams.agregar(team.id, "lider", "h9", "codex", {
     requestId: "pedido-1",
   });
-  assert.equal(repetida.id, primera.id);
+  assert.equal(repetida.id, first.id);
   assert.equal(repetida.repetido, true);
-  assert.equal(equipos.buscarPorRequestId("lider", "pedido-1").id, "h1");
-  assert.equal(equipos.estado("lider").miembros.length, 2);
+  assert.equal(teams.buscarPorRequestId("lider", "pedido-1").id, "h1");
+  assert.equal(teams.estado("lider").miembros.length, 2);
 });
 
 test("sin manifiesto, una hija no amplía el perfil de su madre", async (t) => {
-  const { equipos } = await almacen(t);
-  const equipo = await equipos.crear("lider");
-  await equipos.actualizarMiembro("lider", { toolProfileId: "investigacion" });
+  const { equipos: teams } = await almacen(t);
+  const team = await teams.crear("lider");
+  await teams.actualizarMiembro("lider", { toolProfileId: "investigacion" });
   await assert.rejects(
-    equipos.agregar(equipo.id, "lider", "h1", "codex", {
+    teams.agregar(team.id, "lider", "h1", "codex", {
       toolProfileId: "integracion",
     }),
     { status: 403 },
   );
   // Legacy calls without metadata keep working.
-  await equipos.agregar(equipo.id, "lider", "h2", "codex");
-  await equipos.entregar("h2", "Notas", "texto libre");
-  assert.equal(equipos.estado("lider").entregables[0].version, 1);
+  await teams.agregar(team.id, "lider", "h2", "codex");
+  await teams.entregar("h2", "Notas", "texto libre");
+  assert.equal(teams.estado("lider").entregables[0].version, 1);
 });
 
 test("entregables versionados con hash e integración explícita de dos escritoras sin pisar archivos", async (t) => {
-  const { equipos } = await almacen(t);
-  const destino = await mkdtemp(path.join(tmpdir(), "sb-team-int-"));
-  t.after(() => rm(destino, { recursive: true, force: true }));
-  await writeFile(path.join(destino, "comun.md"), "base\n");
-  const equipo = await equipos.crear("lider", {
+  const { equipos: teams } = await almacen(t);
+  const target = await mkdtemp(path.join(tmpdir(), "sb-team-int-"));
+  t.after(() => rm(target, { recursive: true, force: true }));
+  await writeFile(path.join(target, "comun.md"), "base\n");
+  const equipo = await teams.crear("lider", {
     manifest: manifiesto([
       coordinadora,
       tarjeta("m-a", "codex"),
       tarjeta("m-b", "agy"),
     ]),
-    directorioIntegracion: destino,
+    directorioIntegracion: target,
   });
-  await equipos.agregar(equipo.id, "lider", "ha", "codex");
-  await equipos.agregar(equipo.id, "lider", "hb", "agy");
+  await teams.agregar(equipo.id, "lider", "ha", "codex");
+  await teams.agregar(equipo.id, "lider", "hb", "agy");
 
-  const ea = await equipos.entregar("ha", {
+  const ea = await teams.entregar("ha", {
     titulo: "Parte A",
     archivos: [{ ruta: "docs/a.md", contenido: "A\n" }],
   });
-  const eb = await equipos.entregar("hb", {
+  const eb = await teams.entregar("hb", {
     titulo: "Parte B",
     archivos: [{ ruta: "docs/b.md", contenido: "B\n" }],
   });
@@ -217,147 +217,141 @@ test("entregables versionados con hash e integración explícita de dos escritor
   assert.equal(ea.archivos[0].sha256, sha("A\n"));
   assert.notEqual(ea.sha256, eb.sha256);
 
-  await assert.rejects(equipos.integrar("ha"), { status: 403 });
-  const resultado = await equipos.integrar("lider");
-  assert.equal(resultado.estado, "integrado");
-  assert.deepEqual(
-    resultado.integrados.map((i) => [i.ruta, i.miembro]).sort(),
-    [
-      ["docs/a.md", "m-a"],
-      ["docs/b.md", "m-b"],
-    ],
-  );
-  assert.equal(await readFile(path.join(destino, "docs/a.md"), "utf8"), "A\n");
-  assert.equal(await readFile(path.join(destino, "docs/b.md"), "utf8"), "B\n");
+  await assert.rejects(teams.integrar("ha"), { status: 403 });
+  const result = await teams.integrar("lider");
+  assert.equal(result.estado, "integrado");
+  assert.deepEqual(result.integrados.map((i) => [i.ruta, i.miembro]).sort(), [
+    ["docs/a.md", "m-a"],
+    ["docs/b.md", "m-b"],
+  ]);
+  assert.equal(await readFile(path.join(target, "docs/a.md"), "utf8"), "A\n");
+  assert.equal(await readFile(path.join(target, "docs/b.md"), "utf8"), "B\n");
 
   // A second version chained on the integrated hash integrates cleanly.
-  const v2 = await equipos.entregar("ha", {
+  const v2 = await teams.entregar("ha", {
     titulo: "Parte A",
     ruta: "docs/a.md",
     contenido: "A2\n",
     baseSha256: sha("A\n"),
   });
   assert.equal(v2.version, 1);
-  const v3 = await equipos.entregar("ha", {
+  const v3 = await teams.entregar("ha", {
     titulo: "Parte A",
     ruta: "docs/a.md",
     contenido: "A3\n",
     baseSha256: sha("A2\n"),
   });
   assert.equal(v3.version, 2);
-  const encadenado = await equipos.integrar("lider", {
+  const encadenado = await teams.integrar("lider", {
     entregableIds: [v2.id, v3.id],
   });
   assert.equal(encadenado.estado, "integrado");
-  assert.equal(await readFile(path.join(destino, "docs/a.md"), "utf8"), "A3\n");
+  assert.equal(await readFile(path.join(target, "docs/a.md"), "utf8"), "A3\n");
 });
 
 test("ediciones concurrentes del mismo archivo quedan como conflicto visible hasta una resolución explícita", async (t) => {
-  const { equipos } = await almacen(t);
-  const destino = await mkdtemp(path.join(tmpdir(), "sb-team-conf-"));
-  t.after(() => rm(destino, { recursive: true, force: true }));
-  await writeFile(path.join(destino, "comun.md"), "base\n");
-  const equipo = await equipos.crear("lider", {
+  const { equipos: teams } = await almacen(t);
+  const target = await mkdtemp(path.join(tmpdir(), "sb-team-conf-"));
+  t.after(() => rm(target, { recursive: true, force: true }));
+  await writeFile(path.join(target, "comun.md"), "base\n");
+  const equipo = await teams.crear("lider", {
     manifest: manifiesto([
       coordinadora,
       tarjeta("m-a", "codex"),
       tarjeta("m-b", "agy"),
     ]),
-    directorioIntegracion: destino,
+    directorioIntegracion: target,
   });
-  await equipos.agregar(equipo.id, "lider", "ha", "codex");
-  await equipos.agregar(equipo.id, "lider", "hb", "agy");
+  await teams.agregar(equipo.id, "lider", "ha", "codex");
+  await teams.agregar(equipo.id, "lider", "hb", "agy");
   const base = sha("base\n");
-  const ea = await equipos.entregar("ha", {
+  const ea = await teams.entregar("ha", {
     titulo: "A",
     ruta: "comun.md",
     contenido: "versión A\n",
     baseSha256: base,
   });
-  const eb = await equipos.entregar("hb", {
+  const eb = await teams.entregar("hb", {
     titulo: "B",
     ruta: "comun.md",
     contenido: "versión B\n",
     baseSha256: base,
   });
-  const conflicto = await equipos.integrar("lider");
-  assert.equal(conflicto.estado, "conflicto");
-  assert.equal(conflicto.conflictos[0].ruta, "comun.md");
+  const conflict = await teams.integrar("lider");
+  assert.equal(conflict.estado, "conflicto");
+  assert.equal(conflict.conflictos[0].ruta, "comun.md");
   assert.deepEqual(
-    conflicto.conflictos[0].entregas.map((e) => e.memberId),
+    conflict.conflictos[0].entregas.map((e) => e.memberId),
     ["m-a", "m-b"],
   );
-  assert.equal(
-    await readFile(path.join(destino, "comun.md"), "utf8"),
-    "base\n",
-  );
-  assert.equal(equipos.estado("lider").conflictos.length, 1);
+  assert.equal(await readFile(path.join(target, "comun.md"), "utf8"), "base\n");
+  assert.equal(teams.estado("lider").conflictos.length, 1);
 
-  const resuelto = await equipos.integrar("lider", {
+  const resolved = await teams.integrar("lider", {
     resoluciones: [{ ruta: "comun.md", entregableId: eb.id }],
   });
-  assert.equal(resuelto.estado, "integrado");
+  assert.equal(resolved.estado, "integrado");
   assert.equal(
-    await readFile(path.join(destino, "comun.md"), "utf8"),
+    await readFile(path.join(target, "comun.md"), "utf8"),
     "versión B\n",
   );
   assert.ok(ea.id);
 });
 
 test("un cambio externo en el destino o una ruta fuera del workspace impide integrar", async (t) => {
-  const { equipos } = await almacen(t);
-  const destino = await mkdtemp(path.join(tmpdir(), "sb-team-ext-"));
-  t.after(() => rm(destino, { recursive: true, force: true }));
-  await writeFile(path.join(destino, "nota.md"), "original\n");
-  const equipo = await equipos.crear("lider", {
+  const { equipos: teams } = await almacen(t);
+  const target = await mkdtemp(path.join(tmpdir(), "sb-team-ext-"));
+  t.after(() => rm(target, { recursive: true, force: true }));
+  await writeFile(path.join(target, "nota.md"), "original\n");
+  const equipo = await teams.crear("lider", {
     manifest: manifiesto([coordinadora, tarjeta("m-a", "codex")]),
-    directorioIntegracion: destino,
+    directorioIntegracion: target,
   });
-  await equipos.agregar(equipo.id, "lider", "ha", "codex");
-  await equipos.entregar("ha", {
+  await teams.agregar(equipo.id, "lider", "ha", "codex");
+  await teams.entregar("ha", {
     titulo: "Nota",
     ruta: "nota.md",
     contenido: "nuevo\n",
     baseSha256: sha("original\n"),
   });
-  await writeFile(path.join(destino, "nota.md"), "editado a mano\n");
-  const resultado = await equipos.integrar("lider");
-  assert.equal(resultado.estado, "conflicto");
-  assert.equal(resultado.conflictos[0].hashEnDisco, sha("editado a mano\n"));
+  await writeFile(path.join(target, "nota.md"), "editado a mano\n");
+  const result = await teams.integrar("lider");
+  assert.equal(result.estado, "conflicto");
+  assert.equal(result.conflictos[0].hashEnDisco, sha("editado a mano\n"));
   assert.equal(
-    await readFile(path.join(destino, "nota.md"), "utf8"),
+    await readFile(path.join(target, "nota.md"), "utf8"),
     "editado a mano\n",
   );
 
   for (const ruta of ["../fuera.md", "C:/x.md", "/abs.md", ".git/config"])
     await assert.rejects(
-      equipos.entregar("ha", { titulo: "Mal", ruta, contenido: "x" }),
+      teams.entregar("ha", { titulo: "Mal", ruta, contenido: "x" }),
       /Ruta de entregable inválida/,
     );
 });
 
 test("un cambio manual posterior a una integración produce conflicto y ninguna resolución lo pisa sin verlo", async (t) => {
-  const { equipos } = await almacen(t);
-  const destino = await mkdtemp(path.join(tmpdir(), "sb-team-post-"));
-  t.after(() => rm(destino, { recursive: true, force: true }));
-  const equipo = await equipos.crear("lider", {
+  const { equipos: teams } = await almacen(t);
+  const target = await mkdtemp(path.join(tmpdir(), "sb-team-post-"));
+  t.after(() => rm(target, { recursive: true, force: true }));
+  const equipo = await teams.crear("lider", {
     manifest: manifiesto([coordinadora, tarjeta("m-a", "codex")]),
-    directorioIntegracion: destino,
+    directorioIntegracion: target,
   });
-  await equipos.agregar(equipo.id, "lider", "ha", "codex");
-  const v1 = await equipos.entregar("ha", {
+  await teams.agregar(equipo.id, "lider", "ha", "codex");
+  const v1 = await teams.entregar("ha", {
     titulo: "Informe",
     ruta: "informe.md",
     contenido: "v1\n",
   });
-  const primera = await equipos.integrar("lider");
-  assert.equal(primera.estado, "integrado");
-  const archivo = path.join(destino, "informe.md");
+  const first = await teams.integrar("lider");
+  assert.equal(first.estado, "integrado");
+  const archivo = path.join(target, "informe.md");
   assert.equal(await readFile(archivo, "utf8"), "v1\n");
 
   // The owner edits the integrated file by hand after the integration.
   await writeFile(archivo, "editado por Ana\n");
-  const v2 = await equipos.entregar("ha", {
+  const v2 = await teams.entregar("ha", {
     titulo: "Informe",
     ruta: "informe.md",
     contenido: "v2\n",
@@ -366,7 +360,7 @@ test("un cambio manual posterior a una integración produce conflicto y ninguna 
 
   // A resolution sent before any conflict was shown is rejected.
   await assert.rejects(
-    equipos.integrar("lider", {
+    teams.integrar("lider", {
       entregableIds: [v1.id, v2.id],
       resoluciones: [{ ruta: "informe.md", entregableId: v2.id }],
     }),
@@ -374,7 +368,7 @@ test("un cambio manual posterior a una integración produce conflicto y ninguna 
   );
   assert.equal(await readFile(archivo, "utf8"), "editado por Ana\n");
 
-  const conflicto = await equipos.integrar("lider", {
+  const conflicto = await teams.integrar("lider", {
     entregableIds: [v1.id, v2.id],
   });
   assert.equal(conflicto.estado, "conflicto");
@@ -384,20 +378,20 @@ test("un cambio manual posterior a una integración produce conflicto y ninguna 
 
   // Another manual edit after the conflict invalidates the old resolution.
   await writeFile(archivo, "segunda edición de Ana\n");
-  const repetido = await equipos.integrar("lider", {
+  const repeated = await teams.integrar("lider", {
     entregableIds: [v1.id, v2.id],
     resoluciones: [{ ruta: "informe.md", entregableId: v2.id }],
   });
-  assert.equal(repetido.estado, "conflicto");
+  assert.equal(repeated.estado, "conflicto");
   assert.equal(
-    repetido.conflictos[0].hashEnDisco,
+    repeated.conflictos[0].hashEnDisco,
     sha("segunda edición de Ana\n"),
   );
   assert.equal(await readFile(archivo, "utf8"), "segunda edición de Ana\n");
 
   // An explicit resolution over the destination the conflict showed applies
   // and records which on-disk version it replaced.
-  const resuelto = await equipos.integrar("lider", {
+  const resolved = await teams.integrar("lider", {
     entregableIds: [v1.id, v2.id],
     resoluciones: [
       {
@@ -406,9 +400,9 @@ test("un cambio manual posterior a una integración produce conflicto y ninguna 
       },
     ],
   });
-  assert.equal(resuelto.estado, "integrado");
+  assert.equal(resolved.estado, "integrado");
   assert.equal(
-    resuelto.integrados[0].hashEnDiscoReemplazado,
+    resolved.integrados[0].hashEnDiscoReemplazado,
     sha("segunda edición de Ana\n"),
   );
   assert.equal(await readFile(archivo, "utf8"), "segunda edición de Ana\nv2\n");

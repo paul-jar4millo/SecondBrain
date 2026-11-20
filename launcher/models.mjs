@@ -1,7 +1,11 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { entornoDe, DEEPSEEK_MODEL, PENSAMIENTO_DEEPSEEK } from "./engines.mjs";
+import {
+  environmentOf,
+  DEEPSEEK_MODEL,
+  DEEPSEEK_THINKING,
+} from "./engines.mjs";
 
 /** @import { LauncherEngine } from "./session-types.d.ts" */
 /** @typedef {{ id: string, nombre: string, esfuerzo?: string, esfuerzos?: string[] }} LauncherModel */
@@ -19,22 +23,22 @@ import { entornoDe, DEEPSEEK_MODEL, PENSAMIENTO_DEEPSEEK } from "./engines.mjs";
 // An empty list only means «the program's default»; it never blocks a session.
 // Effort levels accepted by `claude --effort`: the current Opus, Sonnet and Haiku
 // all take the five levels.
-const ESFUERZOS_CLAUDE = ["low", "medium", "high", "xhigh", "max"];
+const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const CLAUDE = [
-  { id: "opus", nombre: "Opus", esfuerzos: ESFUERZOS_CLAUDE },
-  { id: "sonnet", nombre: "Sonnet", esfuerzos: ESFUERZOS_CLAUDE },
-  { id: "haiku", nombre: "Haiku", esfuerzos: ESFUERZOS_CLAUDE },
+  { id: "opus", nombre: "Opus", esfuerzos: CLAUDE_EFFORTS },
+  { id: "sonnet", nombre: "Sonnet", esfuerzos: CLAUDE_EFFORTS },
+  { id: "haiku", nombre: "Haiku", esfuerzos: CLAUDE_EFFORTS },
 ];
 // Marina has a single model; its effort becomes a thinking budget.
 const DEEPSEEK = [
   {
     id: DEEPSEEK_MODEL,
     nombre: "DeepSeek Flash",
-    esfuerzos: Object.keys(PENSAMIENTO_DEEPSEEK),
+    esfuerzos: Object.keys(DEEPSEEK_THINKING),
   },
 ];
 const ID = /^[A-Za-z0-9][\w.:[\]-]{0,79}$/;
-const ESFUERZO = /^[a-z]{1,10}$/;
+const EFFORT = /^[a-z]{1,10}$/;
 
 /** @param {string} json */
 export function readCodexModels(json) {
@@ -49,44 +53,44 @@ export function readCodexModels(json) {
       esfuerzo: m.default_reasoning_level,
       esfuerzos: (m.supported_reasoning_levels || [])
         .map((l) => l.effort)
-        .filter((e) => ESFUERZO.test(e)),
+        .filter((e) => EFFORT.test(e)),
     }));
 }
 
-/** @param {string} salida */
-export function readAgyModels(salida) {
+/** @param {string} output */
+export function readAgyModels(output) {
   /** @type {Map<string, LauncherModel>} */
-  const vistos = new Map();
-  for (const linea of salida.replace(/\x1b\[[0-9;]*m/g, "").split(/\r?\n/)) {
-    const m = /^(\S+)\t+(.+?)\s*$/.exec(linea);
-    if (m && ID.test(m[1])) vistos.set(m[1], { id: m[1], nombre: m[2] });
+  const seen = new Map();
+  for (const line of output.replace(/\x1b\[[0-9;]*m/g, "").split(/\r?\n/)) {
+    const m = /^(\S+)\t+(.+?)\s*$/.exec(line);
+    if (m && ID.test(m[1])) seen.set(m[1], { id: m[1], nombre: m[2] });
   }
-  return [...vistos.values()];
+  return [...seen.values()];
 }
 
 /**
  * @param {NodeJS.ProcessEnv} env
  * @returns {Promise<string>}
  */
-function correrAgy(env) {
+function runAgy(env) {
   return new Promise((resolve) => {
-    let salida = "";
-    let hijo;
+    let output = "";
+    let child;
     try {
-      hijo = spawn("agy", ["models"], {
+      child = spawn("agy", ["models"], {
         cwd: env.HOME,
-        env: entornoDe("gemini", env),
+        env: environmentOf("gemini", env),
         stdio: ["ignore", "pipe", "ignore"],
       });
     } catch {
       return resolve("");
     }
-    const reloj = setTimeout(() => hijo.kill(), 20000);
-    hijo.stdout.on("data", (d) => (salida += d));
-    hijo.once("error", () => resolve(""));
-    hijo.once("close", () => {
-      clearTimeout(reloj);
-      resolve(salida);
+    const clock = setTimeout(() => child.kill(), 20000);
+    child.stdout.on("data", (d) => (output += d));
+    child.once("error", () => resolve(""));
+    child.once("close", () => {
+      clearTimeout(clock);
+      resolve(output);
     });
   });
 }
@@ -96,18 +100,18 @@ function correrAgy(env) {
  */
 export function createModelCatalog({
   env = process.env,
-  agy = () => correrAgy(env),
-  leer = (archivo) => readFile(archivo, "utf8"),
+  agy = () => runAgy(env),
+  leer: read = (file) => readFile(file, "utf8"),
   ahora = Date.now,
 } = {}) {
   /** @type {{ en: number, valor: ModelCatalog } | null} */
   let cache = null;
   /** @returns {Promise<ModelCatalog>} */
-  async function modelos() {
+  async function models() {
     if (cache && ahora() - cache.en < 10 * 60_000) return cache.valor;
     const [codex, lira] = await Promise.all([
       env.CODEX_HOME
-        ? leer(path.join(env.CODEX_HOME, "models_cache.json"))
+        ? read(path.join(env.CODEX_HOME, "models_cache.json"))
             .then(readCodexModels)
             .catch(/** @returns {[]} */ () => [])
         : [],
@@ -115,31 +119,31 @@ export function createModelCatalog({
         .then(readAgyModels)
         .catch(/** @returns {[]} */ () => []),
     ]);
-    const valor = { claude: CLAUDE, codex, agy: lira, deepseek: DEEPSEEK };
+    const value = { claude: CLAUDE, codex, agy: lira, deepseek: DEEPSEEK };
     // A failed query is retried on the next request instead of being cached.
-    if (codex.length && lira.length) cache = { en: ahora(), valor };
-    return valor;
+    if (codex.length && lira.length) cache = { en: ahora(), valor: value };
+    return value;
   }
   /**
    * Rejects anything not offered right now: the values become CLI arguments.
-   * @param {string | undefined} motor Unvalidated request field; unknown engines list no models.
+   * @param {string | undefined} engine Unvalidated request field; unknown engines list no models.
    * @param {string | null} [modelo]
    * @param {string | null} [esfuerzo]
    */
-  async function validar(motor, modelo, esfuerzo) {
+  async function validate(engine, modelo, esfuerzo) {
     if (!modelo && !esfuerzo) return;
     const lista =
-      (await modelos())[/** @type {LauncherEngine} */ (motor)] || [];
+      (await models())[/** @type {LauncherEngine} */ (engine)] || [];
     // The program's default model accepts any effort its catalog offers.
     if (!modelo) {
       if (!esfuerzo || !lista.some((m) => m.esfuerzos?.includes(esfuerzo)))
         throw new Error("Modelo no disponible");
       return;
     }
-    const elegido = lista.find((m) => m.id === modelo);
-    if (!elegido) throw new Error("Modelo no disponible");
-    if (esfuerzo && !elegido.esfuerzos?.includes(esfuerzo))
+    const chosen = lista.find((m) => m.id === modelo);
+    if (!chosen) throw new Error("Modelo no disponible");
+    if (esfuerzo && !chosen.esfuerzos?.includes(esfuerzo))
       throw new Error("Modelo no disponible");
   }
-  return { modelos, validar };
+  return { modelos: models, validar: validate };
 }

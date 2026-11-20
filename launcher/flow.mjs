@@ -1,11 +1,11 @@
-import { coalescer } from "./harness.mjs";
-import { LOTE_INICIAL } from "./items.mjs";
+import { coalesce } from "./harness.mjs";
+import { INITIAL_BATCH } from "./items.mjs";
 
 /** @import { TerminalEvent } from "./types.d.ts" */
 
-const LATIDO = 15000;
+const HEARTBEAT = 15000;
 // A reader this far behind is cut off; it reconnects and gets a fresh snapshot.
-const MAX_PENDIENTE = 4 * 1024 * 1024;
+const MAX_PENDING = 4 * 1024 * 1024;
 
 /**
  * Server-sent stream of one harness: `snapshot` (clean screen state) followed by
@@ -18,12 +18,12 @@ export function serveFlow({
   res,
   id,
   ejecutor,
-  registro,
+  registro: registry,
   items,
   ms = 24,
-  latido = LATIDO,
+  latido: heartbeat = HEARTBEAT,
 }) {
-  let fuente = ejecutor.flujo(id);
+  let source = ejecutor.flujo(id);
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
@@ -33,107 +33,107 @@ export function serveFlow({
   let cerrado = false;
   /**
    * @param {string} evento
-   * @param {unknown} datos
+   * @param {unknown} data
    */
-  const enviar = (evento, datos) => {
+  const send = (evento, data) => {
     if (cerrado) return;
-    if (res.writableLength > MAX_PENDIENTE) return cerrar();
-    res.write(`event: ${evento}\ndata: ${JSON.stringify(datos)}\n\n`);
+    if (res.writableLength > MAX_PENDING) return close();
+    res.write(`event: ${evento}\ndata: ${JSON.stringify(data)}\n\n`);
   };
-  const coalescencia = coalescer((lote) => enviar("salida", lote), ms);
+  const coalescing = coalesce((batch) => send("salida", batch), ms);
   /** @type {Extract<TerminalEvent, { tipo: "salida" } >[]} */
-  let cola = [];
+  let queue = [];
   let vivo = false;
-  let ronda = 0;
-  let desuscribir = () => {};
+  let round = 0;
+  let unsubscribe = () => {};
 
-  async function reiniciar() {
-    const esta = ++ronda;
+  async function restart() {
+    const esta = ++round;
     vivo = false;
-    coalescencia.cancelar();
-    cola = [];
-    const instantanea = await fuente.snapshot();
-    if (cerrado || esta !== ronda) return;
-    enviar("snapshot", {
+    coalescing.cancelar();
+    queue = [];
+    const instantanea = await source.snapshot();
+    if (cerrado || esta !== round) return;
+    send("snapshot", {
       ...instantanea,
-      activa: fuente.activa(),
-      generacion: fuente.generacion,
+      activa: source.activa(),
+      generacion: source.generacion,
     });
-    for (const evento of cola)
-      if (evento.seq > instantanea.seq)
-        coalescencia.agregar(evento.datos, evento.seq);
-    cola = [];
+    for (const event of queue)
+      if (event.seq > instantanea.seq)
+        coalescing.agregar(event.datos, event.seq);
+    queue = [];
     vivo = true;
   }
-  function enlazar() {
-    desuscribir();
-    desuscribir = fuente.suscribir((evento) => {
-      if (evento.tipo === "tamano") void reiniciar();
-      else if (evento.tipo === "salida") {
-        if (vivo) coalescencia.agregar(evento.datos, evento.seq);
-        else cola.push(evento);
+  function link() {
+    unsubscribe();
+    unsubscribe = source.suscribir((event) => {
+      if (event.tipo === "tamano") void restart();
+      else if (event.tipo === "salida") {
+        if (vivo) coalescing.agregar(event.datos, event.seq);
+        else queue.push(event);
       }
     });
   }
 
-  let ultimoEstado = "";
+  let lastState = "";
   const estado = () => {
-    const sesion = registro.leer().find((s) => s.id === id);
-    if (!sesion) return;
+    const session = registry.leer().find((s) => s.id === id);
+    if (!session) return;
     const actual = {
-      estado: sesion.estado,
-      activa: fuente.activa(),
-      ultimaAccion: sesion.ultimaAccion ?? null,
+      estado: session.estado,
+      activa: source.activa(),
+      ultimaAccion: session.ultimaAccion ?? null,
     };
-    const huella = JSON.stringify(actual);
-    if (huella === ultimoEstado) return;
-    ultimoEstado = huella;
-    enviar("estado", actual);
+    const fingerprint = JSON.stringify(actual);
+    if (fingerprint === lastState) return;
+    lastState = fingerprint;
+    send("estado", actual);
   };
-  const dejarRegistro = registro.subscribe(() => {
+  const unsubscribeRegistry = registry.subscribe(() => {
     if (cerrado) return;
     try {
-      const nueva = ejecutor.flujo(id);
-      if (nueva.generacion !== fuente.generacion) {
+      const created = ejecutor.flujo(id);
+      if (created.generacion !== source.generacion) {
         // The program was started again: a new screen, a new snapshot.
-        fuente = nueva;
-        enlazar();
-        void reiniciar();
-      } else fuente = nueva;
+        source = created;
+        link();
+        void restart();
+      } else source = created;
     } catch {
       /* the session was deleted; the stream ends below */
     }
     estado();
   });
-  const sub = items?.suscribir(id, (lista) =>
-    enviar("items", { reemplazar: false, items: lista }),
+  const sub = items?.suscribir(id, (list) =>
+    send("items", { reemplazar: false, items: list }),
   );
-  const pulso = setInterval(() => {
+  const pulse = setInterval(() => {
     if (!cerrado) res.write(": latido\n\n");
-  }, latido);
-  pulso.unref();
+  }, heartbeat);
+  pulse.unref();
 
-  function cerrar() {
+  function close() {
     if (cerrado) return;
     cerrado = true;
-    clearInterval(pulso);
-    coalescencia.cancelar();
-    desuscribir();
-    dejarRegistro();
+    clearInterval(pulse);
+    coalescing.cancelar();
+    unsubscribe();
+    unsubscribeRegistry();
     sub?.off();
     res.end();
   }
-  res.on("close", cerrar);
+  res.on("close", close);
 
   res.write(": conectado\n\n");
-  enlazar();
-  void reiniciar().then(() => {
+  link();
+  void restart().then(() => {
     if (cerrado) return;
-    enviar("items", {
+    send("items", {
       reemplazar: true,
-      items: sub?.ultimos(LOTE_INICIAL) ?? [],
+      items: sub?.ultimos(INITIAL_BATCH) ?? [],
     });
     estado();
   });
-  return cerrar;
+  return close;
 }

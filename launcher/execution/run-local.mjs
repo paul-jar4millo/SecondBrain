@@ -3,9 +3,9 @@
 import { LauncherError } from "../errors.mjs";
 import { PROVIDER_BY_ENGINE } from "./process-tools.mjs";
 import {
-  actividadEvento,
-  entornoDe,
-  entornoEsfuerzo,
+  eventActivity,
+  environmentOf,
+  effortEnvironment,
   readClaudeEvent,
   readGeminiEvent,
   newClaudeState,
@@ -31,10 +31,16 @@ import { StringDecoder } from "node:string_decoder";
  *   Pick<ReturnType<typeof import("./run-remote.mjs").createRemoteRunner>, "correrRemoto">} deps
  */
 export function createLocalRunner(config, state, deps) {
-  const { comando, conversations, env, limiteMs, registro, toolCatalog } =
-    config;
   const {
-    activos,
+    comando: command,
+    conversations,
+    env,
+    limiteMs: limitMs,
+    registro: registry,
+    toolCatalog,
+  } = config;
+  const {
+    activos: active,
     exitedProcesses,
     liveProcesses,
     materializedSkillCleanups,
@@ -44,14 +50,14 @@ export function createLocalRunner(config, state, deps) {
   } = state;
   const {
     acpGeminiDirFor,
-    correrRemoto,
+    correrRemoto: runRemote,
     activeJob,
-    diagnosticar,
-    margenDiagnostico,
+    diagnosticar: diagnose,
+    margenDiagnostico: diagnosticMargin,
     resolveSessionEffectiveProfile,
     sanitizeChildEnv,
     senalar,
-    vigilar,
+    vigilar: watch,
   } = deps;
   /**
    * @param {LauncherSession} sesion
@@ -80,8 +86,8 @@ export function createLocalRunner(config, state, deps) {
       const sessionTokenFile = sessionTokenFiles.get(sesion.id) || null;
       const baseEnv = sanitizeChildEnv(
         {
-          ...entornoDe(proveedor, env),
-          ...entornoEsfuerzo(sesion.motor, sesion.esfuerzo),
+          ...environmentOf(proveedor, env),
+          ...effortEnvironment(sesion.motor, sesion.esfuerzo),
           SB_SESSION_ID: sesion.id,
         },
         profile,
@@ -120,8 +126,8 @@ export function createLocalRunner(config, state, deps) {
         conversations?.hasLiveController?.(sesion.id)
       ) {
         job.hijo = existingChild;
-        vigilar(sesion, existingChild);
-        await registro
+        watch(sesion, existingChild);
+        await registry
           .actualizar(sesion.id, {
             conexion: {
               estado: "activa",
@@ -192,7 +198,7 @@ export function createLocalRunner(config, state, deps) {
             });
           }
           provenanceList = [...provenanceList, ...materializedRes.provenance];
-          await registro.actualizar(sesion.id, {
+          await registry.actualizar(sesion.id, {
             skillProvenance: provenanceList,
           });
         }
@@ -254,7 +260,7 @@ export function createLocalRunner(config, state, deps) {
                   const snapshotProv = [...provenanceList];
                   provenanceSync = provenanceSync
                     .then(() =>
-                      registro.actualizar(sesion.id, {
+                      registry.actualizar(sesion.id, {
                         observedSkills: snapshotObs,
                         skillProvenance: snapshotProv,
                       }),
@@ -282,8 +288,8 @@ export function createLocalRunner(config, state, deps) {
               if (liveProcesses.get(sesion.id) === child) {
                 liveProcesses.delete(sesion.id);
               }
-              if (!activos.has(sesion.id)) {
-                void registro
+              if (!active.has(sesion.id)) {
+                void registry
                   .actualizar(sesion.id, {
                     conexion: {
                       estado: "cerrada",
@@ -298,8 +304,8 @@ export function createLocalRunner(config, state, deps) {
             });
             // Drain diagnostics without exposing provider credentials or prompts.
             child.stderr.on("data", () => {});
-            vigilar(sesion, child);
-            void registro
+            watch(sesion, child);
+            void registry
               .actualizar(sesion.id, {
                 conexion: {
                   estado: "activa",
@@ -313,7 +319,7 @@ export function createLocalRunner(config, state, deps) {
           },
           /** @param {string} id */
           onNativeId: (id) =>
-            registro.actualizar(sesion.id, { conversacionId: id }),
+            registry.actualizar(sesion.id, { conversacionId: id }),
         });
         await provenanceSync;
         if (turnOptions.commandId) {
@@ -329,7 +335,7 @@ export function createLocalRunner(config, state, deps) {
         const liveController = conversations
           ?.liveSessions?.()
           .find((entry) => entry.id === sesion.id);
-        await registro.actualizar(sesion.id, {
+        await registry.actualizar(sesion.id, {
           estado: job.cancelada
             ? "cancelada"
             : snap.lastTurnStatus === "interrupted"
@@ -382,15 +388,15 @@ export function createLocalRunner(config, state, deps) {
       }
       return;
     }
-    if (sesion.harness) return correrRemoto(sesion, brief, cwd);
+    if (sesion.harness) return runRemote(sesion, brief, cwd);
     if (
       env.SB_REMOTE_INTERACTIVE === "1" &&
       sesion.origen === "sala" &&
       ["claude", "agy"].includes(sesion.motor)
     )
-      return correrRemoto(sesion, brief, cwd);
+      return runRemote(sesion, brief, cwd);
     const spec = sessionCommand(
-      comando(sesion.motor, brief, {
+      command(sesion.motor, brief, {
         modelo: sesion.modelo,
         esfuerzo: sesion.esfuerzo,
         conversacionId: sesion.conversacionId,
@@ -400,8 +406,8 @@ export function createLocalRunner(config, state, deps) {
     );
     const proveedor = PROVIDER_BY_ENGINE[sesion.motor] || sesion.motor;
     const childEnv = {
-      ...entornoDe(proveedor, env),
-      ...entornoEsfuerzo(sesion.motor, sesion.esfuerzo),
+      ...environmentOf(proveedor, env),
+      ...effortEnvironment(sesion.motor, sesion.esfuerzo),
       SB_SESSION_ID: sesion.id,
       ...(env.SB_HOOK_TOKEN_FILE
         ? { SB_HOOK_TOKEN_FILE: env.SB_HOOK_TOKEN_FILE }
@@ -419,46 +425,46 @@ export function createLocalRunner(config, state, deps) {
     const job = activeJob(sesion.id);
     job.hijo = hijo;
     if (job.cancelada) senalar(hijo, "SIGTERM");
-    const detenerVigilante = vigilar(sesion, hijo);
-    const acumulado = newClaudeState();
+    const stopWatcher = watch(sesion, hijo);
+    const accumulated = newClaudeState();
     /** @type {Promise<unknown>} */
-    let cambio = Promise.resolve();
-    const lineas = createInterface({ input: hijo.stdout });
-    lineas.on("line", (linea) => {
-      let evento;
+    let change = Promise.resolve();
+    const lines = createInterface({ input: hijo.stdout });
+    lines.on("line", (line) => {
+      let event;
       try {
-        evento = JSON.parse(linea);
+        event = JSON.parse(line);
       } catch {
         return;
       }
       if (sesion.motor === "claude" || sesion.motor === "deepseek")
-        readClaudeEvent(acumulado, evento);
-      if (sesion.motor === "agy") readGeminiEvent(acumulado, evento);
+        readClaudeEvent(accumulated, event);
+      if (sesion.motor === "agy") readGeminiEvent(accumulated, event);
       if (
-        acumulado.sessionId &&
-        acumulado.sessionId !== sesion.conversacionId
+        accumulated.sessionId &&
+        accumulated.sessionId !== sesion.conversacionId
       ) {
-        sesion.conversacionId = acumulado.sessionId;
-        cambio = cambio.then(() =>
-          registro.actualizar(sesion.id, {
-            conversacionId: acumulado.sessionId,
+        sesion.conversacionId = accumulated.sessionId;
+        change = change.then(() =>
+          registry.actualizar(sesion.id, {
+            conversacionId: accumulated.sessionId,
           }),
         );
       }
       if (
         sesion.motor === "codex" &&
-        evento.type === "item.completed" &&
-        evento.item?.type === "agent_message"
+        event.type === "item.completed" &&
+        event.item?.type === "agent_message"
       )
-        acumulado.texto = String(evento.item.text || "");
-      const actividad = actividadEvento(evento);
-      if (actividad)
-        cambio = cambio.then(() =>
-          registro.actualizar(sesion.id, {
-            ultimaAccion: actividad.etiqueta,
+        accumulated.texto = String(event.item.text || "");
+      const activity = eventActivity(event);
+      if (activity)
+        change = change.then(() =>
+          registry.actualizar(sesion.id, {
+            ultimaAccion: activity.etiqueta,
             fase: inferPhase(
-              evento.item?.type ||
-                evento.message?.content?.find(
+              event.item?.type ||
+                event.message?.content?.find(
                   /** @param {{type?: string, name?: string}} c */
                   (c) => c.type === "tool_use",
                 )?.name ||
@@ -468,11 +474,11 @@ export function createLocalRunner(config, state, deps) {
         );
     });
     // The engine's own diagnostics stay in the log; they never reach clients.
-    let fallo = "";
-    const decodificador = new StringDecoder("utf8");
+    let failure = "";
+    const decoder = new StringDecoder("utf8");
     hijo.stderr.on("data", (chunk) => {
-      fallo = (fallo + decodificador.write(chunk)).slice(
-        -margenDiagnostico(brief),
+      failure = (failure + decoder.write(chunk)).slice(
+        -diagnosticMargin(brief),
       );
     });
     let codigo;
@@ -481,36 +487,36 @@ export function createLocalRunner(config, state, deps) {
         hijo.once("error", reject);
         hijo.once("close", resolve);
       });
-      await cambio;
-      if ((codigo !== 0 || acumulado.error) && !job.cancelada)
-        diagnosticar(sesion, brief, { codigo, diagnostico: fallo });
-      await registro.actualizar(
+      await change;
+      if ((codigo !== 0 || accumulated.error) && !job.cancelada)
+        diagnose(sesion, brief, { codigo, diagnostico: failure });
+      await registry.actualizar(
         sesion.id,
         job.cancelada
           ? { estado: "cancelada" }
           : job.excedida
             ? {
                 estado: "error",
-                error: `La sesión superó el tiempo máximo de ${Math.round(limiteMs / 60000)} minutos y se canceló.`,
+                error: `La sesión superó el tiempo máximo de ${Math.round(limitMs / 60000)} minutos y se canceló.`,
               }
-            : codigo === 0 && !acumulado.error
+            : codigo === 0 && !accumulated.error
               ? {
                   estado: "terminada",
-                  resultado: acumulado.texto.slice(0, 100000),
+                  resultado: accumulated.texto.slice(0, 100000),
                 }
               : { estado: "error", error: "El motor terminó con error." },
       );
     } catch (error) {
-      diagnosticar(sesion, brief, {
+      diagnose(sesion, brief, {
         mensaje: error?.message,
         pila: error?.stack,
       });
-      await registro.actualizar(sesion.id, {
+      await registry.actualizar(sesion.id, {
         estado: job.cancelada ? "cancelada" : "error",
         error: "No se pudo ejecutar el motor.",
       });
     } finally {
-      detenerVigilante();
+      stopWatcher();
     }
   }
   return {

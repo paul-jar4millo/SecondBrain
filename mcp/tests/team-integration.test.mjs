@@ -24,32 +24,32 @@ test("MCP, servicio y lanzador coordinan sesiones de distintos motores", async (
     fake,
     'setTimeout(() => { console.log(JSON.stringify({event:"result",result:{status:"SUCCESS",response:"listo"}})); console.log(JSON.stringify({type:"item.completed",item:{type:"agent_message",text:"listo"}})); }, Number(process.argv[2]))',
   );
-  const registro = await openSessionRegistry(
+  const registry = await openSessionRegistry(
     path.join(dir, "state", "sesiones.json"),
   );
-  const equipos = await openTeams(path.join(dir, "state", "equipos"), {
+  const teams = await openTeams(path.join(dir, "state", "equipos"), {
     activo: (id) =>
-      registro
+      registry
         .leer()
         .some(
           (s) => s.id === id && ["pendiente", "trabajando"].includes(s.estado),
         ),
   });
-  const ejecutor = createExecutor({
-    registro,
-    equipos,
+  const executor = createExecutor({
+    registro: registry,
+    equipos: teams,
     proyectos: { prueba: dir },
     // The leader outlives its children, as a real leader waiting for them does.
-    comando: (motor) => ({
+    comando: (engine) => ({
       bin: process.execPath,
-      args: [fake, motor === "claude" ? "15000" : "2500"],
+      args: [fake, engine === "claude" ? "15000" : "2500"],
     }),
   });
   const hash = (s) => createHash("sha256").update(s).digest("hex");
   const launcher = createLauncherServer({
-    registro,
-    equipos,
-    ejecutor,
+    registro: registry,
+    equipos: teams,
+    ejecutor: executor,
     controlHash: hash("control"),
     hookHash: hash("hook"),
   });
@@ -70,9 +70,9 @@ test("MCP, servicio y lanzador coordinan sesiones de distintos motores", async (
   const clientes = [];
   t.after(async () => {
     for (const c of clientes) await c.close();
-    for (const s of registro.leer().filter((s) => s.estado === "trabajando")) {
-      await ejecutor.cancelar(s.id).catch(() => {});
-      await ejecutor.esperar(s.id);
+    for (const s of registry.leer().filter((s) => s.estado === "trabajando")) {
+      await executor.cancelar(s.id).catch(() => {});
+      await executor.esperar(s.id);
     }
     await app.close();
     await new Promise((resolve) => launcher.close(resolve));
@@ -101,13 +101,13 @@ test("MCP, servicio y lanzador coordinan sesiones de distintos motores", async (
     assert.notEqual(response.isError, true, response.content?.[0]?.text);
     return JSON.parse(response.content[0].text);
   }
-  const lider = await ejecutor.encargar({
+  const lead = await executor.encargar({
     motor: "claude",
     origen: "sala",
     proyecto: "prueba",
     brief: "coordina",
   });
-  const ambar = await cliente("ambar", lider.id);
+  const ambar = await cliente("ambar", lead.id);
   const lira = await llamar(ambar, "equipo_encargar", {
     motor: "agy",
     brief: "investiga",

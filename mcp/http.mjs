@@ -6,13 +6,13 @@ import { createBrainMcp } from "./index.mjs";
  * authenticated the OAuth client; tools reach the service over loopback.
  * @param {import("node:http").IncomingMessage} request
  * @param {import("node:http").ServerResponse} response
- * @param {unknown} cuerpo
+ * @param {unknown} body
  * @param {Pick<Parameters<typeof createBrainMcp>[0], "baseUrl" | "token" | "cliente">} options
  */
-export async function atenderMcp(
+export async function handleMcp(
   request,
   response,
-  cuerpo,
+  body,
   { baseUrl, token, cliente },
 ) {
   const server = createBrainMcp({ baseUrl, token, cliente });
@@ -25,5 +25,5 @@ export async function atenderMcp(
     server.close().catch(() => {});
   });
   await server.connect(transport);
-  await transport.handleRequest(request, response, cuerpo);
+  await transport.handleRequest(request, response, body);
 }

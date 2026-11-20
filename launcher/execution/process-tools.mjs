@@ -21,7 +21,13 @@ export const PROVIDER_BY_ENGINE = { codex: "chatgpt", agy: "gemini" };
  * @param {ExecutorConfig} config
  */
 export function createProcessTools(config) {
-  const { env, proyectos, registrar, registro, seguimiento } = config;
+  const {
+    env,
+    proyectos: projects,
+    registrar: register,
+    registro: registry,
+    seguimiento: tracking,
+  } = config;
   function sessionTokenDir() {
     const base =
       env.SB_LANZADOR_DATA_DIR || path.join(os.tmpdir(), "sb-lanzador");
@@ -32,14 +38,14 @@ export function createProcessTools(config) {
    * @param {ToolProfile} profile
    * @param {string | null} tokenFile
    * @param {boolean} billingGranted
-   * @param {string} motor
+   * @param {string} engine
    */
   function sanitizeChildEnv(
     baseEnv,
     profile,
     tokenFile,
     billingGranted,
-    motor,
+    engine,
   ) {
     const next = { ...baseEnv };
     // Never leak supervisor / wide room tokens into agent environments.
@@ -63,7 +69,7 @@ export function createProcessTools(config) {
         delete next[key];
       }
     }
-    if (!(motor === "deepseek" && billingGranted)) {
+    if (!(engine === "deepseek" && billingGranted)) {
       delete next.DEEPSEEK_API_KEY;
       delete next.ANTHROPIC_AUTH_TOKEN;
     }
@@ -79,7 +85,7 @@ export function createProcessTools(config) {
    * @param {string} src
    * @param {string} dst
    */
-  async function copiarEntradasProyecto(src, dst) {
+  async function copyProjectEntries(src, dst) {
     const srcResolved = path.resolve(src);
     const dstResolved = path.resolve(dst);
     const entries = await readdir(srcResolved, { withFileTypes: true }).catch(
@@ -105,13 +111,13 @@ export function createProcessTools(config) {
       }).catch(() => {});
     }
   }
-  /** @param {LauncherSession | undefined} sesion */
-  async function limpiarWorkspaceMiembro(sesion) {
-    const ws = sesion?.workspacePath;
+  /** @param {LauncherSession | undefined} session */
+  async function cleanMemberWorkspace(session) {
+    const ws = session?.workspacePath;
     if (
-      !sesion ||
+      !session ||
       !ws ||
-      !["git-worktree", "directory"].includes(sesion.workspaceKind ?? "")
+      !["git-worktree", "directory"].includes(session.workspaceKind ?? "")
     ) {
       return;
     }
@@ -122,7 +128,7 @@ export function createProcessTools(config) {
     ) {
       return;
     }
-    if (sesion.workspaceKind === "git-worktree") {
+    if (session.workspaceKind === "git-worktree") {
       let repoRoot = null;
       try {
         const common = await runFile(
@@ -136,7 +142,7 @@ export function createProcessTools(config) {
           );
         }
       } catch {
-        repoRoot = sesion.proyecto ? proyectos[sesion.proyecto] || null : null;
+        repoRoot = session.proyecto ? projects[session.proyecto] || null : null;
       }
       if (repoRoot) {
         await runFile(
@@ -152,23 +158,23 @@ export function createProcessTools(config) {
     await rm(resolvedWs, { recursive: true, force: true }).catch(() => {});
     await rmdir(path.dirname(resolvedWs)).catch(() => {});
   }
-  registro.setOnPrune?.((sesion) => limpiarWorkspaceMiembro(sesion));
+  registry.setOnPrune?.((session) => cleanMemberWorkspace(session));
   /**
-   * @param {ChildProcess} hijo
+   * @param {ChildProcess} child
    * @param {NodeJS.Signals} signal
    */
-  function senalar(hijo, signal) {
-    if (process.platform !== "win32" && hijo.pid) {
+  function senalar(child, signal) {
+    if (process.platform !== "win32" && child.pid) {
       try {
-        process.kill(-hijo.pid, signal);
+        process.kill(-child.pid, signal);
         return;
       } catch {}
     }
     try {
-      hijo.kill(signal);
+      child.kill(signal);
     } catch (error) {
       try {
-        registrar(
+        register(
           JSON.stringify({
             evento: "lanzador.signal",
             senal: signal,
@@ -181,43 +187,43 @@ export function createProcessTools(config) {
   /**
    * A checkpoint of the working tree precedes every turn; it never blocks one.
    * @param {string} id
-   * @param {string} texto
+   * @param {string} text
    */
-  const marcar = (id, texto) =>
-    seguimiento ? seguimiento.marcar(id, texto) : Promise.resolve(null);
+  const mark = (id, text) =>
+    tracking ? tracking.marcar(id, text) : Promise.resolve(null);
   /**
    * Keep enough overlap to redact a credential or assignment crossing the tail.
    * @param {string} brief
    */
-  const margenDiagnostico = (brief) =>
+  const diagnosticMargin = (brief) =>
     2000 +
     Math.max(
       brief.length,
       ...Object.values(env).map((v) => (typeof v === "string" ? v.length : 0)),
     );
   /**
-   * @param {LauncherSession} sesion
+   * @param {LauncherSession} session
    * @param {string} brief
-   * @param {Record<string, unknown>} datos
+   * @param {Record<string, unknown>} data
    */
-  function diagnosticar(sesion, brief, datos) {
+  function diagnose(session, brief, data) {
     try {
-      registrar(
+      register(
         JSON.stringify({
           evento: "lanzador.motor",
-          sesion: sesion.id,
-          motor: sesion.motor,
+          sesion: session.id,
+          motor: session.motor,
           ...Object.fromEntries(
-            Object.entries(datos).map(([key, value]) => {
-              const limpio =
+            Object.entries(data).map(([key, value]) => {
+              const clean =
                 typeof value === "string"
                   ? redactDiagnostic(value, { env, textos: [brief] })
                   : value;
               return [
                 key,
                 key === "diagnostico"
-                  ? /** @type {string} */ (limpio).slice(-2000)
-                  : limpio,
+                  ? /** @type {string} */ (clean).slice(-2000)
+                  : clean,
               ];
             }),
           ),
@@ -231,11 +237,11 @@ export function createProcessTools(config) {
     sessionTokenDir,
     sanitizeChildEnv,
     acpGeminiDirFor,
-    copiarEntradasProyecto,
-    limpiarWorkspaceMiembro,
+    copiarEntradasProyecto: copyProjectEntries,
+    limpiarWorkspaceMiembro: cleanMemberWorkspace,
     senalar,
-    marcar,
-    margenDiagnostico,
-    diagnosticar,
+    marcar: mark,
+    margenDiagnostico: diagnosticMargin,
+    diagnosticar: diagnose,
   };
 }

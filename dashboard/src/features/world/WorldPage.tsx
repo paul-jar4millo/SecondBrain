@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { PageHeading } from "../../components/PageHeading";
 import { api, isDemo } from "../../core/store";
-import { montarPanel } from "./panel";
+import { mountPanel } from "./panel";
 import { useConfirmation } from "../../components/useConfirmation";
 import "./panel.css";
 
@@ -10,9 +10,9 @@ const apiPanel = (path: string, body?: unknown) =>
 
 export default function WorldPage() {
   const { confirm, confirmation } = useConfirmation();
-  const raiz = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!isDemo) return montarPanel(raiz.current!, { api: apiPanel, confirm });
+    if (!isDemo) return mountPanel(root.current!, { api: apiPanel, confirm });
   }, [confirm]);
   return (
     <>
@@ -24,7 +24,7 @@ export default function WorldPage() {
       {isDemo ? (
         <p>La demo no incluye los archivos del canal.</p>
       ) : (
-        <div ref={raiz} className="mundo-panel">
+        <div ref={root} className="mundo-panel">
           <div className="mundo-nav">
             <nav id="nav" aria-label="Secciones del proyecto" />
             <a

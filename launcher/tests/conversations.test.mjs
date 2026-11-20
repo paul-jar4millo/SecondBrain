@@ -4,7 +4,7 @@ import {
   readConversation,
   watchConversations,
   readContextUsage,
-  marcarInterna,
+  markInternal,
 } from "../conversations.mjs";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -134,8 +134,8 @@ test("mide el contexto del último turno sin sumar todo el cache histórico", ()
 test("Codex observer links an exact launcher marker to its native conversation", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "sb-codex-history-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const registro = await openSessionRegistry(path.join(root, "registro.json"));
-  const session = await registro.crear({
+  const registry = await openSessionRegistry(path.join(root, "registro.json"));
+  const session = await registry.crear({
     motor: "codex",
     origen: "sala",
     espacioId: "p1",
@@ -175,24 +175,24 @@ test("Codex observer links an exact launcher marker to its native conversation",
       .join("\n"),
   );
   const stop = watchConversations({
-    registro,
+    registro: registry,
     env: { HOME: root, CODEX_HOME: path.join(root, "codex") },
     proyectos: {},
     intervalo: 10,
   });
   t.after(stop);
-  for (let i = 0; i < 100 && !registro.leer()[0].conversacionId; i++)
+  for (let i = 0; i < 100 && !registry.leer()[0].conversacionId; i++)
     await new Promise((r) => setTimeout(r, 10));
-  const saved = registro.leer()[0];
+  const saved = registry.leer()[0];
   assert.equal(saved.conversacionId, native);
   assert.equal(saved.resultado, "Listo");
-  assert.equal(registro.leer().length, 1);
+  assert.equal(registry.leer().length, 1);
 });
 
 test("una ejecución interna marcada nunca aparece como conversación", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "sb-internas-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const registro = await openSessionRegistry(path.join(root, "registro.json"));
+  const registry = await openSessionRegistry(path.join(root, "registro.json"));
   const claude = path.join(root, "claude/projects/p");
   await mkdir(claude, { recursive: true });
   const transcript = (texto) =>
@@ -205,27 +205,27 @@ test("una ejecución interna marcada nunca aparece como conversación", async (t
     ]
       .map(JSON.stringify)
       .join(String.fromCharCode(10));
-  const interna = "e5555555-5555-4555-8555-555555555555";
+  const internal = "e5555555-5555-4555-8555-555555555555";
   const visible = "f6666666-6666-4666-8666-666666666666";
   const env = { HOME: root, AGENTES_CLAUDE_DIR: path.join(root, "claude") };
-  await marcarInterna(env, interna);
+  await markInternal(env, internal);
   await writeFile(
-    path.join(claude, interna + ".jsonl"),
+    path.join(claude, internal + ".jsonl"),
     transcript("Redacta el PR"),
   );
   await writeFile(path.join(claude, visible + ".jsonl"), transcript("Hola"));
   const stop = watchConversations({
-    registro,
+    registro: registry,
     env,
     proyectos: {},
     intervalo: 10,
   });
   t.after(stop);
-  for (let i = 0; i < 100 && !registro.leer().length; i++)
+  for (let i = 0; i < 100 && !registry.leer().length; i++)
     await new Promise((r) => setTimeout(r, 10));
   await new Promise((r) => setTimeout(r, 100));
   assert.deepEqual(
-    registro.leer().map((s) => s.conversacionId),
+    registry.leer().map((s) => s.conversacionId),
     [visible],
   );
 });

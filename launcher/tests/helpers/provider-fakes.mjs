@@ -309,7 +309,7 @@ export async function createHarness(t, options = {}) {
   await writeFile(path.join(dir, "codex-fake.mjs"), FAKE_CODEX_SCRIPT);
   await writeFile(path.join(dir, "acp-fake.mjs"), FAKE_ACP_SCRIPT);
 
-  const registro = await openSessionRegistry(
+  const registry = await openSessionRegistry(
     path.join(dataDir, "sesiones.json"),
   );
   const toolCatalog = await createToolCatalogStore({ dataDir });
@@ -369,7 +369,7 @@ export async function createHarness(t, options = {}) {
 
   const conversations = createProviderConversations({
     directory: path.join(dataDir, "conversaciones"),
-    registro,
+    registro: registry,
     adapters,
     ...(options.rpcOverrides ? { rpc: options.rpcOverrides } : {}),
   });
@@ -384,8 +384,8 @@ export async function createHarness(t, options = {}) {
     ...(options.env || {}),
   };
 
-  const ejecutor = createExecutor({
-    registro,
+  const executor = createExecutor({
+    registro: registry,
     proyectos: { demo: projectDir },
     env,
     maxActivos: options.maxActivos ?? 6,
@@ -399,7 +399,7 @@ export async function createHarness(t, options = {}) {
     fs.mkdir(projectDir, { recursive: true }),
   );
   t.after(async () => {
-    await ejecutor.cerrarTodo("Fin de prueba");
+    await executor.cerrarTodo("Fin de prueba");
     await rm(dir, {
       recursive: true,
       force: true,
@@ -412,10 +412,10 @@ export async function createHarness(t, options = {}) {
     dir,
     dataDir,
     projectDir,
-    registro,
+    registro: registry,
     conversations,
     toolCatalog,
-    ejecutor,
+    ejecutor: executor,
     env,
     spawnedBinsAndArgs,
   };

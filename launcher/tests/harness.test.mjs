@@ -11,9 +11,12 @@ import { createExecutor } from "../executor.mjs";
 import { openWorkspaces } from "../workspaces.mjs";
 
 test("uses each original interactive CLI", () => {
-  for (const motor of ["claude", "codex", "agy", "deepseek"]) {
-    const spec = comandoHarness({ motor, id: "test", modelo: null }, "hola");
-    assert.equal(spec.bin, motor === "deepseek" ? "claude" : motor);
+  for (const engine of ["claude", "codex", "agy", "deepseek"]) {
+    const spec = comandoHarness(
+      { motor: engine, id: "test", modelo: null },
+      "hola",
+    );
+    assert.equal(spec.bin, engine === "deepseek" ? "claude" : engine);
     assert.ok(!spec.args.includes("exec"));
     assert.ok(!spec.args.includes("-p"));
   }
@@ -30,14 +33,14 @@ test(
       fake,
       `console.log('READY');process.stdin.on('data', d=>{console.log('ECHO:'+d.toString());if(d.toString().includes('exit'))process.exit(0)});`,
     );
-    const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+    const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
     const espacios = await openWorkspaces({
       archivo: path.join(dir, "spaces.json"),
       proyectos: {},
       workspaces: path.join(dir, "workspaces"),
     });
     const runner = createExecutor({
-      registro,
+      registro: registry,
       espacios,
       proyectos: {},
       comandoInteractivo: () => ({ bin: process.execPath, args: [fake] }),
@@ -68,7 +71,7 @@ test(
     await runner.esperar(s.id);
     assert.match((await runner.terminal(s.id)).datos, /ECHO:hello/);
     assert.equal((await runner.terminal(s.id)).activa, false);
-    const saved = registro.leer()[0];
+    const saved = registry.leer()[0];
     assert.equal(saved.espacioId, "p1");
     assert.equal(saved.proyecto, null);
     assert.ok(saved.directorio.startsWith(path.join(dir, "workspaces")));
@@ -108,7 +111,7 @@ test("Marina abre su propio harness: identidad DeepSeek y effort solo para Claud
 });
 
 test("el harness de Claude usa el MCP local aunque el repositorio traiga su .mcp.json", () => {
-  const entorno = {
+  const environment = {
     SB_BRAIN_TOKEN_FILE: "/agente/brain-token",
     SB_BRAIN_URL: "http://127.0.0.1:8080/api/v1",
     SB_AGENTE: "ambar",
@@ -118,7 +121,7 @@ test("el harness de Claude usa el MCP local aunque el repositorio traiga su .mcp
   const { args } = comandoHarness(
     { motor: "claude", id: "s1" },
     "hola",
-    entorno,
+    environment,
   );
   const i = args.indexOf("--mcp-config");
   // --mcp-config is variadic: only another flag ends its list.
@@ -152,14 +155,14 @@ test(
       fake,
       `process.stdout.write('\\x1b[2m? for\\x1b[0m shortcuts\\n');process.stdin.on('data', d=>{console.log('ECHO:'+d.toString());if(d.toString().includes('salir'))process.exit(0)});`,
     );
-    const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+    const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
     const espacios = await openWorkspaces({
       archivo: path.join(dir, "spaces.json"),
       proyectos: {},
       workspaces: path.join(dir, "workspaces"),
     });
     const runner = createExecutor({
-      registro,
+      registro: registry,
       espacios,
       proyectos: {},
       env: { PATH: process.env.PATH, HOME: dir },
@@ -191,7 +194,7 @@ test(
     runner.entrada(s.id, { cols: 80, rows: 24 });
     runner.entrada(s.id, { raw: "salir\r" });
     await runner.esperar(s.id);
-    assert.equal(registro.leer()[0].estado, "terminada");
+    assert.equal(registry.leer()[0].estado, "terminada");
     assert.throws(() => runner.entrada(s.id, { cols: 80, rows: 24 }), {
       message: "Terminal no disponible",
     });
@@ -231,17 +234,17 @@ test("prepara la configuración de cada agente sin perder datos ni tocar otra", 
 test("Lira confía en el espacio del proyecto antes de abrir Antigravity", async (t) => {
   const home = await mkdtemp(path.join(tmpdir(), "sb-agy-"));
   t.after(() => rm(home, { recursive: true, force: true }));
-  const archivo = path.join(home, ".gemini/antigravity-cli/settings.json");
-  await mkdir(path.dirname(archivo), { recursive: true });
+  const file = path.join(home, ".gemini/antigravity-cli/settings.json");
+  await mkdir(path.dirname(file), { recursive: true });
   await writeFile(
-    archivo,
+    file,
     JSON.stringify({ theme: "x", trustedWorkspaces: ["/srv/repo"] }),
   );
   await prepareAgy(home, "/datos/workspaces/p1");
   await prepareAgy(home, "/datos/workspaces/p1");
-  const datos = JSON.parse(await readFile(archivo, "utf8"));
-  assert.equal(datos.theme, "x");
-  assert.deepEqual(datos.trustedWorkspaces, [
+  const data = JSON.parse(await readFile(file, "utf8"));
+  assert.equal(data.theme, "x");
+  assert.deepEqual(data.trustedWorkspaces, [
     "/srv/repo",
     "/datos/workspaces/p1",
   ]);

@@ -26,7 +26,7 @@ export function TeamSettings() {
   const [catalog, setCatalog] = useState<Record<string, Model[]> | null>(null);
   const [choices, setChoices] = useState(() =>
     Object.fromEntries(
-      Object.values(engines).map((motor) => [motor, loadChoice(motor)]),
+      Object.values(engines).map((engine) => [engine, loadChoice(engine)]),
     ),
   );
   useEffect(() => {
@@ -93,8 +93,8 @@ export function TeamSettings() {
         gastan más de tu plan.
       </p>
       {characters.map((a) => {
-        const motor = engines[a.id];
-        const list = catalog?.[motor] || [];
+        const engine = engines[a.id];
+        const list = catalog?.[engine] || [];
         return (
           <div className="setting-row setting-agent" key={a.id}>
             <AgentPortrait id={a.id} />
@@ -105,16 +105,16 @@ export function TeamSettings() {
             <ModelEffortPicker
               owner={a.name}
               models={list}
-              choice={choices[motor]}
+              choice={choices[engine]}
               defaultLabel={
                 catalog && !list.length
                   ? "Sin catálogo del lanzador"
                   : "Predeterminado"
               }
               onChange={(choice) => {
-                if (!saveChoice(motor, choice))
+                if (!saveChoice(engine, choice))
                   notify("No se pudo guardar en este navegador.");
-                setChoices((current) => ({ ...current, [motor]: choice }));
+                setChoices((current) => ({ ...current, [engine]: choice }));
               }}
             />
           </div>

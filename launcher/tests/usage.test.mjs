@@ -8,18 +8,18 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
   createUsage,
-  contextoLinea,
+  lineContext,
   saveUsageLine,
   readCodexUsage,
   readUsageLine,
   usageLine,
   latestCodexUsage,
-  vigente,
+  current,
 } from "../usage.mjs";
-import { ventanasAgy, ventanasClaude } from "../engines.mjs";
+import { agyWindows, claudeWindows } from "../engines.mjs";
 import { prepareAgy, prepareClaude } from "../claude-config.mjs";
 
-const evento = (primary, secondary, extra = {}) =>
+const event = (primary, secondary, extra = {}) =>
   JSON.stringify({
     timestamp: "2026-11-09T03:00:00.000Z",
     type: "event_msg",
@@ -46,33 +46,33 @@ const semana = {
 };
 
 test("toma el último límite de la cuenta e ignora líneas rotas y otros límites", () => {
-  const texto = [
+  const text = [
     '{"cortada":',
-    evento({ ...cinco, used_percent: 10 }, semana),
-    evento(cinco, semana),
-    evento({ ...cinco, used_percent: 99 }, semana, { limit_id: "otro" }),
+    event({ ...cinco, used_percent: 10 }, semana),
+    event(cinco, semana),
+    event({ ...cinco, used_percent: 99 }, semana, { limit_id: "otro" }),
     '{"type":"event_msg","payload":{"type":"token_count","rate_limits":null}}',
     "",
   ].join("\n");
-  const uso = latestCodexUsage(texto);
-  assert.equal(uso.ventanas["5h"].usado, 48);
-  assert.equal(uso.ventanas.semanal.usado, 51);
-  assert.equal(uso.plan, "plus");
+  const usage = latestCodexUsage(text);
+  assert.equal(usage.ventanas["5h"].usado, 48);
+  assert.equal(usage.ventanas.semanal.usado, 51);
+  assert.equal(usage.plan, "plus");
   assert.equal(latestCodexUsage("texto sin límites"), null);
 });
 
 test("una ventana ya reiniciada cuenta como vacía", () => {
-  const uso = latestCodexUsage(evento(cinco, semana));
-  const despues = Date.parse(uso.ventanas["5h"].reinicia) + 1000;
-  const ahora = vigente(uso, despues);
-  assert.equal(ahora.ventanas["5h"].usado, 0);
-  assert.equal(ahora.ventanas.semanal.usado, 51);
-  assert.equal(vigente(null), null);
+  const usage = latestCodexUsage(event(cinco, semana));
+  const despues = Date.parse(usage.ventanas["5h"].reinicia) + 1000;
+  const now = current(usage, despues);
+  assert.equal(now.ventanas["5h"].usado, 0);
+  assert.equal(now.ventanas.semanal.usado, 51);
+  assert.equal(current(null), null);
 });
 
 test("la línea de estado mide el contexto de Claude sin sumar facturación acumulada", () => {
   assert.deepEqual(
-    contextoLinea({
+    lineContext({
       context_window: {
         current_usage: {
           input_tokens: 1000,
@@ -85,38 +85,38 @@ test("la línea de estado mide el contexto de Claude sin sumar facturación acum
     { usados: 223500, limite: 400000 },
   );
   assert.equal(
-    contextoLinea({ rate_limits: { five_hour: { utilization: 0.7 } } }),
+    lineContext({ rate_limits: { five_hour: { utilization: 0.7 } } }),
     null,
   );
 });
 
 test("lee el rollout más reciente sin devolver su contenido", async (t) => {
-  const raiz = await mkdtemp(path.join(tmpdir(), "sb-uso-"));
-  t.after(() => rm(raiz, { recursive: true, force: true }));
-  const dia = path.join(raiz, "sessions/2026/11/09");
+  const root = await mkdtemp(path.join(tmpdir(), "sb-uso-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const dia = path.join(root, "sessions/2026/11/09");
   await mkdir(dia, { recursive: true });
-  const viejo = path.join(dia, "rollout-a.jsonl");
-  const nuevo = path.join(dia, "rollout-b.jsonl");
-  await writeFile(viejo, evento({ ...cinco, used_percent: 5 }, semana));
+  const old = path.join(dia, "rollout-a.jsonl");
+  const created = path.join(dia, "rollout-b.jsonl");
+  await writeFile(old, event({ ...cinco, used_percent: 5 }, semana));
   await writeFile(
-    nuevo,
-    `{"type":"response_item","texto":"secreto"}\n${evento(cinco, semana)}\n`,
+    created,
+    `{"type":"response_item","texto":"secreto"}\n${event(cinco, semana)}\n`,
   );
-  await utimes(viejo, new Date(1000), new Date(1000));
-  const uso = await readCodexUsage(path.join(raiz, "sessions"));
-  assert.equal(uso.ventanas["5h"].usado, 48);
-  assert.ok(!JSON.stringify(uso).includes("secreto"));
-  assert.equal(await readCodexUsage(path.join(raiz, "no-existe")), null);
-  const leer = createUsage({
-    env: { CODEX_HOME: raiz },
+  await utimes(old, new Date(1000), new Date(1000));
+  const usage = await readCodexUsage(path.join(root, "sessions"));
+  assert.equal(usage.ventanas["5h"].usado, 48);
+  assert.ok(!JSON.stringify(usage).includes("secreto"));
+  assert.equal(await readCodexUsage(path.join(root, "no-existe")), null);
+  const read = createUsage({
+    env: { CODEX_HOME: root },
     ahora: () => Date.parse("2026-11-09T03:00:00Z"),
   });
-  assert.equal((await leer()).codex.ventanas.semanal.usado, 51);
+  assert.equal((await read()).codex.ventanas.semanal.usado, 51);
   assert.deepEqual(await createUsage({ env: {} })(), {});
 });
 
-const AHORA = Date.parse("2026-11-09T03:00:00Z");
-const entradaClaude = {
+const NOW = Date.parse("2026-11-09T03:00:00Z");
+const claudeEntry = {
   session_id: "secreto-claude",
   cwd: "/ruta/secreta",
   rate_limits: {
@@ -124,7 +124,7 @@ const entradaClaude = {
     seven_day: { used_percentage: 100, resets_at: 1794717096 },
   },
 };
-const entradaAgy = {
+const agyEntry = {
   email: "persona@example.test",
   model: { id: "gemini-3-pro" },
   quota: {
@@ -141,101 +141,98 @@ const entradaAgy = {
     "3p-weekly": { remaining_amount: 3, reset_time: "2026-11-12T04:00:00Z" },
   },
 };
-const carpetaTemporal = async (t) => {
-  const raiz = await mkdtemp(path.join(tmpdir(), "sb-uso-linea-"));
-  t.after(() => rm(raiz, { recursive: true, force: true }));
-  return raiz;
+const temporaryFolder = async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "sb-uso-linea-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  return root;
 };
 
 test("traduce las ventanas de Claude sin inventar las que faltan", () => {
-  const ventanas = ventanasClaude(entradaClaude.rate_limits);
-  assert.equal(ventanas["5h"].usado, 23.5);
-  assert.equal(ventanas["5h"].reinicia, new Date(1794200000000).toISOString());
-  assert.equal(ventanas["5h"].agotada, false);
-  assert.equal(ventanas.semanal.agotada, true);
-  assert.deepEqual(Object.keys(ventanasClaude({ seven_day: {} })), []);
-  assert.deepEqual(ventanasClaude(undefined), {});
+  const windows = claudeWindows(claudeEntry.rate_limits);
+  assert.equal(windows["5h"].usado, 23.5);
+  assert.equal(windows["5h"].reinicia, new Date(1794200000000).toISOString());
+  assert.equal(windows["5h"].agotada, false);
+  assert.equal(windows.semanal.agotada, true);
+  assert.deepEqual(Object.keys(claudeWindows({ seven_day: {} })), []);
+  assert.deepEqual(claudeWindows(undefined), {});
 });
 
 test("traduce la cuota de Antigravity según la familia del modelo", () => {
-  const gemini = ventanasAgy(entradaAgy.quota, "gemini-3-pro");
+  const gemini = agyWindows(agyEntry.quota, "gemini-3-pro");
   assert.equal(gemini["5h"].usado, 25);
   assert.equal(gemini.semanal.usado, 6.2);
   assert.equal(gemini.semanal.reinicia, "2026-11-12T05:00:00.000Z");
   // A bucket measured in amounts has no percentage to show.
-  assert.deepEqual(Object.keys(ventanasAgy(entradaAgy.quota, "Claude Opus")), [
+  assert.deepEqual(Object.keys(agyWindows(agyEntry.quota, "Claude Opus")), [
     "5h",
   ]);
-  assert.equal(ventanasAgy(entradaAgy.quota, "gpt-5")["5h"].usado, 90);
+  assert.equal(agyWindows(agyEntry.quota, "gpt-5")["5h"].usado, 90);
   assert.deepEqual(
-    ventanasAgy(
+    agyWindows(
       { "gemini-5h": { remaining_fraction: 0.5, disabled: true } },
       "auto",
     ),
     {},
   );
-  assert.deepEqual(ventanasAgy(undefined, null), {});
+  assert.deepEqual(agyWindows(undefined, null), {});
 });
 
 test("guarda solo números y conserva lo último si llega una entrada sin límites", async (t) => {
-  const archivo = path.join(await carpetaTemporal(t), "nueva/sb-uso.json");
-  assert.equal(await saveUsageLine("claude", { cwd: "/x" }, archivo), false);
-  assert.equal(await readUsageLine(archivo), null);
-  assert.equal(
-    await saveUsageLine("claude", entradaClaude, archivo, AHORA),
-    true,
-  );
-  const crudo = await readFile(archivo, "utf8");
+  const file = path.join(await temporaryFolder(t), "nueva/sb-uso.json");
+  assert.equal(await saveUsageLine("claude", { cwd: "/x" }, file), false);
+  assert.equal(await readUsageLine(file), null);
+  assert.equal(await saveUsageLine("claude", claudeEntry, file, NOW), true);
+  const crudo = await readFile(file, "utf8");
   assert.ok(!crudo.includes("secreto"));
   assert.ok(!crudo.includes("/ruta"));
-  await saveUsageLine("claude", { rate_limits: {} }, archivo, AHORA + 1000);
+  await saveUsageLine("claude", { rate_limits: {} }, file, NOW + 1000);
   assert.equal(
-    (await readUsageLine(archivo)).actualizado,
-    new Date(AHORA).toISOString(),
+    (await readUsageLine(file)).actualizado,
+    new Date(NOW).toISOString(),
   );
   // A window the CLI drops stays recorded for `vigente` to empty it.
   await saveUsageLine(
     "claude",
-    { rate_limits: { five_hour: entradaClaude.rate_limits.five_hour } },
-    archivo,
-    AHORA + 2000,
+    { rate_limits: { five_hour: claudeEntry.rate_limits.five_hour } },
+    file,
+    NOW + 2000,
   );
-  assert.equal((await readUsageLine(archivo)).ventanas.semanal.usado, 100);
-  await writeFile(archivo, "{roto");
-  assert.equal(await readUsageLine(archivo), null);
+  assert.equal((await readUsageLine(file)).ventanas.semanal.usado, 100);
+  await writeFile(file, "{roto");
+  assert.equal(await readUsageLine(file), null);
   await writeFile(
-    archivo,
+    file,
     JSON.stringify({
       ventanas: { "5h": { usado: "mucho" }, otra: { usado: 1 } },
     }),
   );
-  assert.equal(await readUsageLine(archivo), null);
-  assert.equal(await saveUsageLine("codex", entradaClaude, archivo), false);
+  assert.equal(await readUsageLine(file), null);
+  assert.equal(await saveUsageLine("codex", claudeEntry, file), false);
 });
 
 test("cada motor con dato real aparece; el resto no recibe barras", async (t) => {
-  const raiz = await carpetaTemporal(t);
-  const claudeDir = path.join(raiz, "claude");
-  const home = path.join(raiz, "home");
+  const root = await temporaryFolder(t);
+  const claudeDir = path.join(root, "claude");
+  const home = path.join(root, "home");
   const env = { AGENTES_CLAUDE_DIR: claudeDir, HOME: home };
-  const reloj = () => AHORA;
-  assert.deepEqual(await createUsage({ env, ahora: reloj })(), {});
+  const clock = () => NOW;
+  assert.deepEqual(await createUsage({ env, ahora: clock })(), {});
   await saveUsageLine(
     "claude",
-    entradaClaude,
+    claudeEntry,
     path.join(claudeDir, "sb-uso.json"),
-    AHORA,
+    NOW,
   );
   await saveUsageLine(
     "agy",
-    entradaAgy,
+    agyEntry,
     path.join(home, ".gemini/antigravity-cli/sb-uso.json"),
-    AHORA,
+    NOW,
   );
-  const uso = await createUsage({ env, ahora: reloj })();
-  assert.deepEqual(Object.keys(uso).sort(), ["agy", "claude"]);
-  assert.equal(uso.claude.ventanas["5h"].usado, 23.5);
-  assert.equal(uso.agy.ventanas["5h"].usado, 25);
+  const usage = await createUsage({ env, ahora: clock })();
+  assert.deepEqual(Object.keys(usage).sort(), ["agy", "claude"]);
+  assert.equal(usage.claude.ventanas["5h"].usado, 23.5);
+  assert.equal(usage.agy.ventanas["5h"].usado, 25);
   const tarde = await createUsage({
     env,
     ahora: () => Date.parse("2026-11-09T06:00:00Z"),
@@ -245,71 +242,71 @@ test("cada motor con dato real aparece; el resto no recibe barras", async (t) =>
 });
 
 test("el comando de la línea guarda el uso e imprime la firma, incluso con datos rotos", async (t) => {
-  const archivo = path.join(await carpetaTemporal(t), "sb-uso.json");
+  const file = path.join(await temporaryFolder(t), "sb-uso.json");
   const script = fileURLToPath(new URL("../usage-line.mjs", import.meta.url));
-  const correr = (entrada) =>
+  const run = (entry) =>
     new Promise((resolve, reject) => {
-      const hijo = execFile(
+      const child = execFile(
         process.execPath,
-        [script, "agy", archivo, "Lira · Antigravity"],
+        [script, "agy", file, "Lira · Antigravity"],
         (error, stdout) => (error ? reject(error) : resolve(stdout)),
       );
-      hijo.stdin.end(entrada);
+      child.stdin.end(entry);
     });
-  assert.equal(await correr("{roto"), "Lira · Antigravity");
-  assert.equal(await readUsageLine(archivo), null);
-  assert.equal(await correr(JSON.stringify(entradaAgy)), "Lira · Antigravity");
-  assert.equal((await readUsageLine(archivo)).ventanas["5h"].usado, 25);
-  assert.ok(!(await readFile(archivo, "utf8")).includes("persona"));
+  assert.equal(await run("{roto"), "Lira · Antigravity");
+  assert.equal(await readUsageLine(file), null);
+  assert.equal(await run(JSON.stringify(agyEntry)), "Lira · Antigravity");
+  assert.equal((await readUsageLine(file)).ventanas["5h"].usado, 25);
+  assert.ok(!(await readFile(file, "utf8")).includes("persona"));
 });
 
 test("Ámbar y Lira miden sin pisar una línea propia; Marina no mide", async (t) => {
-  const raiz = await carpetaTemporal(t);
-  const leer = async (archivo) => JSON.parse(await readFile(archivo, "utf8"));
-  const ambar = path.join(raiz, "claude");
+  const root = await temporaryFolder(t);
+  const read = async (file) => JSON.parse(await readFile(file, "utf8"));
+  const ambar = path.join(root, "claude");
   await mkdir(ambar);
-  const opciones = { firma: "Ámbar · Claude", medir: true };
-  await prepareClaude(ambar, "/w/p", opciones);
+  const options = { firma: "Ámbar · Claude", medir: true };
+  await prepareClaude(ambar, "/w/p", options);
   const ajustes = path.join(ambar, "settings.json");
   assert.match(
-    (await leer(ajustes)).statusLine.command,
+    (await read(ajustes)).statusLine.command,
     /usage-line\.mjs.*'claude'/,
   );
   // A new release moves the script: the line follows it.
-  const propia = await leer(ajustes);
+  const propia = await read(ajustes);
   propia.statusLine.command = "node /vieja/uso-linea.mjs";
   await writeFile(ajustes, JSON.stringify(propia));
-  await prepareClaude(ambar, "/w/p", opciones);
-  assert.ok(!(await leer(ajustes)).statusLine.command.includes("/vieja"));
+  await prepareClaude(ambar, "/w/p", options);
+  assert.ok(!(await read(ajustes)).statusLine.command.includes("/vieja"));
   const personal = { type: "command", command: "mi-linea.sh" };
   await writeFile(ajustes, JSON.stringify({ statusLine: personal }));
-  await prepareClaude(ambar, "/w/p", opciones);
-  assert.deepEqual((await leer(ajustes)).statusLine, personal);
+  await prepareClaude(ambar, "/w/p", options);
+  assert.deepEqual((await read(ajustes)).statusLine, personal);
 
-  const marina = path.join(raiz, "deepseek");
+  const marina = path.join(root, "deepseek");
   await mkdir(marina);
   await prepareClaude(marina, "/w/p", { firma: "Marina · DeepSeek" });
-  const lineaMarina = (await leer(path.join(marina, "settings.json")))
-    .statusLine.command;
-  assert.ok(!lineaMarina.includes("uso-linea"));
+  const marinaLine = (await read(path.join(marina, "settings.json"))).statusLine
+    .command;
+  assert.ok(!marinaLine.includes("uso-linea"));
 
-  const home = path.join(raiz, "home");
-  const carpeta = path.join(home, ".gemini/antigravity-cli");
-  await mkdir(carpeta, { recursive: true });
+  const home = path.join(root, "home");
+  const folder = path.join(home, ".gemini/antigravity-cli");
+  await mkdir(folder, { recursive: true });
   await prepareAgy(home, "/w/p");
-  const lira = await leer(path.join(carpeta, "settings.json"));
+  const lira = await read(path.join(folder, "settings.json"));
   assert.equal(lira.statusLine.stack_with_default, true);
   assert.equal(
     lira.statusLine.command,
-    usageLine("agy", carpeta, "Lira · Antigravity").command,
+    usageLine("agy", folder, "Lira · Antigravity").command,
   );
   await writeFile(
-    path.join(carpeta, "settings.json"),
+    path.join(folder, "settings.json"),
     JSON.stringify({ statusLine: personal, trustedWorkspaces: ["/w/p"] }),
   );
   await prepareAgy(home, "/w/p");
   assert.deepEqual(
-    (await leer(path.join(carpeta, "settings.json"))).statusLine,
+    (await read(path.join(folder, "settings.json"))).statusLine,
     personal,
   );
 });
