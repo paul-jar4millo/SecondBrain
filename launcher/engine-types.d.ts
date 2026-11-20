@@ -1,6 +1,6 @@
 import type { ProviderAttachment } from "./lib/providers/shared.mjs";
 
-export interface MotorOptions {
+export interface EngineOptions {
   modelo?: string | null;
   esfuerzo?: string | null;
   conversacionId?: string | null;

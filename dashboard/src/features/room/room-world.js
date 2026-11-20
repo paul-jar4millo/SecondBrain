@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { fadeWalls } from "./room-walls.js";
 
 // Scene dressing for the Blender map: toon materials, ink lines, the faceted sea,
-// glow halos and the small animated pieces. Group names are set in ops/sala-refugio.py.
+// glow halos and the small animated pieces. Group names are set in ops/room-refuge.py.
 export const FONDO = "#0a1238";
 
 function gradiente() {
@@ -119,7 +119,7 @@ function lineasDeTinta(mapa) {
   return lineas;
 }
 
-export function vestirMundo(scene, mapa, manifiesto, { quieto = false } = {}) {
+export function dressWorld(scene, mapa, manifiesto, { quieto = false } = {}) {
   const rampa = gradiente();
   const reemplazos = new Map();
   const propio = (original) => {

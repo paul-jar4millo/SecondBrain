@@ -36,7 +36,7 @@ the systemd units in `ops/lxc/plantillas/` and by host-only files under
 | `SB_BRAIN_TOKEN_FILE` | per-user default               | Bearer token for the API       |
 | `SB_OWNER_NAME`       | `tu usuario`                   | Name used in tool descriptions |
 
-## lanzador
+## launcher
 
 | Variable                                    | Default            | Purpose                                         |
 | ------------------------------------------- | ------------------ | ----------------------------------------------- |

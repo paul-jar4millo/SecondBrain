@@ -42,7 +42,7 @@ flowchart TB
   subgraph lxc["Container"]
     service["service<br/>Node.js HTTP API<br/>auth · single vault writer · approvals"]
     mcp["mcp<br/>MCP adapter + brain CLI<br/>(stdio)"]
-    lanzador["lanzador<br/>agent session runner<br/>(user sb-agente)"]
+    launcher["launcher<br/>agent session runner<br/>(user sb-agente)"]
     vault[("vault<br/>Markdown + YAML<br/>isomorphic-git")]
     data[("DATA_DIR<br/>auth, journal, history,<br/>briefcase, approvals")]
     clis["Agent CLIs<br/>Codex app-server · Claude Agent SDK<br/>ACP (Antigravity)"]
@@ -51,10 +51,10 @@ flowchart TB
   dashboard -- "REST + SSE /api/v1" --> service
   mcp -- "HTTP /api/v1 (bearer)" --> service
   service -- "/mcp Streamable HTTP" --- mcp
-  service -- "loopback HTTP + bearer" --> lanzador
+  service -- "loopback HTTP + bearer" --> launcher
   service --> vault
   service --> data
-  lanzador --> clis
+  launcher --> clis
   clis -- "MCP tools via brain CLI (scoped token)" --> mcp
 ```
 
@@ -63,7 +63,7 @@ flowchart TB
 | `dashboard` | Installable PWA: 3D refuge, tools (projects, tasks, finance, briefcase, team), demo mode, offline outbox                                                                                         | [module guide](../modules/dashboard.md) |
 | `service`   | The only writer of the vault. Authentication (password, TOTP, OAuth for remote MCP), hash-checked writes, journal and history, finance ledger, approvals, work orders, user requests and effects | [module guide](../modules/service.md)   |
 | `mcp`       | MCP server exposing the vault, finance, briefcase and team tools to agents; a `brain` CLI for isolated sessions                                                                                  | [module guide](../modules/mcp.md)       |
-| `lanzador`  | Starts, observes and cancels agent CLIs in isolated sessions; structured conversations, checkpoints, diffs, pull requests and teams                                                              | [module guide](../modules/launcher.md)  |
+| `launcher`  | Starts, observes and cancels agent CLIs in isolated sessions; structured conversations, checkpoints, diffs, pull requests and teams                                                              | [module guide](../modules/launcher.md)  |
 | `ops`       | Release packaging, container provisioning, systemd units, encrypted backups, deployment helper                                                                                                   | [deployment](../deployment.md)          |
 
 ## Key properties

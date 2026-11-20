@@ -5,7 +5,7 @@ import { useLang } from "./core/i18n";
 import { reloadForNewVersion } from "./core/recovery";
 import "./styles/style.css";
 import "./styles/quick-views.css";
-import "./styles/refugio.css";
+import "./styles/refuge.css";
 import "./styles/assist.css";
 import "./styles/tools.css";
 import "./styles/workspaces.css";

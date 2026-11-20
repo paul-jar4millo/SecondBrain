@@ -28,5 +28,5 @@ of each module you touch.
   Tests use synthetic temporary directories; never mutate a real vault to
   verify code.
 - Architecture and limits: [docs/architecture](docs/architecture/README.md),
-  [MCP tools](docs/mcp-tools.md), [lanzador](docs/modules/launcher.md),
+  [MCP tools](docs/mcp-tools.md), [launcher](docs/modules/launcher.md),
   [deployment](docs/deployment.md).
