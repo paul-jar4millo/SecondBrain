@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { isDemo } from "../../core/store";
 import { useUI } from "../../components/ui";
-import { teamApi } from "./team-store";
+import { agentApi } from "../agents/agent-api";
 interface Pin {
   id: string;
   titulo: string;
@@ -29,7 +29,7 @@ export function ReferenceBoard({ projectId }: { projectId: string }) {
     let alive = true;
     setBoard(null);
     setError("");
-    teamApi(`/sala?espacio=${encodeURIComponent(projectId)}`)
+    agentApi(`/sala?espacio=${encodeURIComponent(projectId)}`)
       .then((data) => {
         if (alive) setBoard(data as Board);
       })
@@ -110,7 +110,7 @@ export function ReferenceBoard({ projectId }: { projectId: string }) {
                     const started = generation.current;
                     setPending((ids) => [...ids, p.id]);
                     try {
-                      const ids = (await teamApi("/sala/tablero", {
+                      const ids = (await agentApi("/sala/tablero", {
                         id: p.id,
                         guardar: !board.tablero.includes(p.id),
                         espacio: projectId,

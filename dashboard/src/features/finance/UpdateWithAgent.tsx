@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ImagePlus, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { Modal } from "../../components/ui";
+import { Modal, useUI } from "../../components/ui";
 import { dateLabel, money, today } from "../../core/model";
 import { financeUpdatePrompt } from "../../core/agent-prompt";
 import { uploadForAgents, type UploadedFile } from "../files/upload";
 import { preference, setPreference } from "../settings/preferences";
-import { prepareAgentDraft } from "../team/agent-draft";
-import { characters } from "../team/characters";
-import { AgentPortrait } from "../team/TeamPrimitives";
+import { characters } from "../agents/characters";
+import { AgentPortrait } from "../agents/TeamPrimitives";
 import type { FinanceOverview } from "./useFinance";
 
 // iOS converts HEIC to JPEG when the picker does not accept HEIC.
@@ -37,7 +35,7 @@ export function UpdateWithAgent({
   hidden: boolean;
   onClose: () => void;
 }) {
-  const navigate = useNavigate();
+  const { openThread } = useUI();
   const cards = data.cards || [];
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [balances, setBalances] = useState<Record<string, string>>({});
@@ -132,9 +130,8 @@ export function UpdateWithAgent({
         })),
         note,
       });
-      const route = prepareAgentDraft("general", agent.id, brief);
       onClose();
-      navigate(route);
+      openThread({ engine: agent.engine, prompt: brief });
     } catch (x) {
       setError((x as Error).message);
     } finally {
@@ -298,7 +295,7 @@ export function UpdateWithAgent({
             <p className="form-hint">
               Abrirás a {agent.name} con el mensaje listo y lo revisas antes de
               enviarlo. Antes de escribir en tus finanzas te pedirá aprobación
-              en Equipo.
+              en Finanzas.
             </p>
           </>
         )}

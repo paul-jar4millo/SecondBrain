@@ -18,6 +18,9 @@ export async function openWorkspaces({
     );
     if (git && (git.isDirectory() || git.isFile())) repositories.push(name);
   }
+  const repositoryPaths = Object.fromEntries(
+    repositories.map((name) => [name, projects[name]]),
+  );
   /** @type {{ revision: number, vinculos: Record<string, string | null> }} */
   let state = await readFile(file, "utf8")
     .then(JSON.parse)
@@ -34,7 +37,12 @@ export async function openWorkspaces({
   const valid = (id) =>
     typeof id === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(id);
   return {
-    leer: () => structuredClone({ ...state, repositorios: repositories }),
+    leer: () =>
+      structuredClone({
+        ...state,
+        repositorios: repositories,
+        repositoryPaths,
+      }),
     /** @param {{ id: string, repositorio: string | null, revision: number }} data */
     vincular(data) {
       const operation = queue.then(async () => {

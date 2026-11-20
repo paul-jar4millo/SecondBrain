@@ -2,13 +2,13 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { ReferenceBoard } from "../src/features/team/ReferenceBoard";
+import { ReferenceBoard } from "../src/features/projects/ReferenceBoard";
 const fixture = vi.hoisted(() => ({
   finish: null as null | ((ids: string[]) => void),
 }));
 vi.mock("../src/core/store", () => ({ isDemo: true }));
-vi.mock("../src/features/team/team-store", () => ({
-  teamApi: async (path: string) => {
+vi.mock("../src/features/agents/agent-api", () => ({
+  agentApi: async (path: string) => {
     if (path === "/sala/tablero")
       return new Promise<string[]>((resolve) => {
         fixture.finish = resolve;

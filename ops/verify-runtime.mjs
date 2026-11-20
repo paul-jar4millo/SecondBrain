@@ -84,7 +84,7 @@ async function until(what, check, ms = TURN_MS) {
     const value = await check();
     if (value) return value;
     if (Date.now() > end) throw new Error(`Tiempo agotado: ${what}`);
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 500));
   }
 }
 
@@ -92,7 +92,7 @@ async function until(what, check, ms = TURN_MS) {
 const snapshot = (id) => call(`/threads/${id}`);
 
 /**
- * Waits for the thread to rest, approving whatever the agent asks on the way.
+ * Waits for the thread to rest. A file-only smoke test needs no approvals.
  * @param {string} id
  */
 async function settle(id) {
@@ -100,12 +100,13 @@ async function settle(id) {
     const snap = await snapshot(id);
     for (const request of snap.requests ?? [])
       if (request.status === "open") {
-        const answer =
-          request.kind === "approval"
-            ? { approved: true }
-            : { text: "Sigue con lo más simple." };
+        assert.equal(
+          request.kind,
+          "question",
+          "Solicitud inesperada durante la prueba",
+        );
         await call(`/threads/${id}/requests/${request.id}`, {
-          answer,
+          answer: { text: "Sigue con lo más simple." },
           origin: "app",
         });
       }
@@ -158,14 +159,22 @@ assert.ok(
 step(`turno con ${engine} y diff`);
 
 await call(`/threads/${thread.id}/messages`, {
-  text: `Añade la línea "dos" a ${marker}.txt.`,
+  text:
+    engine === "codex"
+      ? `Ejecuta el comando \`sleep 15\` y luego añade la línea "dos" a ${marker}.txt. Es una prueba para enviar una redirección mientras el comando sigue activo.`
+      : `Añade la línea "dos" a ${marker}.txt.`,
   mode: "send",
 });
-await until("turno en curso", async () =>
-  ["running", "waiting-user"].includes(
-    (await snapshot(thread.id)).thread.status,
-  ),
-);
+await until("turno del proveedor en curso", async () => {
+  const current = await snapshot(thread.id);
+  if (engine !== "codex") return current.thread.status === "running";
+  return current.items.some(
+    (/** @type {{ kind: string; status: string; command?: string }} */ item) =>
+      item.kind === "command" &&
+      item.status === "in-progress" &&
+      item.command?.includes("sleep 15"),
+  );
+});
 const steer = await call(`/threads/${thread.id}/messages`, {
   text: `Además añade la línea "tres" al final.`,
   mode: "steer",
@@ -184,13 +193,14 @@ const closed = await call(`/threads/${thread.id}/close`, {
 assert.equal(closed.thread.status, "done");
 const baseBranch = thread.repo.baseBranch;
 const merged = await git("show", `${baseBranch}:${marker}.txt`);
-assert.match(merged, /uno/);
+assert.deepEqual(merged.split(/\r?\n/), ["uno", "dos", "tres"]);
 step(`merge local en ${baseBranch}`);
 
 await call(`/threads/${thread.id}/archive`, {});
 assert.equal(await git("branch", "--list", branch), "");
 assert.doesNotMatch(await git("worktree", "list"), new RegExp(branch));
 step("archivado sin worktree ni rama");
+if (engine === "codex") assert.equal(steer.delivery, "steer");
 
 console.log(
   JSON.stringify({ ok: true, thread: thread.id, engine, steps }, null, 2),

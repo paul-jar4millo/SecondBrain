@@ -13,7 +13,8 @@ const keys: Record<Preference, string> = {
 
 export function preference(name: Preference) {
   try {
-    return localStorage.getItem(keys[name]) || defaults[name];
+    const value = localStorage.getItem(keys[name]) || defaults[name];
+    return name === "startView" && value === "/team" ? "/threads" : value;
   } catch {
     return defaults[name];
   }

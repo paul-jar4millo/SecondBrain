@@ -156,13 +156,13 @@ describe("clicks on blocked ground", () => {
 });
 describe("honest interaction prompts", () => {
   it("names the tool and the place for each zone", () => {
-    expect(ZONES.find((z) => z.id === "terrace")!.tool).toBe("/team");
+    expect(ZONES.find((z) => z.id === "terrace")!.tool).toBe("/threads");
     expect(
       interactionPrompt(
         ZONES.find((z) => z.id === "terrace")!,
         "keyboard",
       ),
-    ).toBe("E · Equipo en la Terraza");
+    ).toBe("E · Threads en la Terraza");
     expect(
       interactionPrompt(
         ZONES.find((z) => z.id === "cafe")!,
@@ -189,7 +189,7 @@ describe("honest interaction prompts", () => {
   });
   it("lists every zone tool in plain words for the help panel", () => {
     expect(zoneGuide()).toBe(
-      "Equipo en la Terraza, Proyectos en el Taller, Tareas en la Biblioteca, Maletín en el Invernadero y Finanzas en el Café",
+      "Threads en la Terraza, Proyectos en el Taller, Tareas en la Biblioteca, Maletín en el Invernadero y Finanzas en el Café",
     );
   });
 });

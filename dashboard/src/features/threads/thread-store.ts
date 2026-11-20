@@ -233,3 +233,11 @@ export const STATUS_LABEL: Record<Thread["status"], string> = {
   failed: "Falló",
   archived: "Archivado",
 };
+
+export const isWorkingThread = (thread: Thread) =>
+  ["setting-up", "running", "in-review", "closing"].includes(thread.status);
+
+export const isAttentionThread = (thread: Thread) =>
+  ["waiting-user", "ready-for-review", "needs-decision", "failed"].includes(
+    thread.status,
+  );

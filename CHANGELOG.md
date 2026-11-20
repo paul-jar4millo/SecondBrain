@@ -4,6 +4,20 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.2] - 2026-11-20
+
+### Changed
+
+- The refuge, projects and settings use the Threads projection. Tasks,
+  projects and finance open the new thread form with the relevant context.
+  Financial approvals are available in Finance.
+- Browser verification covers desktop and mobile thread workflows. The
+  live smoke test checks that Codex receives a steer during an active turn.
+
+### Removed
+
+- The session-era Equipo dashboard and the empty session-list API shim.
+
 ## [0.4.1] - 2026-11-20
 
 ### Fixed

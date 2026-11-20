@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { UI } from "../src/components/ui";
 import { TaskRow } from "../src/features/tasks/TaskRow";
 import { newItem } from "../src/core/model";
-import { draftKey, prepareAgentDraft } from "../src/features/team/agent-draft";
+import { taskPrompt } from "../src/core/agent-prompt";
 vi.mock("../src/core/store", () => ({
   api: vi.fn(),
   isDemo: false,
@@ -19,7 +19,7 @@ afterEach(() => {
 });
 it("opens the selected agent with the task and project without saving or executing the task", async () => {
   const user = userEvent.setup(),
-    openAgent = vi.fn();
+    openThread = vi.fn();
   const task = {
     ...newItem("task"),
     id: "task-1",
@@ -36,8 +36,7 @@ it("opens the selected agent with the task and project without saving or executi
           trash: vi.fn(),
           ask: vi.fn(),
           notify: vi.fn(),
-          openAgent,
-          openTeam: vi.fn(),
+          openThread,
         }}
       >
         <TaskRow task={task} />
@@ -52,30 +51,9 @@ it("opens the selected agent with the task and project without saving or executi
   await user.click(
     screen.getByRole("button", { name: "Consultar a Lira para esta tarea" }),
   );
-  expect(openAgent).toHaveBeenCalledWith({
-    agentId: "lira",
+  expect(openThread).toHaveBeenCalledWith({
+    engine: "agy",
     projectId: "project-1",
-    taskId: "task-1",
+    prompt: taskPrompt(task, [task]),
   });
-});
-
-it("prepareAgentDraft does not duplicate identical or already included text", () => {
-  const storage = new Map<string, string>();
-  vi.stubGlobal("localStorage", {
-    getItem: (key: string) => storage.get(key) || null,
-    setItem: (key: string, value: string) => storage.set(key, value),
-  });
-
-  const key = draftKey("p1", "agy");
-  const route = prepareAgentDraft("p1", "lira", "  Revisar la tarea  ");
-  expect(route).toBe("/team?project=p1&agent=lira&chat=new");
-  expect(storage.get(key)).toBe("Revisar la tarea");
-
-  prepareAgentDraft("p1", "lira", "Revisar la tarea");
-  expect(storage.get(key)).toBe("Revisar la tarea");
-
-  storage.set(key, "Nota previa");
-  prepareAgentDraft("p1", "lira", "Revisar la tarea");
-  prepareAgentDraft("p1", "lira", "Revisar la tarea");
-  expect(storage.get(key)).toBe("Nota previa\n\nRevisar la tarea");
 });

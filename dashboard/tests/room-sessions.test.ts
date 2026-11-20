@@ -3,59 +3,39 @@ import {
   sceneSessions,
   conciliarCopias,
 } from "../src/features/room/room-sessions";
+import { characterState } from "../src/features/room/team-panel";
 
-describe("sesiones observadas", () => {
-  it("mantiene cuatro bases y crea una figura por sesión concurrente adicional", () => {
-    const state = sceneSessions([
-      {
-        id: "uno",
-        motor: "codex",
-        copia: 0,
-        estado: "trabajando",
-        fase: "revisar",
-        ultimaAccion: "Ejecutando pruebas",
-      },
-      {
-        id: "dos",
-        motor: "codex",
-        copia: 1,
-        estado: "trabajando",
-        fase: "investigar",
-        ultimaAccion: "Consultando",
-      },
-      { id: "tres", motor: "claude", copia: 0, estado: "terminada" },
+import { fixtureThread } from "./thread-fixture";
+
+describe("threads in the refuge", () => {
+  it("preserves the four base figures and adds a copy for concurrent work", () => {
+    const { agents, copies, figures } = sceneSessions([
+      fixtureThread("b", "codex", "waiting-user", "a"),
+      fixtureThread("a", "codex", "running"),
+      fixtureThread("c", "claude", "done"),
     ]);
-    expect(state.base).toHaveLength(4);
-    expect(state.base.find((s) => s.id === "menta")?.ultimo?.fase).toBe(
-      "revisar",
-    );
+    expect(agents.filter((agent) => !agent.id.includes("#"))).toHaveLength(4);
+    expect(copies).toEqual([{ id: "menta#1", baseId: "menta", copy: 1 }]);
+    expect([...figures]).toEqual([
+      ["a", "menta"],
+      ["b", "menta#1"],
+    ]);
     expect(
-      state.base.find((s) => s.id === "menta")?.ultimo?.actividad?.zona,
-    ).toBe("workshop");
-    expect(state.copias).toEqual([
-      {
-        id: "menta#1",
-        baseId: "menta",
-        copia: 1,
-        sesionId: "dos",
-        fase: "investigar",
-        etiqueta: "Consultando",
-        equipoId: undefined,
-        padreId: undefined,
-      },
-    ]);
-    expect(state.base.find((s) => s.id === "ambar")?.ocupada).toBe(false);
+      characterState(agents.find((agent) => agent.id === "menta#1")!),
+    ).toMatchObject({
+      esperando: true,
+      trabajando: false,
+      jobId: "b",
+    });
+    expect(agents.find((agent) => agent.id === "ambar")).toMatchObject({
+      ocupada: false,
+      ultimo: { jobId: "c", estado: "listo" },
+    });
   });
-  it("crea y retira solo las copias cuyo estado cambió", () => {
+
+  it("adds and removes only the copies that changed", () => {
     expect(
       conciliarCopias(["menta#1", "lira#1"], ["menta#1", "ambar#2"]),
     ).toEqual({ crear: ["ambar#2"], retirar: ["lira#1"] });
-  });
-  it("no conserva copias de sesiones terminadas ni muestra texto ausente como actividad", () => {
-    const state = sceneSessions([
-      { id: "x", motor: "agy", copia: 1, estado: "terminada" },
-    ]);
-    expect(state.copias).toEqual([]);
-    expect(state.base.find((s) => s.id === "lira")?.ocupada).toBe(false);
   });
 });

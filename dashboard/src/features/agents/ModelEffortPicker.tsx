@@ -68,7 +68,7 @@ export function resolveChoice(models: Model[], choice: ModelChoice) {
   };
 }
 
-/** Fields for POST /agentes/sesiones: what is not chosen is left to the program. */
+/** Translate explicit model and effort choices into launcher options. */
 export function choicePayload(models: Model[], choice: ModelChoice) {
   const { model, effort } = resolveChoice(models, choice);
   return {
@@ -95,7 +95,7 @@ export function ModelEffortPicker({
   const { model, efforts, effort } = resolveChoice(models, choice);
   const modelDefault = model?.esfuerzo && effortLabel(model.esfuerzo);
   return (
-    <div className="conversation-model">
+    <div className="model-effort-picker">
       <label>
         Modelo
         <select

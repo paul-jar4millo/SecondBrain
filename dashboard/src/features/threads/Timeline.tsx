@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageItem, WorkItem, agentName } from "./items";
+import { MessageItem, WorkItem } from "./items";
+import { agentName } from "../agents/characters";
 import { RequestCard } from "./RequestCard";
 import {
   formatDuration,

@@ -34,8 +34,8 @@ export const ZONES = [
     place: "la Terraza",
     x: 0,
     z: 4,
-    tool: "/team",
-    toolName: "Equipo",
+    tool: "/threads",
+    toolName: "Threads",
   },
   {
     id: "workshop",
@@ -86,7 +86,7 @@ export function interactionPrompt(
     : `${key} · ${target.toolName} en ${target.place}`;
 }
 
-/** "Equipo en la Terraza, …  y Finanzas en el Café" for the help panel. */
+/** "Threads en la Terraza, …  y Finanzas en el Café" for the help panel. */
 export function zoneGuide() {
   const parts = ZONES.map((z) => `${z.toolName} en ${z.place}`);
   return `${parts.slice(0, -1).join(", ")} y ${parts.at(-1)}`;

@@ -22,8 +22,7 @@ const ui = {
   trash: vi.fn(),
   notify: vi.fn(),
   ask: vi.fn(),
-  openAgent: vi.fn(),
-  openTeam: vi.fn(),
+  openThread: vi.fn(),
 };
 
 it("shows a failed backup ahead of the reminders, with the last good one", () => {

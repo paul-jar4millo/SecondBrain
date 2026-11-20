@@ -1,3 +1,4 @@
+import { ApprovalPanel } from "./ApprovalPanel";
 import { useMemo, useState } from "react";
 import {
   Plus,
@@ -129,6 +130,7 @@ export function FinancePage() {
     return (
       <>
         {heading}
+        <ApprovalPanel hideEmpty />
         {error ? (
           <p className="form-error" role="alert">
             {error}
@@ -142,6 +144,7 @@ export function FinancePage() {
     return (
       <>
         {heading}
+        <ApprovalPanel hideEmpty />
         <Empty heading="Aún no hay datos financieros." />
         <p className="page-guide">
           Tus tarjetas aparecerán aquí cuando se registre su información. Puedes
@@ -172,6 +175,7 @@ export function FinancePage() {
   return (
     <>
       {heading}
+      <ApprovalPanel hideEmpty />
       <nav className="finance-jumps" aria-label="Vistas rápidas de finanzas">
         <a href="#financial-cards">Tarjetas y pagos</a>
         <a href="#financial-categories">Gráfica de gastos</a>
