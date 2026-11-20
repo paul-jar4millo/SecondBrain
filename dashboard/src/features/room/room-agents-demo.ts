@@ -1,5 +1,23 @@
+interface DemoAgent {
+  id: string;
+  ultimo: Record<string, unknown> | null;
+  historial?: Record<string, unknown>[];
+  configuracion?: DemoConfig;
+  [field: string]: unknown;
+}
+interface DemoConfig {
+  modelo?: string;
+  esfuerzo?: string;
+}
+interface DemoBody {
+  id: string;
+  modelo?: string;
+  esfuerzo?: string;
+  [field: string]: unknown;
+}
+
 /** Synthetic values for `?demo=1`, which has no backend. */
-export const DEMO_AGENTS = {
+export const DEMO_AGENTS: { conectado: boolean; agentes: DemoAgent[] } = {
   conectado: true,
   agentes: [
     {
@@ -52,8 +70,9 @@ export const DEMO_AGENTS = {
 };
 
 /** Explicitly synthetic showcase; this path never invokes providers. */
-export function demoAgentsApi(path, body) {
-  const stored = JSON.parse(
+export function demoAgentsApi(path: string, body?: unknown) {
+  const request = body as DemoBody;
+  const stored: Record<string, DemoConfig> = JSON.parse(
     localStorage.getItem("sb-demo-agent-config") || "{}",
   );
   if (path === "/agentes") {
@@ -108,7 +127,7 @@ export function demoAgentsApi(path, body) {
     const id = new URLSearchParams(path.split("?")[1]).get("id");
     return {
       manual: id === "marina",
-      configuracion: stored[id] || {},
+      configuracion: (id && stored[id]) || {},
       modelos:
         id === "menta"
           ? [
@@ -145,21 +164,22 @@ export function demoAgentsApi(path, body) {
     };
   }
   if (path === "/agentes/configuracion") {
-    stored[body.id] = { modelo: body.modelo, esfuerzo: body.esfuerzo };
+    stored[request.id] = { modelo: request.modelo, esfuerzo: request.esfuerzo };
     localStorage.setItem("sb-demo-agent-config", JSON.stringify(stored));
-    return stored[body.id];
+    return stored[request.id];
   }
   if (path === "/agentes/encargos") {
-    const a = DEMO_AGENTS.agentes.find((a) => a.id === body.id);
+    const a = DEMO_AGENTS.agentes.find((a) => a.id === request.id);
+    if (!a) throw new Error("Agente de demostración desconocido.");
     a.ultimo = {
-      ...body,
+      ...request,
       jobId: crypto.randomUUID(),
       estado: "listo",
       inicio: new Date().toISOString(),
       fin: new Date().toISOString(),
       respuesta:
         "# Demostración\n\nRespuesta sintética. En esta demo no se ejecutan modelos.",
-      configuracion: stored[body.id] || {},
+      configuracion: stored[request.id] || {},
     };
     a.historial = [a.ultimo, ...(a.historial || [])].slice(0, 10);
     return a;
