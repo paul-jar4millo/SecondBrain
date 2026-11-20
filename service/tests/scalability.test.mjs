@@ -6,7 +6,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Vault } from "../vault.mjs";
 import { createApplication } from "../index.mjs";
-import { createLanzador } from "../lanzador.mjs";
+import { createLanzador } from "../launcher-client.mjs";
 import { Failure } from "../vault.mjs";
 import http from "node:http";
 

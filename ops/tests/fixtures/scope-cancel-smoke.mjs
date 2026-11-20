@@ -1,6 +1,6 @@
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
-import { abrirRegistro } from "/opt/secondbrain/current/lanzador/sesiones.mjs";
-import { crearEjecutor } from "/opt/secondbrain/current/lanzador/ejecucion.mjs";
+import { abrirRegistro } from "/opt/secondbrain/current/lanzador/sessions.mjs";
+import { crearEjecutor } from "/opt/secondbrain/current/lanzador/executor.mjs";
 import { setTimeout as delay } from "node:timers/promises";
 const dir = await mkdtemp("/var/lib/sb-agente/scope-cancel-");
 let descendant;

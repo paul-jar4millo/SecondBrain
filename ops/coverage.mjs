@@ -7,12 +7,21 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+/**
+ * @param {string} cwd
+ * @param {string} command
+ * @param {string[]} args
+ * @param {boolean} [shell]
+ */
 const run = (cwd, command, args, shell = false) => {
   const result = spawnSync(command, args, { cwd, stdio: "inherit", shell });
   if (result.status !== 0) process.exit(result.status ?? 1);
 };
 
-/** Line coverage from an LCOV file: sum of LH over sum of LF. */
+/**
+ * Line coverage from an LCOV file: sum of LH over sum of LF.
+ * @param {string} file
+ */
 const linePercent = (file) => {
   let found = 0;
   let hit = 0;
@@ -23,7 +32,20 @@ const linePercent = (file) => {
   return found ? ((hit / found) * 100).toFixed(1) : "0.0";
 };
 
-for (const module of ["service", "mcp", "lanzador"]) {
+// Minimum line coverage per module. Raise a floor when coverage improves; never
+// lower it. Baseline 2026-11-19 (v0.1.2), raised after the type work.
+const floors = { service: 87, mcp: 41, lanzador: 68, dashboard: 40 };
+/** @type {string[]} */
+const failures = [];
+/** @param {keyof typeof floors} module */
+const check = (module) => {
+  const percent = linePercent(path.join(root, "coverage", module, "lcov.info"));
+  console.log(`${module}: ${percent}% lines (floor ${floors[module]}%)`);
+  if (Number(percent) < floors[module])
+    failures.push(`${module} ${percent}% < ${floors[module]}%`);
+};
+
+for (const module of /** @type {const} */ (["service", "mcp", "lanzador"])) {
   const dir = path.join(root, module);
   const out = path.join(root, "coverage", module);
   mkdirSync(out, { recursive: true });
@@ -41,12 +63,17 @@ for (const module of ["service", "mcp", "lanzador"]) {
     `--test-reporter-destination=${path.join(out, "lcov.info")}`,
     ...tests,
   ]);
-  console.log(`${module}: ${linePercent(path.join(out, "lcov.info"))}% lines`);
+  check(module);
 }
 console.log("\n== dashboard");
-run(
-  path.join(root, "dashboard"),
-  "npx",
-  ["vitest", "run", "--coverage"],
-  process.platform === "win32",
-);
+// On Windows npx is a .cmd shim and needs a shell; pass one command string so
+// Node does not concatenate unescaped arguments (DEP0190).
+if (process.platform === "win32")
+  run(path.join(root, "dashboard"), "npx vitest run --coverage", [], true);
+else run(path.join(root, "dashboard"), "npx", ["vitest", "run", "--coverage"]);
+check("dashboard");
+
+if (failures.length) {
+  console.error(`\nCoverage below the floor: ${failures.join(", ")}`);
+  process.exit(1);
+}

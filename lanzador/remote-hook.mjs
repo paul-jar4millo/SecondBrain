@@ -1,4 +1,3 @@
-// @ts-check
 import { mkdir, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
 try {
@@ -12,8 +11,14 @@ try {
   const e = JSON.parse(text);
   const native = e.session_id || e.conversationId;
   const session = process.env.SB_SESSION_ID;
-  if (/^[a-f0-9-]{36}$/i.test(native) && /^[a-f0-9-]{36}$/i.test(session)) {
-    const dir = path.join(process.env.HOME, "estado/lanzador/links");
+  const home = process.env.HOME;
+  if (
+    home !== undefined &&
+    session !== undefined &&
+    /^[a-f0-9-]{36}$/i.test(native) &&
+    /^[a-f0-9-]{36}$/i.test(session)
+  ) {
+    const dir = path.join(home, "estado/lanzador/links");
     await mkdir(dir, { recursive: true });
     const file = path.join(dir, native + ".json");
     const tmp = file + "." + process.pid;

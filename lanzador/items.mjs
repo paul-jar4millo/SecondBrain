@@ -1,4 +1,3 @@
-// @ts-check
 import { watch } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -6,7 +5,7 @@ import path from "node:path";
 /**
  * Structured conversation for the dashboard: provider transcripts become a flat
  * list of items (user, assistant, tool, error, system) with tool calls paired to
- * their results. `leerConversacion` (conversaciones.mjs) keeps feeding
+ * their results. `leerConversacion` (conversations.mjs) keeps feeding
  * `sesion.mensajes`; this module is the live, richer view.
  */
 
@@ -18,6 +17,77 @@ export const LOTE_INICIAL = 300;
 // A transcript this large is read from its tail: the oldest turns are not live.
 const MAX_LECTURA = 8 * 1024 * 1024;
 
+/**
+ * @typedef {object} TranscriptItem
+ * @property {string} id
+ * @property {"usuario" | "asistente" | "herramienta" | "error" | "sistema"} tipo
+ * @property {string | null} ts
+ * @property {string} [texto]
+ * @property {TranscriptTool} [herramienta]
+ */
+/**
+ * @typedef {object} TranscriptTool
+ * @property {string} nombre
+ * @property {string} resumen
+ * @property {"pendiente" | "error" | "ok"} estado
+ * @property {string} [resultado]
+ */
+/** @typedef {TranscriptItem & { tipo: "herramienta", herramienta: TranscriptTool }} TranscriptToolItem */
+/**
+ * @typedef {object} TranscriptBlock
+ * @property {string} [type]
+ * @property {string} [text]
+ * @property {string} [id]
+ * @property {string} [name]
+ * @property {unknown} [input]
+ * @property {string} [tool_use_id]
+ * @property {unknown} [content]
+ * @property {boolean} [is_error]
+ */
+/**
+ * @typedef {object} CodexTranscriptPayload
+ * @property {string} [type]
+ * @property {string} [message]
+ * @property {string} [role]
+ * @property {TranscriptBlock[]} [content]
+ * @property {string} [id]
+ * @property {string} [call_id]
+ * @property {string} [name]
+ * @property {unknown} [arguments]
+ * @property {unknown} [input]
+ * @property {unknown} [action]
+ * @property {unknown} [output]
+ */
+/**
+ * @typedef {object} TranscriptEvent
+ * @property {string} [type]
+ * @property {string} [subtype]
+ * @property {string | number} [id]
+ * @property {string | number} [step_id]
+ * @property {string} [uuid]
+ * @property {string} [timestamp]
+ * @property {string} [created_at]
+ * @property {string} [content]
+ * @property {unknown} [error]
+ * @property {{ content?: string | TranscriptBlock[] }} [message]
+ * @property {boolean} [isSidechain]
+ * @property {boolean} [isMeta]
+ * @property {boolean} [isApiErrorMessage]
+ * @property {CodexTranscriptPayload} [payload]
+ * @property {string} [tool_name]
+ * @property {string} [toolName]
+ * @property {string} [name]
+ * @property {unknown} [args]
+ * @property {unknown} [input]
+ */
+/** @typedef {ReturnType<typeof crearAcumulador>} Accumulator */
+/** @typedef {Pick<import("./session-types.d.ts").LauncherSession, "id" | "motor" | "conversacionId">} TranscriptSession */
+/** @typedef {(items: TranscriptItem[]) => void} TranscriptListener */
+
+/**
+ * @param {unknown} texto
+ * @param {number} max
+ */
 const corto = (texto, max) => {
   const valor = String(texto ?? "");
   return valor.length > max ? valor.slice(0, max - 1) + "…" : valor;
@@ -35,7 +105,10 @@ const CLAVES_RESUMEN = [
   "prompt",
 ];
 
-/** Short, single-line description of a tool input. */
+/**
+ * Short, single-line description of a tool input.
+ * @param {unknown} entrada
+ */
 export function resumirEntrada(entrada) {
   if (entrada === null || entrada === undefined) return "";
   if (typeof entrada === "string")
@@ -43,8 +116,9 @@ export function resumirEntrada(entrada) {
   if (Array.isArray(entrada) && entrada.every((x) => typeof x === "string"))
     return corto(entrada.join(" "), MAX_RESUMEN);
   if (typeof entrada === "object") {
+    const objeto = /** @type {Record<string, unknown>} */ (entrada);
     for (const clave of CLAVES_RESUMEN) {
-      const valor = entrada[clave];
+      const valor = objeto[clave];
       if (typeof valor === "string" && valor.trim())
         return corto(valor.replace(/\s+/g, " ").trim(), MAX_RESUMEN);
       if (Array.isArray(valor) && valor.length)
@@ -59,10 +133,11 @@ export function resumirEntrada(entrada) {
   return corto(entrada, MAX_RESUMEN);
 }
 
+/** @param {unknown} contenido */
 function textoDe(contenido) {
   if (typeof contenido === "string") return contenido;
   if (Array.isArray(contenido))
-    return contenido
+    return /** @type {(string | TranscriptBlock)[]} */ (contenido)
       .map((x) =>
         typeof x === "string"
           ? x
@@ -74,37 +149,45 @@ function textoDe(contenido) {
       )
       .filter(Boolean)
       .join("\n");
-  if (contenido && typeof contenido === "object")
-    return typeof contenido.text === "string"
-      ? contenido.text
-      : typeof contenido.content === "string"
-        ? contenido.content
+  if (contenido && typeof contenido === "object") {
+    const bloque = /** @type {TranscriptBlock} */ (contenido);
+    return typeof bloque.text === "string"
+      ? bloque.text
+      : typeof bloque.content === "string"
+        ? bloque.content
         : JSON.stringify(contenido);
+  }
   return "";
 }
 
 /** State shared by the per-provider readers: ordered items plus changed ids. */
 function crearAcumulador() {
+  /** @type {Map<string, TranscriptItem>} */
   const items = new Map();
+  /** @type {Set<string>} */
   const cambiados = new Set();
+  /** @type {Map<string, TranscriptToolItem>} */
   const herramientas = new Map();
   return {
     herramientas,
+    /** @param {TranscriptItem} item */
     poner(item) {
       items.set(item.id, item);
       cambiados.add(item.id);
       if (items.size > MAX_ITEMS) {
-        const viejo = items.keys().next().value;
+        // Over the limit the map is never empty, so the oldest key exists.
+        const viejo = /** @type {string} */ (items.keys().next().value);
         items.delete(viejo);
         cambiados.delete(viejo);
       }
     },
+    /** @param {string} id */
     existe: (id) => items.has(id),
     todos: () => [...items.values()].map((x) => structuredClone(x)),
     drenar() {
       const lista = [...cambiados]
         .map((id) => items.get(id))
-        .filter(Boolean)
+        .filter((x) => x !== undefined)
         .map((x) => structuredClone(x));
       cambiados.clear();
       return lista;
@@ -112,6 +195,13 @@ function crearAcumulador() {
   };
 }
 
+/**
+ * @param {string} id
+ * @param {unknown} nombre
+ * @param {unknown} entrada
+ * @param {string | null} ts
+ * @returns {TranscriptToolItem}
+ */
 const herramienta = (id, nombre, entrada, ts) => ({
   id,
   tipo: "herramienta",
@@ -123,6 +213,13 @@ const herramienta = (id, nombre, entrada, ts) => ({
   ts,
 });
 
+/**
+ * @param {Accumulator} acc
+ * @param {string} clave
+ * @param {string} texto
+ * @param {boolean} error
+ * @param {string | null} ts
+ */
 function cerrarHerramienta(acc, clave, texto, error, ts) {
   const item = acc.herramientas.get(clave);
   if (!item) return;
@@ -134,6 +231,11 @@ function cerrarHerramienta(acc, clave, texto, error, ts) {
 
 const INTERNO_CLAUDE = /^<(?:command-|local-command|system-reminder|bash-)/;
 
+/**
+ * @param {TranscriptEvent} e
+ * @param {Accumulator} acc
+ * @param {number} linea
+ */
 function leerClaude(e, acc, linea) {
   if (e.isSidechain || e.isMeta) return;
   const ts = e.timestamp ?? null;
@@ -142,7 +244,9 @@ function leerClaude(e, acc, linea) {
       id: `${e.uuid ?? "l" + linea}:error`,
       tipo: "error",
       texto: corto(
-        e.error?.message || e.content || "El proveedor devolvió un error.",
+        /** @type {{ message?: unknown }} */ (e.error)?.message ||
+          e.content ||
+          "El proveedor devolvió un error.",
         2000,
       ),
       ts,
@@ -198,6 +302,10 @@ function leerClaude(e, acc, linea) {
 const INTERNO_CODEX = /^<(?:environment_context|user_instructions|ide-context)/;
 const PREFIJO_LANZADOR = /^Contexto SecondBrain: sesión [a-f0-9-]+\.\s*/i;
 
+/**
+ * @param {unknown} valor
+ * @returns {unknown}
+ */
 function argumentos(valor) {
   if (typeof valor !== "string") return valor;
   try {
@@ -207,7 +315,10 @@ function argumentos(valor) {
   }
 }
 
-/** Codex wraps shell output as {"output": "...", "metadata": {"exit_code": n}}. */
+/**
+ * Codex wraps shell output as {"output": "...", "metadata": {"exit_code": n}}.
+ * @param {unknown} salida
+ */
 function resultadoCodex(salida) {
   let valor = salida;
   if (typeof valor === "string" && valor.trimStart().startsWith("{"))
@@ -217,16 +328,26 @@ function resultadoCodex(salida) {
       /* plain text that merely starts with a brace */
     }
   if (valor && typeof valor === "object" && !Array.isArray(valor)) {
-    const codigo = valor.metadata?.exit_code;
+    const objeto =
+      /** @type {{ metadata?: { exit_code?: unknown }, output?: unknown, content?: unknown, success?: boolean }} */ (
+        valor
+      );
+    const codigo = objeto.metadata?.exit_code;
     return {
-      texto: textoDe(valor.output ?? valor.content ?? valor),
+      texto: textoDe(objeto.output ?? objeto.content ?? valor),
       error:
-        (typeof codigo === "number" && codigo !== 0) || valor.success === false,
+        (typeof codigo === "number" && codigo !== 0) ||
+        objeto.success === false,
     };
   }
   return { texto: textoDe(valor), error: false };
 }
 
+/**
+ * @param {TranscriptEvent} e
+ * @param {Accumulator} acc
+ * @param {number} linea
+ */
 function leerCodex(e, acc, linea) {
   if (e.type === "event_msg" && e.payload?.type === "error") {
     acc.poner({
@@ -240,9 +361,9 @@ function leerCodex(e, acc, linea) {
   if (e.type !== "response_item") return;
   const p = e.payload ?? {};
   const ts = e.timestamp ?? null;
-  if (p.type === "message" && ["user", "assistant"].includes(p.role)) {
+  if (p.type === "message" && ["user", "assistant"].includes(p.role ?? "")) {
     let texto = (p.content ?? [])
-      .filter((c) => ["input_text", "output_text"].includes(c.type))
+      .filter((c) => ["input_text", "output_text"].includes(c.type ?? ""))
       .map((c) => c.text)
       .join("\n")
       .trim();
@@ -258,7 +379,9 @@ function leerCodex(e, acc, linea) {
       ts,
     });
   } else if (
-    ["function_call", "custom_tool_call", "local_shell_call"].includes(p.type)
+    ["function_call", "custom_tool_call", "local_shell_call"].includes(
+      p.type ?? "",
+    )
   ) {
     const clave = p.call_id ?? p.id ?? `l${linea}`;
     const item = herramienta(
@@ -270,7 +393,9 @@ function leerCodex(e, acc, linea) {
     acc.herramientas.set(clave, item);
     acc.poner(item);
   } else if (
-    ["function_call_output", "custom_tool_call_output"].includes(p.type) &&
+    ["function_call_output", "custom_tool_call_output"].includes(
+      p.type ?? "",
+    ) &&
     p.call_id
   ) {
     const { texto, error } = resultadoCodex(p.output);
@@ -283,6 +408,11 @@ function leerCodex(e, acc, linea) {
 const PASO_HERRAMIENTA =
   /TOOL|COMMAND|FILE|SEARCH|GREP|LIST_DIR|VIEW|MCP|BROWSER/i;
 
+/**
+ * @param {TranscriptEvent} e
+ * @param {Accumulator} acc
+ * @param {number} linea
+ */
 function leerAgy(e, acc, linea) {
   const id = String(e.id ?? e.step_id ?? `l${linea}`);
   const ts = e.timestamp ?? e.created_at ?? null;
@@ -312,6 +442,7 @@ function leerAgy(e, acc, linea) {
   }
 }
 
+/** @type {Record<string, (event: TranscriptEvent, acc: Accumulator, line: number) => void>} */
 const LECTORES = {
   claude: leerClaude,
   deepseek: leerClaude,
@@ -322,6 +453,7 @@ const LECTORES = {
 /**
  * Incremental reader: `alimentar` takes whole lines (never a partial one) and
  * `drenar` returns only the items that were created or updated since.
+ * @param {string} motor
  */
 export function crearNormalizador(motor) {
   const leer = LECTORES[motor];
@@ -329,10 +461,12 @@ export function crearNormalizador(motor) {
   const acc = crearAcumulador();
   let linea = 0;
   return {
+    /** @param {string} texto */
     alimentar(texto) {
       for (const cruda of texto.split("\n")) {
         linea++;
         if (!cruda.trim()) continue;
+        /** @type {TranscriptEvent} */
         let evento;
         try {
           evento = JSON.parse(cruda);
@@ -347,7 +481,11 @@ export function crearNormalizador(motor) {
   };
 }
 
-/** Whole-transcript convenience used by tests and one-off reads. */
+/**
+ * Whole-transcript convenience used by tests and one-off reads.
+ * @param {string} motor
+ * @param {string} texto
+ */
 export function normalizarItems(motor, texto) {
   const normalizador = crearNormalizador(motor);
   normalizador.alimentar(texto);
@@ -358,12 +496,21 @@ export function normalizarItems(motor, texto) {
 
 const UUID = /^[a-f0-9-]{36}$/i;
 
+/**
+ * @param {string} raiz
+ * @param {string} id
+ */
 async function buscarCodex(raiz, id) {
+  /** @type {string[]} */
   const hallado = [];
+  /**
+   * @param {string} dir
+   * @param {number} profundidad
+   */
   async function recorrer(dir, profundidad) {
     if (profundidad > 4 || hallado.length) return;
     for (const entrada of await readdir(dir, { withFileTypes: true }).catch(
-      () => [],
+      /** @returns {[]} */ () => [],
     )) {
       if (entrada.isSymbolicLink()) continue;
       const completa = path.join(dir, entrada.name);
@@ -380,11 +527,17 @@ async function buscarCodex(raiz, id) {
   return hallado[0] ?? null;
 }
 
-/** Path of the provider transcript of a session, or null while it does not exist. */
+/**
+ * Path of the provider transcript of a session, or null while it does not exist.
+ * @param {TranscriptSession} sesion
+ * @param {NodeJS.ProcessEnv} env
+ */
 export async function localizarTranscript(sesion, env) {
-  const ids = [sesion.conversacionId, sesion.id].filter(
-    (id, i, todos) =>
-      typeof id === "string" && UUID.test(id) && todos.indexOf(id) === i,
+  const ids = /** @type {string[]} */ (
+    [sesion.conversacionId, sesion.id].filter(
+      (id, i, todos) =>
+        typeof id === "string" && UUID.test(id) && todos.indexOf(id) === i,
+    )
   );
   const casa = env.HOME ?? "";
   if (sesion.motor === "claude" || sesion.motor === "deepseek") {
@@ -395,7 +548,7 @@ export async function localizarTranscript(sesion, env) {
       "projects",
     );
     for (const dir of await readdir(raiz, { withFileTypes: true }).catch(
-      () => [],
+      /** @returns {[]} */ () => [],
     )) {
       if (!dir.isDirectory() || dir.isSymbolicLink()) continue;
       for (const id of ids) {
@@ -444,13 +597,22 @@ export async function localizarTranscript(sesion, env) {
  * Follows one transcript by byte offset: fs.watch wakes it up, a timer is the
  * safety net (watchers are unreliable on some filesystems). Only appended bytes
  * are read; a truncated file starts over.
+ * @param {{
+ *   localizar: () => Promise<string | null>,
+ *   motor: string,
+ *   intervalo: number,
+ *   alCambiar: TranscriptListener
+ * }} options
  */
 function seguirArchivo({ localizar, motor, intervalo, alCambiar }) {
   const normalizador0 = () => crearNormalizador(motor);
   let normalizador = normalizador0();
+  /** @type {string | null} */
   let archivo = null;
   let offset = 0;
+  /** @type {string | null} null after a seek, until the next full line. */
   let resto = "";
+  /** @type {import("node:fs").FSWatcher | null} */
   let vigia = null;
   let ocupado = false;
   let pendiente = false;
@@ -484,7 +646,9 @@ function seguirArchivo({ localizar, motor, intervalo, alCambiar }) {
             /* the timer still follows the file */
           }
         }
-        const info = await stat(archivo).catch(() => null);
+        const info = await stat(archivo).catch(
+          /** @returns {null} */ () => null,
+        );
         if (!info) {
           archivo = null;
           cerrarVigia();
@@ -544,20 +708,34 @@ function seguirArchivo({ localizar, motor, intervalo, alCambiar }) {
 /**
  * Shares one follower per session among all its readers and stops it with the
  * last one, so an idle transcript costs nothing.
+ * @param {{
+ *   registro: { leer(): readonly TranscriptSession[] },
+ *   env?: NodeJS.ProcessEnv,
+ *   intervalo?: number
+ * }} options
  */
 export function crearItems({ registro, env = process.env, intervalo = 1000 }) {
+  /** @type {Map<string, { lectores: Set<TranscriptListener>, seguidor: ReturnType<typeof seguirArchivo> }>} */
   const seguidores = new Map();
   return {
     activos: () => seguidores.size,
-    /** `alCambiar(items)` receives created/updated items. */
+    /**
+     * `alCambiar(items)` receives created/updated items.
+     * @param {string} id
+     * @param {TranscriptListener} alCambiar
+     */
     suscribir(id, alCambiar) {
       const sesion = registro.leer().find((s) => s.id === id);
       if (!sesion || !LECTORES[sesion.motor])
-        return { ultimos: () => [], off() {} };
-      let entrada = seguidores.get(id);
-      if (!entrada) {
-        entrada = { lectores: new Set() };
-        entrada.seguidor = seguirArchivo({
+        return {
+          ultimos: /** @returns {TranscriptItem[]} */ () => [],
+          off() {},
+        };
+      let existente = seguidores.get(id);
+      if (!existente) {
+        /** @type {Set<TranscriptListener>} */
+        const lectores = new Set();
+        const seguidor = seguirArchivo({
           motor: sesion.motor,
           intervalo,
           localizar: () =>
@@ -566,13 +744,16 @@ export function crearItems({ registro, env = process.env, intervalo = 1000 }) {
               env,
             ),
           alCambiar: (lista) => {
-            for (const lector of entrada.lectores) lector(lista);
+            for (const lector of lectores) lector(lista);
           },
         });
-        seguidores.set(id, entrada);
+        existente = { lectores, seguidor };
+        seguidores.set(id, existente);
       }
+      const entrada = existente;
       entrada.lectores.add(alCambiar);
       return {
+        /** @param {number} [n] */
         ultimos: (n) => entrada.seguidor.ultimos(n),
         off() {
           entrada.lectores.delete(alCambiar);

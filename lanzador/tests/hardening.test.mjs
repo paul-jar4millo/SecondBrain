@@ -15,11 +15,11 @@ import { once } from "node:events";
 import { request } from "node:http";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { abrirRegistro } from "../sesiones.mjs";
-import { crearEjecutor } from "../ejecucion.mjs";
+import { abrirRegistro } from "../sessions.mjs";
+import { crearEjecutor } from "../executor.mjs";
 import { crearServidor } from "../index.mjs";
 import { createHash } from "node:crypto";
-import { observarConversaciones } from "../conversaciones.mjs";
+import { observarConversaciones } from "../conversations.mjs";
 
 async function fixture(t) {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-audit-p2-"));

@@ -1,4 +1,3 @@
-// @ts-check
 import {
   mkdir,
   open,
@@ -10,7 +9,13 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
+
+/** @import { JournalEntry, VaultIssue } from "./vault-types.d.ts" */
+/** @import { Vault } from "./vault.mjs" */
+
+/** @param {string} text */
 const hash = (text) => createHash("sha256").update(text).digest("hex");
+/** @param {string} file */
 const read = async (file) => {
   try {
     return await readFile(file, "utf8");
@@ -20,12 +25,23 @@ const read = async (file) => {
   }
 };
 export class Journal {
+  /**
+   * @param {Pick<Vault, "safe">} vault
+   * @param {string} directory
+   * @param {JournalEntry[]} [entries]
+   * @param {string} [file]
+   */
   constructor(vault, directory, entries = [], file) {
     this.vault = vault;
     this.directory = directory;
     this.entries = entries;
     this.file = file || path.join(directory, randomUUID() + ".json");
   }
+  /**
+   * @param {string} relative
+   * @param {string | null} before
+   * @param {string} after
+   */
   async record(relative, before, after) {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     this.entries.push({ relative, before, afterHash: hash(after) });
@@ -84,6 +100,11 @@ export class Journal {
     else await this.commit();
     return warnings;
   }
+  /**
+   * @param {Pick<Vault, "safe">} vault
+   * @param {string} directory
+   * @returns {Promise<VaultIssue[]>}
+   */
   static async recover(vault, directory) {
     let files;
     try {

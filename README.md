@@ -114,7 +114,7 @@ npm run coverage                    # per-module coverage table
 ## Roadmap
 
 - Finish moving tool content to the i18n dictionaries.
-- Split `service/index.mjs` and `lanzador/ejecucion.mjs` into route and
+- Split `service/index.mjs` and `lanzador/executor.mjs` into route and
   lifecycle modules (the provider controllers are already split).
 - Extend `@ts-check` to the remaining Node files.
 - Raise MCP and dashboard coverage.

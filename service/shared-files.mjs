@@ -1,8 +1,32 @@
-// @ts-check
 import { createHash, randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+/** @import { Readable } from "node:stream" */
+
+/**
+ * @typedef {object} SharedFileRecord
+ * @property {string} id
+ * @property {string} area
+ * @property {string} name
+ * @property {number} size
+ * @property {string} sha256
+ * @property {string} mime
+ * @property {string} [actor]
+ * @property {string} note
+ * @property {boolean} pinned
+ * @property {string} createdAt
+ * @property {string} expiresAt
+ * @property {string} [trashedAt]
+ */
+/**
+ * @typedef {object} SharedUpload
+ * @property {string | null} area
+ * @property {unknown} name
+ * @property {unknown} [note]
+ * @property {string} [actor]
+ */
+
 /**
  * "Maletín": a folder shared between the owner (browser) and the agents (MCP/API).
  * Files live outside the vault under opaque ids; the index maps ids to names, so
@@ -16,6 +40,7 @@ export const MAX_TOTAL = 2 * 1024 * 1024 * 1024;
 export const MAX_INLINE = 8 * 1024 * 1024;
 const RETENTION_DAYS = 30;
 const TRASH_DAYS = 7;
+/** @type {Record<string, string>} */
 const TYPES = {
   txt: "text/plain",
   md: "text/markdown",
@@ -46,13 +71,15 @@ const TYPES = {
 // as attachments (see downloadHeaders), so the type only guides how agents read.
 const UNKNOWN_TYPE = "application/octet-stream";
 const MAX_NAME = 120;
+/** @param {unknown} value */
 export function cleanName(value) {
-  const base = String(value ?? "")
-    .replace(/\\/g, "/")
-    .split("/")
-    .pop()
-    .replace(/[\u0000-\u001f\u007f"<>:|?*]/g, "")
-    .trim();
+  const base =
+    String(value ?? "")
+      .replace(/\\/g, "/")
+      .split("/")
+      .at(-1)
+      ?.replace(/[\u0000-\u001f\u007f"<>:|?*]/g, "")
+      .trim() ?? "";
   if (/^\.*$/.test(base)) return "";
   // Long names keep their extension, which is what identifies the file.
   const extension = path.extname(base).slice(0, 20);
@@ -60,11 +87,12 @@ export function cleanName(value) {
     ? base.slice(0, MAX_NAME - extension.length) + extension
     : base;
 }
-export function createSharedFiles(
-  directory,
-  Failure,
-  { onChange } = /** @type {any} */ ({}),
-) {
+/**
+ * @param {string} directory
+ * @param {new (message: string, status?: number) => Error} Failure
+ * @param {{ onChange?: () => void }} [options]
+ */
+export function createSharedFiles(directory, Failure, { onChange } = {}) {
   const root = path.resolve(directory);
   const indexFile = path.join(root, "index.json");
   /** @type {Promise<unknown>} */
@@ -79,22 +107,31 @@ export function createSharedFiles(
     queue = run.catch(() => {});
     return run;
   };
+  /** @returns {Promise<SharedFileRecord[]>} */
   async function load() {
     await mkdir(root, { recursive: true });
     try {
-      return JSON.parse(await readFile(indexFile, "utf8")).files ?? [];
+      return (
+        /** @type {{ files?: SharedFileRecord[] }} */ (
+          JSON.parse(await readFile(indexFile, "utf8"))
+        ).files ?? []
+      );
     } catch (e) {
       if (e.code === "ENOENT") return [];
       throw new Failure("El índice del Maletín no se pudo leer.", 500);
     }
   }
+  /** @param {SharedFileRecord[]} files */
   async function save(files) {
     const temporary = indexFile + "." + randomUUID() + ".tmp";
     await writeFile(temporary, JSON.stringify({ version: 1, files }, null, 1));
     await rename(temporary, indexFile);
   }
+  /** @param {Pick<SharedFileRecord, "area" | "id">} entry */
   const location = (entry) => path.join(root, entry.area, entry.id);
+  /** @param {SharedFileRecord[]} files */
   const live = (files) => files.filter((f) => !f.trashedAt);
+  /** @param {SharedFileRecord} f */
   const publicEntry = (f) => ({
     id: f.id,
     area: f.area,
@@ -109,6 +146,7 @@ export function createSharedFiles(
     expiresAt: f.pinned ? null : f.expiresAt,
     trashedAt: f.trashedAt ?? null,
   });
+  /** @param {SharedFileRecord[]} files */
   async function prune(files) {
     const now = Date.now();
     const kept = [];
@@ -131,8 +169,10 @@ export function createSharedFiles(
     if (changed) await save(kept);
     return kept;
   }
+  /** @param {unknown} name @param {string | null} area @param {number} size @param {number} total */
   function describe(name, area, size, total) {
-    if (!AREAS.includes(area)) throw new Failure("Carpeta desconocida.");
+    if (area === null || !AREAS.includes(area))
+      throw new Failure("Carpeta desconocida.");
     const clean = cleanName(name);
     const extension = path.extname(clean).slice(1).toLowerCase();
     if (!clean) throw new Failure("El nombre del archivo no es válido.");
@@ -140,10 +180,12 @@ export function createSharedFiles(
     if (total + size > MAX_TOTAL)
       throw new Failure("El Maletín alcanzó su límite de 2 GB.", 507);
     return {
+      area,
       clean,
       mime: Object.hasOwn(TYPES, extension) ? TYPES[extension] : UNKNOWN_TYPE,
     };
   }
+  /** @param {SharedUpload} upload @param {string} temporary @param {number} size @param {string} sha */
   async function register({ area, name, note, actor }, temporary, size, sha) {
     return exclusive(async () => {
       const files = await prune(await load());
@@ -158,7 +200,7 @@ export function createSharedFiles(
       const id = randomUUID();
       const entry = {
         id,
-        area,
+        area: meta.area,
         name: meta.clean,
         size,
         sha256: sha,
@@ -171,7 +213,7 @@ export function createSharedFiles(
           Date.now() + RETENTION_DAYS * 86400000,
         ).toISOString(),
       };
-      await mkdir(path.join(root, area), { recursive: true });
+      await mkdir(path.join(root, meta.area), { recursive: true });
       await rename(temporary, location(entry));
       files.push(entry);
       await save(files);
@@ -184,7 +226,8 @@ export function createSharedFiles(
     return path.join(root, ".tmp", randomUUID());
   }
   return {
-    async list({ trashed = false } = /** @type {any} */ ({})) {
+    /** @param {{ trashed?: boolean }} [options] */
+    async list({ trashed = false } = {}) {
       return exclusive(async () => {
         const files = await prune(await load());
         return files
@@ -193,7 +236,10 @@ export function createSharedFiles(
           .map(publicEntry);
       });
     },
-    /** Small uploads (MCP, JSON): content already in memory. */
+    /**
+     * Small uploads (MCP, JSON): content already in memory.
+     * @param {SharedUpload & { buffer: Buffer }} upload
+     */
     async put({ area, name, note, actor, buffer }) {
       if (buffer.length > MAX_FILE)
         throw new Failure("El archivo supera 100 MB.", 413);
@@ -206,7 +252,10 @@ export function createSharedFiles(
         createHash("sha256").update(buffer).digest("hex"),
       );
     },
-    /** Browser uploads: stream the raw request body to disk with a hard cap. */
+    /**
+     * Browser uploads: stream the raw request body to disk with a hard cap.
+     * @param {SharedUpload & { stream: Readable }} upload
+     */
     async putStream({ area, name, note, actor, stream }) {
       const total = await exclusive(async () =>
         live(await prune(await load())).reduce((sum, f) => sum + f.size, 0),
@@ -224,7 +273,7 @@ export function createSharedFiles(
           out.on("error", reject);
           out.on("finish", () => resolve(undefined));
           stream.on("error", reject);
-          stream.on("data", (chunk) => {
+          stream.on("data", (/** @type {Buffer | string} */ chunk) => {
             size += chunk.length;
             if (size > MAX_FILE || size > remaining) {
               stream.destroy();
@@ -255,12 +304,14 @@ export function createSharedFiles(
         hash.digest("hex"),
       );
     },
+    /** @param {string | null} id */
     async find(id) {
       const files = await exclusive(async () => prune(await load()));
       const entry = files.find((f) => f.id === id && !f.trashedAt);
       if (!entry) throw new Failure("Archivo no encontrado.", 404);
       return { entry: publicEntry(entry), file: location(entry) };
     },
+    /** @param {string | null} id @param {number} offset @param {number} length */
     async chunk(id, offset, length) {
       const { entry, file } = await this.find(id);
       if (entry.size > MAX_INLINE)
@@ -279,7 +330,8 @@ export function createSharedFiles(
         await handle.close();
       }
     },
-    async trash(id, { onlyArea } = /** @type {any} */ ({})) {
+    /** @param {string} id @param {{ onlyArea?: string }} [options] */
+    async trash(id, { onlyArea } = {}) {
       return exclusive(async () => {
         const files = await load();
         const entry = files.find((f) => f.id === id && !f.trashedAt);
@@ -295,6 +347,7 @@ export function createSharedFiles(
         return publicEntry(entry);
       });
     },
+    /** @param {string} id */
     async restore(id) {
       return exclusive(async () => {
         const files = await load();
@@ -309,6 +362,7 @@ export function createSharedFiles(
         return publicEntry(entry);
       });
     },
+    /** @param {string} id @param {unknown} pinned */
     async pin(id, pinned) {
       return exclusive(async () => {
         const files = await load();
@@ -328,6 +382,7 @@ export function createSharedFiles(
     },
   };
 }
+/** @param {Pick<SharedFileRecord, "name" | "size">} entry */
 export function downloadHeaders(entry) {
   const ascii = entry.name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "");
   return {

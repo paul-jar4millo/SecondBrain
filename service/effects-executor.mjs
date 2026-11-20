@@ -1,3 +1,4 @@
+import { DomainError } from "./domain-error.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import {
@@ -10,6 +11,8 @@ import {
   computeOperationFingerprint,
   replayAndRepairJournal,
 } from "./user-requests.mjs";
+
+/** @import { Effect, EffectExecutionReceipt, EffectExecutorOptions, EffectInput, EffectJournalRecord } from "./effect-types.d.ts" */
 
 export const EFFECTS_PAYLOAD_VERSION = 1;
 export const MAX_EFFECT_CONTENT_LENGTH = 16000;
@@ -32,6 +35,7 @@ export const EFFECT_STATUSES = new Set([
   "fallida",
 ]);
 
+/** @type {Partial<Record<string, Set<string>>>} */
 const PROFILE_ALLOWED_CATEGORIES = {
   investigacion: new Set(),
   ejecucion: new Set(["destructive_change"]),
@@ -49,20 +53,19 @@ const PROFILE_ALLOWED_CATEGORIES = {
 
 const UUID_RE = /^[a-f0-9-]{36}$/i;
 
-export class EffectExecutorError extends Error {
-  constructor(message, status = 400, details = {}) {
-    super(message);
-    this.status = status;
-    Object.assign(this, details);
-  }
-}
+export class EffectExecutorError extends DomainError {}
 
+/** @param {unknown} value */
 function sha256Text(value) {
   return createHash("sha256")
     .update(String(value ?? ""), "utf8")
     .digest("hex");
 }
 
+/**
+ * @param {unknown} content
+ * @param {unknown} changes
+ */
 function serializeEffectContentForHash(content, changes) {
   if (content !== null && content !== undefined) {
     return String(content);
@@ -76,6 +79,10 @@ function serializeEffectContentForHash(content, changes) {
   return "";
 }
 
+/**
+ * @param {string} dir
+ * @param {EffectExecutorOptions} options
+ */
 export async function createEffectsExecutor(
   dir,
   {
@@ -96,9 +103,16 @@ export async function createEffectsExecutor(
   const journalFile = path.join(dir, "efectos-journal.jsonl");
   const snapshotFile = path.join(dir, "efectos-snapshots.json");
 
+  /** @type {Map<string, Effect>} */
   const effects = new Map();
+  /** An effect whose id the caller already found in `effects`. */
+  const knownEffect = (/** @type {string} */ id) =>
+    /** @type {Effect} */ (effects.get(id));
+  /** @type {Map<string, EffectExecutionReceipt>} */
   const receiptsByRequestId = new Map();
+  /** @type {Map<string, string>} */
   const effectsByRequestId = new Map();
+  /** @type {Map<string, string>} */
   const effectsByApprovalId = new Map();
   let closed = false;
 
@@ -107,6 +121,7 @@ export async function createEffectsExecutor(
     throw e;
   });
   if (snapRaw.trim()) {
+    /** @type {{ effects?: Record<string, Effect> }} */
     const parsed = JSON.parse(snapRaw);
     for (const [id, eff] of Object.entries(parsed.effects ?? {})) {
       effects.set(id, eff);
@@ -115,6 +130,7 @@ export async function createEffectsExecutor(
 
   const { hadRecords, repaired } = await replayAndRepairJournal(
     journalFile,
+    /** @param {EffectJournalRecord} rec */
     (rec) => {
       if (rec.op === "effect.put" && rec.effect?.id) {
         effects.set(rec.effect.id, rec.effect);
@@ -149,8 +165,10 @@ export async function createEffectsExecutor(
 
   const serial = createSerialQueue();
 
+  /** @param {EffectJournalRecord} record */
   const appendJournal = (record) => appendJsonLine(journalFile, record);
 
+  /** @param {Effect} effect */
   async function saveEffect(effect) {
     effects.set(effect.id, effect);
     if (effect.executionReceipt?.requestId) {
@@ -199,6 +217,10 @@ export async function createEffectsExecutor(
     }
   }
 
+  /**
+   * @param {EffectInput} input
+   * @param {number} numericCost
+   */
   function hasVerifiedBillingAuthorization(input, numericCost) {
     if (
       operatorBillingPolicy?.allowBilledApi === true &&
@@ -235,6 +257,7 @@ export async function createEffectsExecutor(
     );
   }
 
+  /** @param {Effect} eff */
   function toPublicEffect(eff, { includeSensitive = true } = {}) {
     const linkedApproval = eff.approvalId
       ? userRequests.get(eff.approvalId)
@@ -276,6 +299,7 @@ export async function createEffectsExecutor(
   }
 
   return {
+    /** @param {{ workOrderId?: string, status?: string, includeSensitive?: boolean }} [filter] */
     list({ workOrderId, status, includeSensitive = true } = {}) {
       const items = [];
       for (const eff of effects.values()) {
@@ -286,11 +310,13 @@ export async function createEffectsExecutor(
       return items;
     },
 
+    /** @param {string} id */
     get(id, { includeSensitive = true } = {}) {
       const eff = effects.get(id);
       return eff ? toPublicEffect(eff, { includeSensitive }) : null;
     },
 
+    /** @param {EffectInput} input */
     prepareEffect(input) {
       return serial(async () => {
         if (closed) throw new EffectExecutorError("Ejecutor cerrado.", 503);
@@ -445,12 +471,13 @@ export async function createEffectsExecutor(
           throw new EffectExecutorError(
             "El identificador de efecto ya existe; no se puede sobrescribir otra operación ni alterar su aprobación.",
             409,
-            { operacion: toPublicEffect(effects.get(input.id)) },
+            { operacion: toPublicEffect(knownEffect(input.id)) },
           );
         }
 
         const nowIso = new Date(clock()).toISOString();
         const effectId = input.id || randomUUID();
+        /** @type {Effect} */
         const baseEffect = {
           payloadVersion: EFFECTS_PAYLOAD_VERSION,
           id: effectId,
@@ -521,6 +548,14 @@ export async function createEffectsExecutor(
       });
     },
 
+    /**
+     * @param {string} effectId
+     * @param {{
+     *   requestId?: string, actor?: string, expectedNativeTurnId?: string,
+     *   action?: string, recipient?: string, contentHash?: string,
+     *   changes?: unknown, cost?: unknown, scope?: unknown,
+     * }} [approval]
+     */
     executeEffect(
       effectId,
       {
@@ -731,7 +766,7 @@ export async function createEffectsExecutor(
             });
           }
           throw new EffectExecutorError(err.message, err.status || 409, {
-            operacion: toPublicEffect(effects.get(effectId)),
+            operacion: toPublicEffect(knownEffect(effectId)),
           });
         }
         if (
@@ -779,11 +814,11 @@ export async function createEffectsExecutor(
 
           const failStatus = isAmbiguous ? "entrega_incierta" : "fallida";
           const failedEffect = await saveEffect({
-            ...effects.get(effectId),
+            ...knownEffect(effectId),
             status: failStatus,
             pendingExecutionRequestId: isAmbiguous ? requestId : null,
             lastError: String(err?.message || "Fallo en ejecutor externo"),
-            revision: effects.get(effectId).revision + 1,
+            revision: knownEffect(effectId).revision + 1,
             updatedAt: new Date(clock()).toISOString(),
           });
           if (isAmbiguous) {
@@ -800,7 +835,7 @@ export async function createEffectsExecutor(
             );
           }
           throw new EffectExecutorError(
-            failedEffect.lastError,
+            failedEffect.lastError ?? "Fallo en ejecutor externo",
             err?.status || 502,
             { operacion: toPublicEffect(failedEffect) },
           );
@@ -823,12 +858,12 @@ export async function createEffectsExecutor(
         };
 
         const completed = await saveEffect({
-          ...effects.get(effectId),
+          ...knownEffect(effectId),
           status: "ejecutada",
           executionReceipt,
           pendingExecutionRequestId: null,
           lastError: null,
-          revision: effects.get(effectId).revision + 1,
+          revision: knownEffect(effectId).revision + 1,
           updatedAt: nowIso,
         });
 
@@ -866,6 +901,10 @@ export async function createEffectsExecutor(
       });
     },
 
+    /**
+     * @param {string} effectId
+     * @param {{ requestId?: string, outcome?: string, note?: string, actor?: string }} [result]
+     */
     reconcileEffect(
       effectId,
       { requestId, outcome, note = "", actor = "app" } = {},
@@ -877,7 +916,7 @@ export async function createEffectsExecutor(
             400,
           );
         }
-        if (!["confirmada", "fallida"].includes(outcome)) {
+        if (!outcome || !["confirmada", "fallida"].includes(outcome)) {
           throw new EffectExecutorError(
             "El resultado de conciliación debe ser «confirmada» o «fallida».",
             400,

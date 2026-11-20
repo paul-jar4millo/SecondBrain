@@ -1,11 +1,14 @@
-// @ts-check
 import { cp, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-// Explicit inputs: never copy an entire checkout or runtime data directory.
+/**
+ * Explicit inputs: never copy an entire checkout or runtime data directory.
+ * @param {string} destination
+ * @param {{ sourceRoot?: string }} [options]
+ */
 export async function packageRelease(destination, { sourceRoot = root } = {}) {
   const root = path.resolve(sourceRoot);
   const target = path.resolve(destination);
@@ -35,29 +38,37 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
           path.join(target, module, entry.name),
         );
     }
-    // Internal modules of a package (lib/, recursively): only .mjs sources.
-    const lib = path.join(root, module, "lib");
-    const libEntries = await readdir(lib, {
-      withFileTypes: true,
-      recursive: true,
-    }).catch((error) => {
-      if (error.code === "ENOENT") return [];
-      throw error;
-    });
-    for (const entry of libEntries)
-      if (entry.isFile() && entry.name.endsWith(".mjs")) {
-        const relative = path.relative(
-          lib,
-          path.join(entry.parentPath, entry.name),
-        );
-        await mkdir(path.dirname(path.join(target, module, "lib", relative)), {
-          recursive: true,
-        });
-        await cp(
-          path.join(lib, relative),
-          path.join(target, module, "lib", relative),
-        );
-      }
+    // Internal folders of a package, recursively: only .mjs sources.
+    for (const folder of ["lib", "http", "execution"]) {
+      const lib = path.join(root, module, folder);
+      const libEntries = await readdir(lib, {
+        withFileTypes: true,
+        recursive: true,
+      }).catch(
+        /** @returns {import("node:fs").Dirent[]} */
+        (error) => {
+          if (error.code === "ENOENT") return [];
+          throw error;
+        },
+      );
+      for (const entry of libEntries)
+        if (entry.isFile() && entry.name.endsWith(".mjs")) {
+          const relative = path.relative(
+            lib,
+            path.join(entry.parentPath, entry.name),
+          );
+          await mkdir(
+            path.dirname(path.join(target, module, folder, relative)),
+            {
+              recursive: true,
+            },
+          );
+          await cp(
+            path.join(lib, relative),
+            path.join(target, module, folder, relative),
+          );
+        }
+    }
   }
   await mkdir(path.join(target, "lanzador/skills"));
   for (const skill of ["equipo-cuatro-fases", "resumen-matutino"])

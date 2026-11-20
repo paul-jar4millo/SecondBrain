@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readLimits, sessionCommand } from "../limits.mjs";
-import { entornoDe } from "../motores.mjs";
+import { entornoDe } from "../engines.mjs";
 
 test("the real provider environment carries only the local user's scope runtime", () => {
   const runtime = "/run/user/" + (process.getuid?.() ?? 1000);

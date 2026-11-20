@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { once } from "node:events";
-import { abrirRegistro } from "../sesiones.mjs";
-import { abrirEquipos } from "../equipos.mjs";
-import { crearEjecutor } from "../ejecucion.mjs";
+import { abrirRegistro } from "../sessions.mjs";
+import { abrirEquipos } from "../teams.mjs";
+import { crearEjecutor } from "../executor.mjs";
 import { crearServidor } from "../index.mjs";
 import { createProviderConversations } from "../provider-conversations.mjs";
 

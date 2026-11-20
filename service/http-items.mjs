@@ -1,8 +1,12 @@
-// @ts-check
 import { promisify } from "node:util";
 import { gzip } from "node:zlib";
 import { createHash } from "node:crypto";
 const compress = promisify(gzip);
+/**
+ * @param {import("./types.d.ts").HttpRequest} request
+ * @param {import("node:http").ServerResponse} response
+ * @param {{ kind: string, body?: string }[]} items
+ */
 export async function sendItems(request, response, items) {
   const text = JSON.stringify(
     items.map((item) => {

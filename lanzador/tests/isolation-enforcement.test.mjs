@@ -15,8 +15,8 @@ import { PassThrough, Writable } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import { test } from "node:test";
-import { TOOL_PROFILES_BASE } from "../catalogo-herramientas.mjs";
-import { crearEjecutor } from "../ejecucion.mjs";
+import { TOOL_PROFILES_BASE } from "../tool-catalog.mjs";
+import { crearEjecutor } from "../executor.mjs";
 import {
   createAcpController,
   createClaudeController,
@@ -25,7 +25,7 @@ import {
   parseCodexMcpServerKeys,
 } from "../provider-controllers.mjs";
 import { createProviderConversations } from "../provider-conversations.mjs";
-import { abrirRegistro } from "../sesiones.mjs";
+import { abrirRegistro } from "../sessions.mjs";
 
 const execFileAsync = promisify(execFile);
 
