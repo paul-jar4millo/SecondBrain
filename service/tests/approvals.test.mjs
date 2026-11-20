@@ -6,13 +6,13 @@ import path from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { createApplication } from "../index.mjs";
-import { ConflictoAprobacion, crearColaAprobaciones } from "../approvals.mjs";
+import { ApprovalConflict, createApprovalQueue } from "../approvals.mjs";
 
 test("la decisión desbloquea una solicitud y se conserva tras reiniciar", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-approval-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   let ahora = 1000;
-  const cola = await crearColaAprobaciones(dir, { reloj: () => ahora });
+  const cola = await createApprovalQueue(dir, { reloj: () => ahora });
   const solicitud = await cola.solicitar({
     actor: "agente:menta",
     operacion: { op: "sintetica", cantidad: 7 },
@@ -23,7 +23,7 @@ test("la decisión desbloquea una solicitud y se conserva tras reiniciar", async
   assert.equal(await solicitud.esperar, "aprobada");
   await assert.rejects(cola.decidir(solicitud.id, false));
   await cola.cerrar();
-  const reiniciada = await crearColaAprobaciones(dir, { reloj: () => ahora });
+  const reiniciada = await createApprovalQueue(dir, { reloj: () => ahora });
   assert.equal(reiniciada.listar()[0].estado, "aprobada");
   await reiniciada.cerrar();
 });
@@ -178,7 +178,7 @@ test("el vencimiento rechaza, incluso si la decisión llega después del plazo",
   const dir = await mkdtemp(path.join(tmpdir(), "sb-approval-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   let ahora = 1000;
-  const cola = await crearColaAprobaciones(dir, { reloj: () => ahora });
+  const cola = await createApprovalQueue(dir, { reloj: () => ahora });
   const solicitud = await cola.solicitar({
     actor: "agente:lira",
     operacion: { op: "sintetica" },
@@ -193,14 +193,14 @@ test("el vencimiento rechaza, incluso si la decisión llega después del plazo",
 test("una espera interrumpida no se puede aprobar después de reiniciar", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-approval-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const cola = await crearColaAprobaciones(dir);
+  const cola = await createApprovalQueue(dir);
   const solicitud = await cola.solicitar({
     actor: "agente:ambar",
     operacion: { op: "sintetica" },
   });
   await cola.cerrar();
   assert.equal(await solicitud.esperar, "interrumpida");
-  const nueva = await crearColaAprobaciones(dir);
+  const nueva = await createApprovalQueue(dir);
   assert.equal(nueva.listar()[0].estado, "interrumpida");
   await assert.rejects(nueva.decidir(solicitud.id, true));
   await nueva.cerrar();
@@ -209,7 +209,7 @@ test("una espera interrumpida no se puede aprobar después de reiniciar", async 
 test("decisiones simultáneas producen una sola resolución durable", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-approval-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const cola = await crearColaAprobaciones(dir);
+  const cola = await createApprovalQueue(dir);
   const solicitud = await cola.solicitar({
     actor: "agente:marina",
     operacion: { op: "sintetica" },
@@ -234,7 +234,7 @@ test("repetir la respuesta con el mismo requestId devuelve el recibo sin volver 
   const dir = await mkdtemp(path.join(tmpdir(), "sb-recibo-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   let ahora = 5000;
-  const cola = await crearColaAprobaciones(dir, { reloj: () => ahora });
+  const cola = await createApprovalQueue(dir, { reloj: () => ahora });
   const s = await cola.solicitar({
     actor: "agente:menta",
     operacion: { op: "x" },
@@ -265,12 +265,12 @@ test("repetir la respuesta con el mismo requestId devuelve el recibo sin volver 
   // Another id, even with the opposite decision, conflicts with the stored receipt.
   await assert.rejects(
     cola.decidir(s.id, false, { requestId: R2 }),
-    (e) => e instanceof ConflictoAprobacion && e.recibo.requestId === R1,
+    (e) => e instanceof ApprovalConflict && e.recibo.requestId === R1,
   );
-  await assert.rejects(cola.decidir(s.id, true), ConflictoAprobacion);
+  await assert.rejects(cola.decidir(s.id, true), ApprovalConflict);
   await cola.cerrar();
   // The receipt lives in the same journal as the state: it survives a restart.
-  const reiniciada = await crearColaAprobaciones(dir, { reloj: () => ahora });
+  const reiniciada = await createApprovalQueue(dir, { reloj: () => ahora });
   const tras = await reiniciada.decidir(s.id, true, { requestId: R1 });
   assert.equal(tras.repetido, true);
   assert.equal(tras.recibo.por, "owner");
@@ -280,7 +280,7 @@ test("repetir la respuesta con el mismo requestId devuelve el recibo sin volver 
 test("un requestId no puede reutilizarse en otra solicitud y se valida su formato", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-recibo-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const cola = await crearColaAprobaciones(dir);
+  const cola = await createApprovalQueue(dir);
   const a = await cola.solicitar({
     actor: "agente:menta",
     operacion: { op: "a" },
@@ -296,7 +296,7 @@ test("un requestId no puede reutilizarse en otra solicitud y se valida su format
   await cola.decidir(a.id, true, { requestId: R1 });
   await assert.rejects(
     cola.decidir(b.id, true, { requestId: R1 }),
-    ConflictoAprobacion,
+    ApprovalConflict,
   );
   assert.equal(cola.listar().find((r) => r.id === b.id).estado, "pendiente");
   // Without requestId a receipt is still stored, with a generated one.
@@ -309,7 +309,7 @@ test("un requestId no puede reutilizarse en otra solicitud y se valida su format
 test("dos respuestas simultáneas: mismo requestId aplica una vez; ids distintos, solo gana una", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-recibo-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const cola = await crearColaAprobaciones(dir);
+  const cola = await createApprovalQueue(dir);
   const a = await cola.solicitar({
     actor: "agente:menta",
     operacion: { op: "a" },
@@ -336,7 +336,7 @@ test("dos respuestas simultáneas: mismo requestId aplica una vez; ids distintos
     distintas.map((r) => r.status),
     ["fulfilled", "rejected"],
   );
-  assert.ok(distintas[1].reason instanceof ConflictoAprobacion);
+  assert.ok(distintas[1].reason instanceof ApprovalConflict);
   assert.equal(distintas[1].reason.recibo.requestId, R2);
   assert.equal(await b.esperar, "aprobada");
   const lineas = (await readFile(path.join(dir, "aprobaciones.jsonl"), "utf8"))

@@ -53,7 +53,7 @@ test("índice migrado admite la capacidad empaquetada de versión 2", async (t) 
   const run = await fixture(
     t,
     migrated,
-    "export const REGISTRO_VERSION = 2;\n",
+    "export const SESSION_REGISTRY_VERSION = 2;\n",
   );
   assert.equal(run().status, 0);
 });
@@ -68,7 +68,7 @@ test("índice truncado o con referencia inválida nunca autoriza reinicio", asyn
     const run = await fixture(
       t,
       sessions,
-      "export const REGISTRO_VERSION = 2;\n",
+      "export const SESSION_REGISTRY_VERSION = 2;\n",
     );
     assert.equal(run().status, 1);
   }
@@ -78,7 +78,7 @@ test("la marca se inspecciona como datos y jamás se ejecuta", async (t) => {
   const run = await fixture(
     t,
     migrated,
-    "throw new Error('MARCA EJECUTADA');\nexport const REGISTRO_VERSION = 2;\n",
+    "throw new Error('MARCA EJECUTADA');\nexport const SESSION_REGISTRY_VERSION = 2;\n",
   );
   const result = run();
   assert.equal(result.status, 1);
@@ -94,7 +94,7 @@ test("selecciona la release compatible retenida cuando current apunta a un rollb
   await mkdir(path.join(compatible, "lanzador"), { recursive: true });
   await writeFile(
     path.join(compatible, "lanzador/version-registry.mjs"),
-    "export const REGISTRO_VERSION = 2;\n",
+    "export const SESSION_REGISTRY_VERSION = 2;\n",
   );
   const index = path.join(dir, "sesiones.json");
   await writeFile(index, JSON.stringify(migrated));
@@ -114,7 +114,10 @@ test("la marca real del lanzador cumple también el formato estricto de helpers 
     "utf8",
   );
   // Helpers installed before 0.1.1 only accept a file made of the export line.
-  assert.match(marker, /^\s*export const REGISTRO_VERSION = ([1-9]\d*);\s*$/);
+  assert.match(
+    marker,
+    /^\s*export const SESSION_REGISTRY_VERSION = ([1-9]\d*);\s*$/,
+  );
   const run = await fixture(t, migrated, marker);
   assert.equal(run().status, 0);
 });
@@ -123,7 +126,7 @@ test("la marca admite comentarios de línea antes de la exportación", async (t)
   const run = await fixture(
     t,
     migrated,
-    "// @ts-check\n\nexport const REGISTRO_VERSION = 2;\n",
+    "// @ts-check\n\nexport const SESSION_REGISTRY_VERSION = 2;\n",
   );
   assert.equal(run().status, 0);
 });

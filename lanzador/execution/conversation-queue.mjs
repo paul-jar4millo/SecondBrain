@@ -1,7 +1,7 @@
 // Messages sent to a structured session: delivered now, steered into the
 // running turn or queued until the turn ends.
-import { ErrorLanzador } from "../errors.mjs";
-import { validarAdjuntosMotor } from "../engines.mjs";
+import { LauncherError } from "../errors.mjs";
+import { validateEngineAttachments } from "../engines.mjs";
 /** @import { TurnOptions } from "../types.d.ts" */
 /** @import { LauncherSession } from "../session-types.d.ts" */
 /** @import { ExecutorConfig } from "./options.mjs" */
@@ -28,17 +28,17 @@ export function createConversationQueue(config, state, deps) {
     { clientMessageId, text = "", mode = "send", attachments = [] } = {},
   ) {
     if (!conversations) {
-      throw new ErrorLanzador("Integración estructurada no instalada.", 503);
+      throw new LauncherError("Integración estructurada no instalada.", 503);
     }
     const sesion = registro.leer().find((s) => s.id === id && !s.eliminada);
-    if (!sesion) throw new ErrorLanzador("Sesión inexistente.", 404);
+    if (!sesion) throw new LauncherError("Sesión inexistente.", 404);
     if (!sesion.structured) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         "La sesión no admite mensajería estructurada.",
         409,
       );
     }
-    const validatedAttachments = validarAdjuntosMotor(
+    const validatedAttachments = validateEngineAttachments(
       sesion.motor,
       attachments,
       sesion.directorio || "",
@@ -102,7 +102,7 @@ export function createConversationQueue(config, state, deps) {
   /** @param {string} id */
   const listarCola = (id) => {
     if (!conversations) {
-      throw new ErrorLanzador("Integración estructurada no instalada.", 503);
+      throw new LauncherError("Integración estructurada no instalada.", 503);
     }
     return conversations.listQueue(id);
   };
@@ -112,7 +112,7 @@ export function createConversationQueue(config, state, deps) {
    */
   const cancelarCola = (id, clientMessageId) => {
     if (!conversations) {
-      throw new ErrorLanzador("Integración estructurada no instalada.", 503);
+      throw new LauncherError("Integración estructurada no instalada.", 503);
     }
     return conversations.cancelQueuedMessage(id, clientMessageId);
   };

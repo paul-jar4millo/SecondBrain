@@ -1,6 +1,6 @@
 // The executor's options with their defaults applied, so every execution
 // module receives the same resolved values.
-import { comandoMotor, saldoDeepSeek } from "../engines.mjs";
+import { engineCommand, deepSeekBalance } from "../engines.mjs";
 import { comandoHarness } from "../harness.mjs";
 import { spawn } from "node:child_process";
 
@@ -26,14 +26,14 @@ export function resolveExecutorOptions({
   proyectos,
   espacios,
   env = process.env,
-  comando = comandoMotor,
+  comando = engineCommand,
   comandoInteractivo = comandoHarness,
   maxActivos = 6,
   lanzarPty = spawn,
   seguimiento = null,
   conversations = null,
   toolCatalog = null,
-  consultarSaldo = () => saldoDeepSeek(env.DEEPSEEK_API_KEY ?? null),
+  consultarSaldo = () => deepSeekBalance(env.DEEPSEEK_API_KEY ?? null),
   // A silent CLI must not hold a slot forever, including interactive harnesses.
   limiteMs = minutosConfigurados(env.SB_SESION_MAX_MIN, SESION_MAX_MIN),
   inactividadMs = minutosConfigurados(env.SB_SESION_INACTIVIDAD_MIN, 15),

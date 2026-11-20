@@ -1,5 +1,5 @@
 // Validation of MCP elicitation forms (requested schema and the user's answers).
-import { ErrorLanzador } from "../../errors.mjs";
+import { LauncherError } from "../../errors.mjs";
 
 const SUPPORTED_FORM_FIELD_TYPES = new Set([
   "string",
@@ -86,7 +86,7 @@ const SUPPORTED_STRING_FORMATS = new Set([
  */
 function compileSchemaPattern(pattern, key) {
   if (typeof pattern !== "string" || pattern.length > 512) {
-    throw new ErrorLanzador(
+    throw new LauncherError(
       `Patrón regex inválido o excesivo en campo "${key}".`,
       400,
     );
@@ -97,7 +97,7 @@ function compileSchemaPattern(pattern, key) {
     try {
       return new RegExp(pattern);
     } catch {
-      throw new ErrorLanzador(`Patrón regex inválido en campo "${key}".`, 400);
+      throw new LauncherError(`Patrón regex inválido en campo "${key}".`, 400);
     }
   }
 }
@@ -110,7 +110,7 @@ function compileSchemaPattern(pattern, key) {
 function validateStringFormat(key, value, format) {
   if (format === "email") {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe ser un email válido.`,
         400,
       );
@@ -122,7 +122,7 @@ function validateStringFormat(key, value, format) {
       const u = new URL(value);
       if (!u.protocol) throw new Error("missing scheme");
     } catch {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe ser una URI válida.`,
         400,
       );
@@ -135,7 +135,7 @@ function validateStringFormat(key, value, format) {
         value,
       )
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe ser un UUID válido.`,
         400,
       );
@@ -147,7 +147,7 @@ function validateStringFormat(key, value, format) {
       !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
       Number.isNaN(Date.parse(`${value}T00:00:00Z`))
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe tener formato YYYY-MM-DD.`,
         400,
       );
@@ -161,7 +161,7 @@ function validateStringFormat(key, value, format) {
       ) ||
       Number.isNaN(Date.parse(value))
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe tener formato ISO date-time válido.`,
         400,
       );
@@ -211,7 +211,7 @@ function isMultipleOf(value, divisor) {
  */
 function validateFormFieldSchema(key, input, depth = 0) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new ErrorLanzador(
+    throw new LauncherError(
       `Esquema de campo de formulario inválido (${key}).`,
       400,
     );
@@ -222,13 +222,13 @@ function validateFormFieldSchema(key, input, depth = 0) {
       typeof field.type !== "string" ||
       !SUPPORTED_FORM_FIELD_TYPES.has(field.type)
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `Tipo de campo de formulario no soportado en "${key}": ${String(field.type)}.`,
         400,
       );
     }
     if (depth > 0 && field.type === "array") {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `Arreglos anidados no soportados en campo "${key}".`,
         400,
       );
@@ -238,7 +238,7 @@ function validateFormFieldSchema(key, input, depth = 0) {
     field.oneOf === undefined &&
     !Object.hasOwn(field, "const")
   ) {
-    throw new ErrorLanzador(
+    throw new LauncherError(
       `El campo "${key}" del formulario carece de tipo o catálogo admitido.`,
       400,
     );
@@ -249,7 +249,7 @@ function validateFormFieldSchema(key, input, depth = 0) {
     : new Set();
   for (const propKey of Object.keys(field)) {
     if (!COMMON_FIELD_KEYS.has(propKey) && !allowedForType.has(propKey)) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `Keyword de esquema no soportado en campo "${key}": "${propKey}".`,
         400,
       );
@@ -271,14 +271,14 @@ function validateFormFieldSchema(key, input, depth = 0) {
           ),
       )
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `Esquema oneOf no soportado en campo "${key}".`,
         400,
       );
     }
   }
   if (field.enum !== undefined && !Array.isArray(field.enum)) {
-    throw new ErrorLanzador(`El enum de "${key}" debe ser un arreglo.`, 400);
+    throw new LauncherError(`El enum de "${key}" debe ser un arreglo.`, 400);
   }
 
   if (field.type === "string") {
@@ -287,14 +287,14 @@ function validateFormFieldSchema(key, input, depth = 0) {
       (!Number.isInteger(field.minLength) ||
         /** @type {number} */ (field.minLength) < 0)
     ) {
-      throw new ErrorLanzador(`minLength inválido en campo "${key}".`, 400);
+      throw new LauncherError(`minLength inválido en campo "${key}".`, 400);
     }
     if (
       field.maxLength !== undefined &&
       (!Number.isInteger(field.maxLength) ||
         /** @type {number} */ (field.maxLength) < 0)
     ) {
-      throw new ErrorLanzador(`maxLength inválido en campo "${key}".`, 400);
+      throw new LauncherError(`maxLength inválido en campo "${key}".`, 400);
     }
     if (field.pattern !== undefined) {
       compileSchemaPattern(field.pattern, key);
@@ -303,7 +303,7 @@ function validateFormFieldSchema(key, input, depth = 0) {
       field.format !== undefined &&
       !SUPPORTED_STRING_FORMATS.has(field.format)
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `Formato "${String(field.format)}" no soportado en campo "${key}".`,
         400,
       );
@@ -321,7 +321,7 @@ function validateFormFieldSchema(key, input, depth = 0) {
         field[bound] !== undefined &&
         (typeof field[bound] !== "number" || !Number.isFinite(field[bound]))
       ) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           `Límite "${bound}" inválido en campo "${key}".`,
           400,
         );
@@ -333,7 +333,7 @@ function validateFormFieldSchema(key, input, depth = 0) {
         !Number.isFinite(field.multipleOf) ||
         field.multipleOf <= 0)
     ) {
-      throw new ErrorLanzador(`multipleOf inválido en campo "${key}".`, 400);
+      throw new LauncherError(`multipleOf inválido en campo "${key}".`, 400);
     }
   }
 
@@ -344,7 +344,7 @@ function validateFormFieldSchema(key, input, depth = 0) {
         (!Number.isInteger(field[bound]) ||
           /** @type {number} */ (field[bound]) < 0)
       ) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           `Límite "${bound}" inválido en campo "${key}".`,
           400,
         );
@@ -354,7 +354,7 @@ function validateFormFieldSchema(key, input, depth = 0) {
       field.uniqueItems !== undefined &&
       typeof field.uniqueItems !== "boolean"
     ) {
-      throw new ErrorLanzador(`uniqueItems inválido en campo "${key}".`, 400);
+      throw new LauncherError(`uniqueItems inválido en campo "${key}".`, 400);
     }
     if (field.items !== undefined) {
       validateFormFieldSchema(`${key}[]`, field.items, depth + 1);
@@ -366,25 +366,25 @@ function validateFormFieldSchema(key, input, depth = 0) {
 export function validateRequestedSchema(input) {
   if (input === undefined || input === null) return null;
   if (typeof input !== "object" || Array.isArray(input)) {
-    throw new ErrorLanzador("Esquema de formulario no soportado.", 400);
+    throw new LauncherError("Esquema de formulario no soportado.", 400);
   }
   const requestedSchema = /** @type {Record<string, unknown>} */ (input);
   for (const key of Object.keys(requestedSchema)) {
     if (!ALLOWED_ROOT_SCHEMA_KEYS.has(key)) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `Keyword de esquema de formulario no soportado: "${key}".`,
         400,
       );
     }
   }
   if (requestedSchema.type !== undefined && requestedSchema.type !== "object") {
-    throw new ErrorLanzador("Esquema de formulario no soportado.", 400);
+    throw new LauncherError("Esquema de formulario no soportado.", 400);
   }
   if (
     requestedSchema.additionalProperties !== undefined &&
     typeof requestedSchema.additionalProperties !== "boolean"
   ) {
-    throw new ErrorLanzador(
+    throw new LauncherError(
       "additionalProperties en esquema de formulario debe ser booleano.",
       400,
     );
@@ -396,7 +396,7 @@ export function validateRequestedSchema(input) {
     typeof properties !== "object" ||
     Array.isArray(properties)
   ) {
-    throw new ErrorLanzador(
+    throw new LauncherError(
       "Propiedades del esquema de formulario inválidas.",
       400,
     );
@@ -411,11 +411,11 @@ export function validateRequestedSchema(input) {
     requestedSchema.required !== undefined &&
     !Array.isArray(requestedSchema.required)
   ) {
-    throw new ErrorLanzador("Lista `required` del formulario inválida.", 400);
+    throw new LauncherError("Lista `required` del formulario inválida.", 400);
   }
   for (const reqKey of required) {
     if (typeof reqKey !== "string" || !reqKey) {
-      throw new ErrorLanzador("Nombre de campo requerido inválido.", 400);
+      throw new LauncherError("Nombre de campo requerido inválido.", 400);
     }
   }
   return {
@@ -432,13 +432,13 @@ export function validateRequestedSchema(input) {
  */
 function validateScalarValue(key, value, spec) {
   if (Object.hasOwn(spec, "const") && value !== spec.const) {
-    throw new ErrorLanzador(
+    throw new LauncherError(
       `El campo "${key}" debe coincidir con el valor fijo esperado.`,
       400,
     );
   }
   if (Array.isArray(spec.enum) && !spec.enum.includes(value)) {
-    throw new ErrorLanzador(
+    throw new LauncherError(
       `El valor del campo "${key}" no pertenece a las opciones permitidas.`,
       400,
     );
@@ -446,7 +446,7 @@ function validateScalarValue(key, value, spec) {
   if (Array.isArray(spec.oneOf)) {
     const allowed = spec.oneOf.map((o) => o.const);
     if (!allowed.includes(value)) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El valor del campo "${key}" no coincide con las opciones declaradas.`,
         400,
       );
@@ -455,16 +455,16 @@ function validateScalarValue(key, value, spec) {
   if (!spec.type) return;
   if (spec.type === "string") {
     if (typeof value !== "string") {
-      throw new ErrorLanzador(`El campo "${key}" debe ser texto.`, 400);
+      throw new LauncherError(`El campo "${key}" debe ser texto.`, 400);
     }
     if (typeof spec.minLength === "number" && value.length < spec.minLength) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" es más corto que minLength=${spec.minLength}.`,
         400,
       );
     }
     if (typeof spec.maxLength === "number" && value.length > spec.maxLength) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" excede maxLength=${spec.maxLength}.`,
         400,
       );
@@ -472,7 +472,7 @@ function validateScalarValue(key, value, spec) {
     if (typeof spec.pattern === "string") {
       const rx = compileSchemaPattern(spec.pattern, key);
       if (!rx.test(value)) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           `El campo "${key}" no cumple el patrón requerido.`,
           400,
         );
@@ -485,7 +485,7 @@ function validateScalarValue(key, value, spec) {
   }
   if (spec.type === "boolean") {
     if (typeof value !== "boolean") {
-      throw new ErrorLanzador(`El campo "${key}" debe ser booleano.`, 400);
+      throw new LauncherError(`El campo "${key}" debe ser booleano.`, 400);
     }
     return;
   }
@@ -495,14 +495,14 @@ function validateScalarValue(key, value, spec) {
         ? Number.isInteger(value)
         : typeof value === "number" && Number.isFinite(value);
     if (!ok) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe ser ${spec.type === "integer" ? "entero" : "numérico"}.`,
         400,
       );
     }
     const number = /** @type {number} */ (value);
     if (typeof spec.minimum === "number" && number < spec.minimum) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe ser >= ${spec.minimum}.`,
         400,
       );
@@ -511,13 +511,13 @@ function validateScalarValue(key, value, spec) {
       typeof spec.exclusiveMinimum === "number" &&
       number <= spec.exclusiveMinimum
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe ser > ${spec.exclusiveMinimum}.`,
         400,
       );
     }
     if (typeof spec.maximum === "number" && number > spec.maximum) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe ser <= ${spec.maximum}.`,
         400,
       );
@@ -526,7 +526,7 @@ function validateScalarValue(key, value, spec) {
       typeof spec.exclusiveMaximum === "number" &&
       number >= spec.exclusiveMaximum
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe ser < ${spec.exclusiveMaximum}.`,
         400,
       );
@@ -535,7 +535,7 @@ function validateScalarValue(key, value, spec) {
       typeof spec.multipleOf === "number" &&
       !isMultipleOf(number, spec.multipleOf)
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" debe ser múltiplo de ${spec.multipleOf}.`,
         400,
       );
@@ -544,16 +544,16 @@ function validateScalarValue(key, value, spec) {
   }
   if (spec.type === "array") {
     if (!Array.isArray(value)) {
-      throw new ErrorLanzador(`El campo "${key}" debe ser una lista.`, 400);
+      throw new LauncherError(`El campo "${key}" debe ser una lista.`, 400);
     }
     if (typeof spec.minItems === "number" && value.length < spec.minItems) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" requiere al menos ${spec.minItems} elemento(s).`,
         400,
       );
     }
     if (typeof spec.maxItems === "number" && value.length > spec.maxItems) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `El campo "${key}" admite como máximo ${spec.maxItems} elemento(s).`,
         400,
       );
@@ -563,7 +563,7 @@ function validateScalarValue(key, value, spec) {
       for (const item of value) {
         const marker = `${typeof item}:${JSON.stringify(item)}`;
         if (seen.has(marker)) {
-          throw new ErrorLanzador(
+          throw new LauncherError(
             `El campo "${key}" no admite elementos duplicados.`,
             400,
           );
@@ -592,7 +592,7 @@ export function validateAndExtractElicitationContent(
   mode = "form",
 ) {
   if (mode && mode !== "form") {
-    throw new ErrorLanzador(
+    throw new LauncherError(
       `Modo de elicitación no soportado: "${mode}". Solo se admite "form".`,
       400,
     );
@@ -600,7 +600,7 @@ export function validateAndExtractElicitationContent(
   if (requestedSchema === undefined || requestedSchema === null) {
     if (providedContent === undefined || providedContent === null) return {};
     if (typeof providedContent !== "object" || Array.isArray(providedContent)) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         "El contenido del formulario debe ser un objeto.",
         400,
       );
@@ -614,7 +614,7 @@ export function validateAndExtractElicitationContent(
     );
   if (providedContent === undefined || providedContent === null) {
     if (required.length > 0) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `Faltan campos obligatorios en el formulario: ${required.join(", ")}.`,
         400,
       );
@@ -622,7 +622,7 @@ export function validateAndExtractElicitationContent(
     return {};
   }
   if (typeof providedContent !== "object" || Array.isArray(providedContent)) {
-    throw new ErrorLanzador(
+    throw new LauncherError(
       "El contenido del formulario debe ser un objeto.",
       400,
     );
@@ -634,7 +634,7 @@ export function validateAndExtractElicitationContent(
       content[reqKey] === undefined ||
       content[reqKey] === null
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         `Falta campo obligatorio en el formulario: "${reqKey}".`,
         400,
       );
@@ -643,7 +643,7 @@ export function validateAndExtractElicitationContent(
   if (schema.additionalProperties === false) {
     for (const key of Object.keys(content)) {
       if (!Object.hasOwn(properties, key)) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           `Campo no permitido en el formulario: "${key}".`,
           400,
         );
@@ -653,7 +653,7 @@ export function validateAndExtractElicitationContent(
   for (const [key, val] of Object.entries(content)) {
     if (val === undefined) continue;
     if (val === null) {
-      throw new ErrorLanzador(`El campo "${key}" no admite valor nulo.`, 400);
+      throw new LauncherError(`El campo "${key}" no admite valor nulo.`, 400);
     }
     if (Object.hasOwn(properties, key)) {
       validateScalarValue(key, val, properties[key]);

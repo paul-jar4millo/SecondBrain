@@ -1,15 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  leerConversacion,
-  observarConversaciones,
-  leerContexto,
+  readConversation,
+  watchConversations,
+  readContextUsage,
   marcarInterna,
 } from "../conversations.mjs";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { abrirRegistro } from "../sessions.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
 
 test("Claude conserva los turnos humanos y respuestas, sin resultados de herramientas", () => {
   const text =
@@ -26,7 +26,7 @@ test("Claude conserva los turnos humanos y respuestas, sin resultados de herrami
     ]
       .map(JSON.stringify)
       .join("\n") + '\n{"partial":';
-  assert.deepEqual(leerConversacion("claude", text), [
+  assert.deepEqual(readConversation("claude", text), [
     { rol: "user", texto: "Hola" },
     { rol: "assistant", texto: "Respuesta" },
   ]);
@@ -43,7 +43,7 @@ test("Antigravity extrae el prompt sin metadatos internos y la respuesta públic
   ]
     .map(JSON.stringify)
     .join("\n");
-  assert.deepEqual(leerConversacion("agy", text), [
+  assert.deepEqual(readConversation("agy", text), [
     { rol: "user", texto: "Hola" },
     { rol: "assistant", texto: "Respuesta" },
   ]);
@@ -75,7 +75,7 @@ test("Codex preserves human and assistant messages while excluding tool output",
   ]
     .map(JSON.stringify)
     .join("\n");
-  assert.deepEqual(leerConversacion("codex", text), [
+  assert.deepEqual(readConversation("codex", text), [
     { rol: "user", texto: "Hola" },
     { rol: "assistant", texto: "Respuesta" },
   ]);
@@ -107,11 +107,11 @@ test("mide el contexto del último turno sin sumar todo el cache histórico", ()
   ]
     .map(JSON.stringify)
     .join("\n");
-  assert.deepEqual(leerContexto("claude", claude), {
+  assert.deepEqual(readContextUsage("claude", claude), {
     usados: 223500,
     limite: 400000,
   });
-  assert.deepEqual(leerContexto("deepseek", claude), {
+  assert.deepEqual(readContextUsage("deepseek", claude), {
     usados: 223500,
     limite: 400000,
   });
@@ -125,7 +125,7 @@ test("mide el contexto del último turno sin sumar todo el cache histórico", ()
       },
     },
   });
-  assert.deepEqual(leerContexto("codex", codex), {
+  assert.deepEqual(readContextUsage("codex", codex), {
     usados: 351000,
     limite: 400000,
   });
@@ -134,7 +134,7 @@ test("mide el contexto del último turno sin sumar todo el cache histórico", ()
 test("Codex observer links an exact launcher marker to its native conversation", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "sb-codex-history-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(root, "registro.json"));
+  const registro = await openSessionRegistry(path.join(root, "registro.json"));
   const session = await registro.crear({
     motor: "codex",
     origen: "sala",
@@ -174,7 +174,7 @@ test("Codex observer links an exact launcher marker to its native conversation",
       .map(JSON.stringify)
       .join("\n"),
   );
-  const stop = observarConversaciones({
+  const stop = watchConversations({
     registro,
     env: { HOME: root, CODEX_HOME: path.join(root, "codex") },
     proyectos: {},
@@ -192,7 +192,7 @@ test("Codex observer links an exact launcher marker to its native conversation",
 test("una ejecución interna marcada nunca aparece como conversación", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "sb-internas-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(root, "registro.json"));
+  const registro = await openSessionRegistry(path.join(root, "registro.json"));
   const claude = path.join(root, "claude/projects/p");
   await mkdir(claude, { recursive: true });
   const transcript = (texto) =>
@@ -214,7 +214,7 @@ test("una ejecución interna marcada nunca aparece como conversación", async (t
     transcript("Redacta el PR"),
   );
   await writeFile(path.join(claude, visible + ".jsonl"), transcript("Hola"));
-  const stop = observarConversaciones({
+  const stop = watchConversations({
     registro,
     env,
     proyectos: {},

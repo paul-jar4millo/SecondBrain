@@ -2,9 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createHash } from "node:crypto";
-import { crearCatalogo, leerModelosAgy, leerModelosCodex } from "../models.mjs";
-import { comandoMotor } from "../engines.mjs";
-import { crearServidor } from "../index.mjs";
+import {
+  createModelCatalog,
+  readAgyModels,
+  readCodexModels,
+} from "../models.mjs";
+import { engineCommand } from "../engines.mjs";
+import { createLauncherServer } from "../index.mjs";
 
 const cacheCodex = JSON.stringify({
   models: [
@@ -23,7 +27,7 @@ const salidaAgy =
   "Fetching available models...\n\x1b[1mgemini-x-high\x1b[0m\tGemini X (High)\nclaude-y\tClaude Y\n--evil\tMal\n";
 
 test("lee los catálogos de Codex y Antigravity sin ocultos ni opciones", () => {
-  assert.deepEqual(leerModelosCodex(cacheCodex), [
+  assert.deepEqual(readCodexModels(cacheCodex), [
     {
       id: "gpt-a",
       nombre: "GPT A",
@@ -31,7 +35,7 @@ test("lee los catálogos de Codex y Antigravity sin ocultos ni opciones", () => 
       esfuerzos: ["low", "high"],
     },
   ]);
-  assert.deepEqual(leerModelosAgy(salidaAgy), [
+  assert.deepEqual(readAgyModels(salidaAgy), [
     { id: "gemini-x-high", nombre: "Gemini X (High)" },
     { id: "claude-y", nombre: "Claude Y" },
   ]);
@@ -39,7 +43,7 @@ test("lee los catálogos de Codex y Antigravity sin ocultos ni opciones", () => 
 
 test("valida modelo y esfuerzo contra lo que ofrece cada motor", async () => {
   let consultas = 0;
-  const catalogo = crearCatalogo({
+  const catalogo = createModelCatalog({
     env: { CODEX_HOME: "/codex" },
     leer: async () => cacheCodex,
     agy: async () => (consultas++, salidaAgy),
@@ -81,7 +85,7 @@ test("valida modelo y esfuerzo contra lo que ofrece cada motor", async () => {
 
 test("un fallo al consultar deja solo el predeterminado y se reintenta", async () => {
   let consultas = 0;
-  const catalogo = crearCatalogo({
+  const catalogo = createModelCatalog({
     env: {},
     agy: async () => {
       consultas++;
@@ -95,21 +99,23 @@ test("un fallo al consultar deja solo el predeterminado y se reintenta", async (
 
 test("pasa el modelo a cada CLI y nunca a DeepSeek", () => {
   assert.deepEqual(
-    comandoMotor("claude", "x", { modelo: "opus" }).args.slice(-2),
+    engineCommand("claude", "x", { modelo: "opus" }).args.slice(-2),
     ["--model", "opus"],
   );
   assert.ok(
-    !comandoMotor("deepseek", "x", { modelo: "opus" }).args.includes("--model"),
+    !engineCommand("deepseek", "x", { modelo: "opus" }).args.includes(
+      "--model",
+    ),
   );
   assert.deepEqual(
-    comandoMotor("codex", "x", {
+    engineCommand("codex", "x", {
       modelo: "gpt-a",
       esfuerzo: "high",
     }).args.slice(-5),
     ["-m", "gpt-a", "-c", 'model_reasoning_effort="high"', "x"],
   );
   assert.deepEqual(
-    comandoMotor("agy", "x", { modelo: "claude-y" }).args.slice(-2),
+    engineCommand("agy", "x", { modelo: "claude-y" }).args.slice(-2),
     ["--model", "claude-y"],
   );
 });
@@ -117,10 +123,10 @@ test("pasa el modelo a cada CLI y nunca a DeepSeek", () => {
 test("el servidor publica los modelos y rechaza uno que no existe", async (t) => {
   const huella = (s) => createHash("sha256").update(s).digest("hex");
   const pedidos = [];
-  const server = crearServidor({
+  const server = createLauncherServer({
     registro: { leer: () => [], subscribe: () => () => {} },
     ejecutor: { encargar: async (x) => (pedidos.push(x), { id: "s" }) },
-    catalogo: crearCatalogo({
+    catalogo: createModelCatalog({
       env: { CODEX_HOME: "/c" },
       leer: async () => cacheCodex,
       agy: async () => salidaAgy,

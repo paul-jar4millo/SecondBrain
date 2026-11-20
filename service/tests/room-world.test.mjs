@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApplication } from "../index.mjs";
-import { createSala } from "../room.mjs";
+import { createRoom } from "../room.mjs";
 
 process.env.SB_REFERENCE_BANK = fileURLToPath(
   new URL("./fixtures/reference-bank.json", import.meta.url),
@@ -158,7 +158,7 @@ test("sala: orders are limited to four agents, survive restart and keep other as
   assert.equal(data.encargos.marina.project, "p1");
   assert.equal(data.encargos.marina.instruction, "Revisar código en el taller");
   assert.equal(data.encargos.ambar.mode, "rest");
-  const reloaded = await createSala(path.join(root, "data"), Error);
+  const reloaded = await createRoom(path.join(root, "data"), Error);
   assert.equal(reloaded.leer().encargos.marina.project, "p1");
 });
 
@@ -178,7 +178,7 @@ test("sala: simultaneous orders persist without sharing temporary-file renames",
     responses.map((r) => r.status),
     [200, 200, 200, 200],
   );
-  const reloaded = await createSala(path.join(root, "data"), Error);
+  const reloaded = await createRoom(path.join(root, "data"), Error);
   assert.equal(Object.keys(reloaded.leer().encargos).length, 4);
 });
 
@@ -194,7 +194,7 @@ test("sala: el tablero del formato anterior pasa a la sala general", async (t) =
     path.join(root, "sala.json"),
     JSON.stringify({ tablero: [banco] }),
   );
-  const sala = await createSala(root, Error);
+  const sala = await createRoom(root, Error);
   assert.deepEqual(sala.leer().tablero, [banco]);
   assert.deepEqual(sala.leer("otro").tablero, []);
 });

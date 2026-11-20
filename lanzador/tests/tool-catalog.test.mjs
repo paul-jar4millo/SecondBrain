@@ -23,9 +23,9 @@ import {
   PRODUCT_SKILLS_SPEC,
   TOOL_PROFILES_BASE,
 } from "../tool-catalog.mjs";
-import { abrirRegistro } from "../sessions.mjs";
-import { crearEjecutor } from "../executor.mjs";
-import { crearServidor } from "../index.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { createExecutor } from "../executor.mjs";
+import { createLauncherServer } from "../index.mjs";
 import { createApplication } from "../../service/index.mjs";
 
 test("A/E: catálogo separa 6 estados sin inferencias falsas, respeta freshness TTL y bloquea DeepSeek sin concesión de gasto", async (t) => {
@@ -425,15 +425,15 @@ test("rutas HTTP /agentes/herramientas/* respetan permisos de sala y bloquean bi
     dataDir: path.join(dir, "lanzador-data"),
     env: { AGENTES_BRAIN_TOKEN_FILE: path.join(dir, "token") },
   });
-  const registro = await abrirRegistro(path.join(dir, "sessions.json"));
-  const ejecutor = crearEjecutor({
+  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const ejecutor = createExecutor({
     registro,
     proyectos: { demo: dir },
     env: {},
     toolCatalog,
   });
   const h = (v) => createHash("sha256").update(v).digest("hex");
-  const launcher = crearServidor({
+  const launcher = createLauncherServer({
     registro,
     ejecutor,
     toolCatalog,

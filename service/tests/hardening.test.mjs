@@ -8,8 +8,8 @@ import { Readable } from "node:stream";
 import { Auth, totp } from "../auth.mjs";
 import { Failure, Vault } from "../vault.mjs";
 import { createSharedFiles } from "../shared-files.mjs";
-import { crearColaAprobaciones } from "../approvals.mjs";
-import { createMundo } from "../world.mjs";
+import { createApprovalQueue } from "../approvals.mjs";
+import { createWorld } from "../world.mjs";
 import { createApplication } from "../index.mjs";
 
 process.env.SB_REFERENCE_BANK = fileURLToPath(
@@ -168,7 +168,7 @@ test("recupera solo la última línea truncada y compacta el journal", async (t)
       JSON.stringify(current) +
       '\n{"id":',
   );
-  const cola = await crearColaAprobaciones(dir, { reloj: () => 10000000003 });
+  const cola = await createApprovalQueue(dir, { reloj: () => 10000000003 });
   t.after(() => cola.cerrar());
   assert.deepEqual(
     cola.listar().map((r) => r.id),
@@ -182,7 +182,7 @@ test("no oculta corrupción en medio del journal", async (t) => {
     path.join(dir, "aprobaciones.jsonl"),
     'incorrecto\n{"id":"a","estado":"rechazada"}\n',
   );
-  await assert.rejects(crearColaAprobaciones(dir));
+  await assert.rejects(createApprovalQueue(dir));
 });
 test("rechaza metadatos de subida sin consumir cuerpo", async (t) => {
   const dir = await temp(t);
@@ -210,7 +210,7 @@ test("serializa guardados concurrentes de Mundo sin perder agentes", async (t) =
       agents: ["ambar", "menta", "lira", "marina"].map((id) => ({ id })),
     }),
   );
-  const mundo = createMundo(dir, Failure);
+  const mundo = createWorld(dir, Failure);
   await mundo.configurarAgente({ id: "ambar", enabled: true, notes: "inicio" });
   await Promise.all(
     ["ambar", "menta", "lira", "marina"].map((id) =>
@@ -290,8 +290,8 @@ test("elimina claves de límites de intentos caducadas", async () => {
 });
 test("limita bytes de imágenes remotas de Pinterest", async (t) => {
   const dir = await temp(t);
-  const { createSala } = await import("../room.mjs");
-  const sala = await createSala(dir, Failure);
+  const { createRoom } = await import("../room.mjs");
+  const sala = await createRoom(dir, Failure);
   const pin = sala
     .leer()
     .pines.find((p) => p.imagen.startsWith("https://i.pinimg.com/"));

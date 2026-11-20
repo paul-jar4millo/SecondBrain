@@ -1,7 +1,7 @@
 import { body, send } from "../io.mjs";
 import { once } from "node:events";
 import { Failure } from "../../vault.mjs";
-import { MOTOR_ACTOR, intersectList } from "../../agent-profiles.mjs";
+import { ENGINE_ACTOR, intersectList } from "../../agent-profiles.mjs";
 import { randomUUID } from "node:crypto";
 /** @import { RouteModule } from "../route-types.d.ts" */
 
@@ -184,7 +184,7 @@ export const agentSessionRoutes = (ctx, req) => {
         );
       }
       const preassignedSessionId = randomUUID();
-      const sessionActor = MOTOR_ACTOR[payload.motor] || null;
+      const sessionActor = ENGINE_ACTOR[payload.motor] || null;
       const minted = await auth.issueCapability({
         sessionId: preassignedSessionId,
         workOrderId: payload.workOrderId ?? null,

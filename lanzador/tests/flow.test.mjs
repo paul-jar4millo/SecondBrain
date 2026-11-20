@@ -8,21 +8,21 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   coalescer,
-  crearTerminal,
+  createTerminal,
   quitarRespuestas,
   tamanoPermitido,
 } from "../harness.mjs";
-import { abrirRegistro } from "../sessions.mjs";
-import { abrirEspacios } from "../workspaces.mjs";
-import { crearEjecutor } from "../executor.mjs";
-import { crearItems } from "../items.mjs";
-import { crearServidor } from "../index.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
+import { openWorkspaces } from "../workspaces.mjs";
+import { createExecutor } from "../executor.mjs";
+import { createItems } from "../items.mjs";
+import { createLauncherServer } from "../index.mjs";
 
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 const huella = (token) => createHash("sha256").update(token).digest("hex");
 
 test("el snapshot es un estado limpio aunque la salida llegue partida a mitad de una secuencia", async () => {
-  const origen = crearTerminal({ cols: 40, rows: 5 });
+  const origen = createTerminal({ cols: 40, rows: 5 });
   origen.append("hola \x1b[3");
   origen.append("1mroja\x1b[0m\r\nsegunda línea");
   assert.equal(origen.seq, 2);
@@ -31,7 +31,7 @@ test("el snapshot es un estado limpio aunque la salida llegue partida a mitad de
   assert.deepEqual([snapshot.cols, snapshot.rows], [40, 5]);
   assert.ok(!snapshot.datos.includes("\x1b[3\x1b"));
   // Playing the snapshot into a fresh screen reproduces the same state.
-  const copia = crearTerminal({ cols: 40, rows: 5 });
+  const copia = createTerminal({ cols: 40, rows: 5 });
   copia.append(snapshot.datos);
   assert.equal((await copia.snapshot()).datos, snapshot.datos);
   assert.match(snapshot.datos, /hola .*roja/);
@@ -39,7 +39,7 @@ test("el snapshot es un estado limpio aunque la salida llegue partida a mitad de
 });
 
 test("el snapshot conserva el historial acotado y descarta el más antiguo", async () => {
-  const terminal = crearTerminal({ cols: 40, rows: 5, scrollback: 50 });
+  const terminal = createTerminal({ cols: 40, rows: 5, scrollback: 50 });
   for (let i = 1; i <= 200; i++) terminal.append(`línea ${i}\r\n`);
   const { datos, seq } = await terminal.snapshot();
   assert.equal(seq, 200);
@@ -50,7 +50,7 @@ test("el snapshot conserva el historial acotado y descarta el más antiguo", asy
 });
 
 test("un snapshot es coherente con exactamente los fragmentos hasta su seq", async () => {
-  const terminal = crearTerminal({ cols: 40, rows: 5 });
+  const terminal = createTerminal({ cols: 40, rows: 5 });
   terminal.append("uno\r\n");
   const pendiente = terminal.snapshot();
   terminal.append("dos\r\n");
@@ -68,13 +68,13 @@ test("las respuestas a consultas de terminal no se reinyectan en el historial", 
   );
   // Real queries are kept: the screen must still react to them.
   assert.equal(quitarRespuestas("\x1b[c\x1b[6n"), "\x1b[c\x1b[6n");
-  const terminal = crearTerminal();
+  const terminal = createTerminal();
   terminal.append("\x1b[?1;2c");
   assert.equal(terminal.seq, 0);
 });
 
 test("la terminal avisa de fragmentos y cambios de tamaño a quien se suscribe", async () => {
-  const terminal = crearTerminal({ cols: 80, rows: 24 });
+  const terminal = createTerminal({ cols: 80, rows: 24 });
   const eventos = [];
   const baja = terminal.suscribir((e) => eventos.push(e));
   terminal.append("x");
@@ -137,14 +137,14 @@ function falsoHijo() {
 
 async function montar(t, { motor = "claude", items } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-flujo-"));
-  const registro = await abrirRegistro(path.join(dir, "sesiones.json"));
-  const espacios = await abrirEspacios({
+  const registro = await openSessionRegistry(path.join(dir, "sesiones.json"));
+  const espacios = await openWorkspaces({
     archivo: path.join(dir, "espacios.json"),
     proyectos: {},
     workspaces: path.join(dir, "workspaces"),
   });
   let hijo;
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     espacios,
     proyectos: {},
@@ -161,7 +161,7 @@ async function montar(t, { motor = "claude", items } = {}) {
     brief: "hola",
   });
   for (let i = 0; i < 100 && !hijo; i++) await espera(10);
-  const servidor = crearServidor({
+  const servidor = createLauncherServer({
     registro,
     ejecutor,
     items: items?.({ registro, dir }),
@@ -322,7 +322,7 @@ test("el stream exige credencial y rechaza sesiones sin terminal", async (t) => 
 test("el stream envía snapshot, deltas coalescidos con seq continuo, items y estado", async (t) => {
   const { url, sesion, hijo, dir, registro } = await montar(t, {
     items: ({ registro, dir }) =>
-      crearItems({
+      createItems({
         registro,
         env: { HOME: dir, AGENTES_CLAUDE_DIR: path.join(dir, "claude") },
         intervalo: 20,

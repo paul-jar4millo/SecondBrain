@@ -9,7 +9,7 @@ import { test } from "node:test";
 
 import { createClaudeController } from "../provider-controllers.mjs";
 import { createProviderConversations } from "../provider-conversations.mjs";
-import { abrirRegistro } from "../sessions.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
 
 import { createHarness, waitFor } from "./helpers/provider-fakes.mjs";
 
@@ -76,7 +76,7 @@ test("contrato 4: error de escritura guarda respuesta y marca entrega_incierta (
   const dir = await mkdtemp(path.join(os.tmpdir(), "sb-write-fail-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const sessId = randomUUID();
-  const reg = await abrirRegistro(path.join(dir, "s.json"));
+  const reg = await openSessionRegistry(path.join(dir, "s.json"));
   await reg.crear({
     id: sessId,
     motor: "codex",
@@ -149,7 +149,7 @@ test("regresión: Claude reporta callback_returned sin fingir rpc_write_flushed;
   let releaseTurn = null;
   let capturedInterruptCount = 0;
 
-  const registro = await abrirRegistro(path.join(dir, "ses.json"));
+  const registro = await openSessionRegistry(path.join(dir, "ses.json"));
   const conv = createProviderConversations({
     directory: path.join(dir, "conv"),
     registro,

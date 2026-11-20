@@ -45,7 +45,7 @@ const redirectSeguro = (u) => {
  *   onChange?: () => void,
  * }} options
  */
-export async function crearMcpRemoto({
+export async function createRemoteMcp({
   directory,
   auth,
   Failure,

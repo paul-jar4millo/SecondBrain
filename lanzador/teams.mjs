@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { TOOL_PROFILES_BASE } from "./tool-catalog.mjs";
-import { ErrorLanzador } from "./errors.mjs";
+import { LauncherError } from "./errors.mjs";
 import { sha256Hex as hashBytes } from "./lib/hash.mjs";
 
 /** @import { ApprovedCandidate, DeliveryInput, IntegratedFile, IntegrationCandidate, IntegrationConflict, IntegrationOptions, IntegrationRecord, IntegrationResolution, IntegrationResult, ManifestCard, ManifestInput, MemberUpdate, Team, TeamManifest, TeamMember, TeamMetadata, TextDeliverySummary } from "./team-types.d.ts" */
@@ -19,7 +19,7 @@ const sha256Hex = (value) =>
 /** @param {unknown} raw */
 function normalizarRutaRelativa(raw) {
   if (typeof raw !== "string")
-    throw new ErrorLanzador("Ruta de entregable inválida", 400);
+    throw new LauncherError("Ruta de entregable inválida", 400);
   const unix = raw.trim().replaceAll("\\", "/").replace(/^\.\//, "");
   if (
     !unix ||
@@ -28,11 +28,11 @@ function normalizarRutaRelativa(raw) {
     /^[a-zA-Z]:/.test(unix) ||
     unix.includes("\0")
   ) {
-    throw new ErrorLanzador("Ruta de entregable inválida", 400);
+    throw new LauncherError("Ruta de entregable inválida", 400);
   }
   const parts = unix.split("/");
   if (parts.some((p) => !p || p === "." || p === ".." || p === ".git")) {
-    throw new ErrorLanzador("Ruta de entregable inválida", 400);
+    throw new LauncherError("Ruta de entregable inválida", 400);
   }
   return parts.join("/");
 }
@@ -44,11 +44,11 @@ function normalizarRutaRelativa(raw) {
 function normalizarManifiesto(manifest) {
   if (!manifest || typeof manifest !== "object") return null;
   if (!Array.isArray(manifest.team) || manifest.team.length === 0)
-    throw new ErrorLanzador("Manifiesto de equipo inválido", 400);
+    throw new LauncherError("Manifiesto de equipo inválido", 400);
   const team = manifest.team.map((card, index) => {
     const motor = card.motor ?? card.engine;
     if (!motor || !MOTORES.has(motor))
-      throw new ErrorLanzador("Motor inválido en manifiesto", 400);
+      throw new LauncherError("Motor inválido en manifiesto", 400);
     return {
       id: String(card.id || `${manifest.workOrderId || "wo"}-m-${index + 1}`),
       characterId: card.characterId || null,
@@ -107,7 +107,7 @@ function esPerfilMasAmplio(solicitadoId, limiteId) {
  * @param {string} dir
  * @param {{ maxMiembros?: number, activo?: (sessionId: string) => boolean, onChange?: () => void }} [options]
  */
-export async function abrirEquipos(
+export async function openTeams(
   dir,
   { maxMiembros = 4, activo = () => true, onChange = () => {} } = {},
 ) {
@@ -172,7 +172,7 @@ export async function abrirEquipos(
       equipo.manifestSha256 &&
       (meta.manifestSha256 || meta.manifest?.sha256) !== equipo.manifestSha256
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         "Manifiesto del encargo desactualizado; recarga el equipo.",
         409,
       );
@@ -185,7 +185,7 @@ export async function abrirEquipos(
       if (meta.memberId) {
         card = assignedCards.find((c) => c.id === meta.memberId) || null;
         if (!card) {
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "Integrante fuera del manifiesto aprobado.",
             403,
           );
@@ -198,7 +198,7 @@ export async function abrirEquipos(
             (!meta.requestId || m.requestId !== meta.requestId),
         );
         if (alreadyActive) {
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "La integrante del manifiesto ya tiene una sesión activa.",
             409,
           );
@@ -220,19 +220,19 @@ export async function abrirEquipos(
           ) {
             throw new Error("Límite del equipo alcanzado");
           }
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "Todas las tarjetas de este motor en el manifiesto ya están activas.",
             409,
           );
         } else {
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "Integrante fuera del manifiesto aprobado.",
             403,
           );
         }
       }
       if (card.motor !== motor) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "El manifiesto del encargo no permite cambiar el motor de esta integrante.",
           409,
         );
@@ -242,7 +242,7 @@ export async function abrirEquipos(
           ? meta.modelo.trim()
           : null;
       if (card.model && reqModelo && reqModelo !== card.model) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "El manifiesto del encargo fija el modelo de esta integrante y no permite cambiarlo sin editar el equipo.",
           409,
         );
@@ -252,7 +252,7 @@ export async function abrirEquipos(
           ? meta.esfuerzo.trim()
           : null;
       if (card.effort && reqEsfuerzo && reqEsfuerzo !== card.effort) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "El manifiesto del encargo fija el esfuerzo de esta integrante y no permite cambiarlo sin editar el equipo.",
           409,
         );
@@ -263,7 +263,7 @@ export async function abrirEquipos(
         meta.toolProfileId !== card.toolProfileId &&
         esPerfilMasAmplio(meta.toolProfileId, card.toolProfileId)
       ) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "No puedes ampliar el perfil de herramientas respecto al manifiesto aprobado.",
           403,
         );
@@ -278,7 +278,7 @@ export async function abrirEquipos(
         !coordWorkerAllowed &&
         esPerfilMasAmplio(meta.toolProfileId, p.toolProfileId)
       ) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "La integrante hija no puede ampliar permisos más allá del perfil autorizado.",
           403,
         );
@@ -366,7 +366,7 @@ export async function abrirEquipos(
           meta.manifestSha256 &&
           manifest.sha256 !== meta.manifestSha256
         ) {
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "Manifiesto del encargo desactualizado; recarga el equipo.",
             409,
           );
@@ -379,14 +379,14 @@ export async function abrirEquipos(
             ) || null
           : null;
         if (manifest && !coordCard) {
-          throw new ErrorLanzador(
+          throw new LauncherError(
             "Integrante fuera del manifiesto aprobado.",
             403,
           );
         }
         if (coordCard) {
           if (meta.motor && coordCard.motor !== meta.motor) {
-            throw new ErrorLanzador(
+            throw new LauncherError(
               "El manifiesto del encargo no permite cambiar el motor de esta integrante.",
               409,
             );
@@ -396,7 +396,7 @@ export async function abrirEquipos(
             meta.modelo &&
             meta.modelo !== coordCard.model
           ) {
-            throw new ErrorLanzador(
+            throw new LauncherError(
               "El manifiesto del encargo fija el modelo de esta integrante y no permite cambiarlo sin editar el equipo.",
               409,
             );
@@ -406,7 +406,7 @@ export async function abrirEquipos(
             meta.esfuerzo &&
             meta.esfuerzo !== coordCard.effort
           ) {
-            throw new ErrorLanzador(
+            throw new LauncherError(
               "El manifiesto del encargo fija el esfuerzo de esta integrante y no permite cambiarlo sin editar el equipo.",
               409,
             );
@@ -637,7 +637,7 @@ export async function abrirEquipos(
               throw new Error("Entregable inválido");
             const r = normalizarRutaRelativa(item.ruta);
             if (vistas.has(r))
-              throw new ErrorLanzador("Ruta duplicada en el entregable", 400);
+              throw new LauncherError("Ruta duplicada en el entregable", 400);
             vistas.add(r);
             totalBytes += item.contenido.length;
             if (totalBytes > 250000) throw new Error("Entregable inválido");
@@ -708,7 +708,7 @@ export async function abrirEquipos(
         try {
           const equipo = requerir(sesionLider);
           if (equipo.lider !== sesionLider) {
-            throw new ErrorLanzador(
+            throw new LauncherError(
               "Solo la coordinadora del equipo puede integrar entregables.",
               403,
             );
@@ -718,13 +718,13 @@ export async function abrirEquipos(
               ? entregableIds.map((id) => {
                   const hit = equipo.entregables.find((e) => e.id === id);
                   if (!hit)
-                    throw new ErrorLanzador("Entregable inexistente", 404);
+                    throw new LauncherError("Entregable inexistente", 404);
                   return hit;
                 })
               : equipo.entregables;
 
           if (seleccionados.length === 0) {
-            throw new ErrorLanzador(
+            throw new LauncherError(
               "No hay entregables para integrar en este equipo.",
               400,
             );
@@ -738,7 +738,7 @@ export async function abrirEquipos(
             if (e.archivos?.length) {
               for (const f of e.archivos) {
                 if (sha256Hex(f.contenido) !== f.sha256) {
-                  throw new ErrorLanzador(
+                  throw new LauncherError(
                     "Integridad SHA-256 inválida en entregable.",
                     409,
                   );
@@ -760,7 +760,7 @@ export async function abrirEquipos(
               }
             } else if (e.ruta) {
               if (e.sha256 && sha256Hex(e.contenido) !== e.sha256) {
-                throw new ErrorLanzador(
+                throw new LauncherError(
                   "Integridad SHA-256 inválida en entregable.",
                   409,
                 );
@@ -838,7 +838,7 @@ export async function abrirEquipos(
             if (resolucion) {
               const previo = conflictoRegistrado(ruta);
               if (!previo) {
-                throw new ErrorLanzador(
+                throw new LauncherError(
                   `No hay un conflicto registrado para ${ruta}; integra primero para revisarlo.`,
                   409,
                 );
@@ -886,7 +886,7 @@ export async function abrirEquipos(
                   (c) => c.entregableId === resolucion.entregableId,
                 );
                 if (!elegido) {
-                  throw new ErrorLanzador(
+                  throw new LauncherError(
                     `La resolución para ${ruta} referencia un entregable desconocido.`,
                     400,
                   );
@@ -1003,7 +1003,7 @@ export async function abrirEquipos(
               const dst = path.resolve(rootResolved, item.ruta);
               const rel = path.relative(rootResolved, dst);
               if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) {
-                throw new ErrorLanzador(
+                throw new LauncherError(
                   "Ruta de integración fuera de alcance.",
                   403,
                 );
@@ -1014,7 +1014,7 @@ export async function abrirEquipos(
             // while the integration was being checked is never overwritten.
             for (const item of aprobados) {
               if ((await hashEnDisco(item.ruta)) !== item.discoEsperado) {
-                throw new ErrorLanzador(
+                throw new LauncherError(
                   `El archivo ${item.ruta} cambió durante la integración; vuelve a integrar para revisarlo.`,
                   409,
                 );

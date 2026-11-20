@@ -1,17 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  comandoMotor,
+  engineCommand,
   entornoDe,
   entornoEsfuerzo,
   IDENTIDAD_MARINA,
-  modeloEconomico,
-  saldoDeepSeek,
-  validarAdjuntosMotor,
+  economyModel,
+  deepSeekBalance,
+  validateEngineAttachments,
 } from "../engines.mjs";
 
 test("prepara los cuatro motores headless sin imponer modelo ni herramientas", () => {
-  const claude = comandoMotor("claude", "Hazlo");
+  const claude = engineCommand("claude", "Hazlo");
   assert.equal(claude.bin, "claude");
   assert.deepEqual(claude.args, [
     "-p",
@@ -23,12 +23,12 @@ test("prepara los cuatro motores headless sin imponer modelo ni herramientas", (
     "--permission-mode",
     "bypassPermissions",
   ]);
-  assert.deepEqual(comandoMotor("deepseek", "x").args, [
-    ...comandoMotor("claude", "x").args,
+  assert.deepEqual(engineCommand("deepseek", "x").args, [
+    ...engineCommand("claude", "x").args,
     "--append-system-prompt",
     IDENTIDAD_MARINA,
   ]);
-  const codex = comandoMotor("codex", "x").args;
+  const codex = engineCommand("codex", "x").args;
   assert.deepEqual(codex, [
     "exec",
     "--json",
@@ -38,14 +38,14 @@ test("prepara los cuatro motores headless sin imponer modelo ni herramientas", (
     "x",
   ]);
   assert.ok(!codex.includes("model_auto_compact_token_limit=350000"));
-  assert.deepEqual(comandoMotor("agy", "x").args, [
+  assert.deepEqual(engineCommand("agy", "x").args, [
     "-p",
     "x",
     "--output-format",
     "stream-json",
     "--dangerously-skip-permissions",
   ]);
-  assert.throws(() => comandoMotor("otro", "x"));
+  assert.throws(() => engineCommand("otro", "x"));
 });
 
 test("consulta saldo USD sin registrar la clave y rechaza respuestas no fiables", async () => {
@@ -63,16 +63,16 @@ test("consulta saldo USD sin registrar la clave y rechaza respuestas no fiables"
       }),
     };
   };
-  assert.equal(await saldoDeepSeek("test-key", fetchFn), 0.19);
+  assert.equal(await deepSeekBalance("test-key", fetchFn), 0.19);
   assert.equal(solicitud.url, "https://api.deepseek.com/user/balance");
   assert.equal(solicitud.options.headers.Authorization, "Bearer test-key");
   await assert.rejects(
-    saldoDeepSeek("test-key", async () => ({
+    deepSeekBalance("test-key", async () => ({
       ok: true,
       json: async () => ({ is_available: false, balance_infos: [] }),
     })),
   );
-  await assert.rejects(saldoDeepSeek("", fetchFn));
+  await assert.rejects(deepSeekBalance("", fetchFn));
 });
 
 test("las credenciales de proveedores no se mezclan", () => {
@@ -98,7 +98,7 @@ test("las credenciales de proveedores no se mezclan", () => {
 
 test("un encargo que empieza con guion no se interpreta como opción del CLI", () => {
   for (const motor of ["claude", "codex", "agy", "deepseek"]) {
-    const args = comandoMotor(motor, "---\nname: x\n---\nhola").args;
+    const args = engineCommand(motor, "---\nname: x\n---\nhola").args;
     assert.ok(args.includes("Instrucciones:\n---\nname: x\n---\nhola"));
     assert.ok(!args.some((a) => a.startsWith("---")));
   }
@@ -106,12 +106,13 @@ test("un encargo que empieza con guion no se interpreta como opción del CLI", (
 
 test("Claude recibe --effort y DeepSeek lo traduce a presupuesto de pensamiento", () => {
   assert.deepEqual(
-    comandoMotor("claude", "x", { modelo: "opus", esfuerzo: "max" }).args.slice(
-      -4,
-    ),
+    engineCommand("claude", "x", {
+      modelo: "opus",
+      esfuerzo: "max",
+    }).args.slice(-4),
     ["--model", "opus", "--effort", "max"],
   );
-  const marina = comandoMotor("deepseek", "x", { esfuerzo: "high" }).args;
+  const marina = engineCommand("deepseek", "x", { esfuerzo: "high" }).args;
   assert.ok(!marina.includes("--effort"));
   assert.deepEqual(entornoEsfuerzo("deepseek", "high"), {
     MAX_THINKING_TOKENS: "32000",
@@ -120,23 +121,25 @@ test("Claude recibe --effort y DeepSeek lo traduce a presupuesto de pensamiento"
   assert.deepEqual(entornoEsfuerzo("claude", "high"), {});
 });
 
-test("modeloEconomico reconoce -luna en Codex y validarAdjuntosMotor acota capacidades", () => {
+test("economyModel reconoce -luna en Codex y validateEngineAttachments acota capacidades", () => {
   assert.equal(
-    modeloEconomico("codex", [{ id: "gpt-5.6" }, { id: "gpt-5.6-luna" }]),
+    economyModel("codex", [{ id: "gpt-5.6" }, { id: "gpt-5.6-luna" }]),
     "gpt-5.6-luna",
   );
   assert.equal(
-    modeloEconomico("codex", [{ id: "gpt-5.6-luna" }, { id: "gpt-5-mini" }]),
+    economyModel("codex", [{ id: "gpt-5.6-luna" }, { id: "gpt-5-mini" }]),
     "gpt-5-mini",
   );
   assert.throws(
     () =>
-      validarAdjuntosMotor("codex", [{ type: "embeddedContext", text: "x" }]),
+      validateEngineAttachments("codex", [
+        { type: "embeddedContext", text: "x" },
+      ]),
     /no soporta adjuntos/i,
   );
   assert.throws(
     () =>
-      validarAdjuntosMotor(
+      validateEngineAttachments(
         "codex",
         [{ type: "localImage", path: "../secreto.png" }],
         "/tmp/sandbox-workspace",

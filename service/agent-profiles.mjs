@@ -87,7 +87,7 @@ export const SERVICE_TOOL_PROFILES = {
   },
 };
 /** @type {Partial<Record<string, string>>} */
-export const MOTOR_ACTOR = {
+export const ENGINE_ACTOR = {
   claude: "ambar",
   codex: "menta",
   agy: "lira",

@@ -3,7 +3,7 @@
 
 /**
  * @param {{
- *   lanzador: ReturnType<typeof import("./launcher-client.mjs").createLanzador>,
+ *   lanzador: ReturnType<typeof import("./launcher-client.mjs").createLauncherClient>,
  *   userRequests: Awaited<ReturnType<typeof import("./user-requests.mjs").createUserRequestStore>>,
  *   workOrders: Awaited<ReturnType<typeof import("./work-orders.mjs").createWorkOrderStore>>,
  * }} deps

@@ -82,7 +82,7 @@ function cycleDate(day, month, asOfYear, endMonth) {
 }
 
 /** @param {string} markdown @param {string} today */
-export function parseRegistro(markdown, today) {
+export function parseLedgerExport(markdown, today) {
   const asOf = markdown.match(/exportado\s+(\d{4}-\d{2}-\d{2})/)?.[1];
   if (!isDay(asOf))
     throw new Failure(

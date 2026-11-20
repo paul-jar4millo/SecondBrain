@@ -1,21 +1,21 @@
 // Runs one turn of a session: a structured provider conversation when the engine
 // has one, otherwise the engine CLI as a child process.
-import { ErrorLanzador } from "../errors.mjs";
+import { LauncherError } from "../errors.mjs";
 import { PROVIDER_BY_ENGINE } from "./process-tools.mjs";
 import {
   actividadEvento,
   entornoDe,
   entornoEsfuerzo,
-  leerClaude,
-  leerGemini,
-  nuevoClaude,
+  readClaudeEvent,
+  readGeminiEvent,
+  newClaudeState,
 } from "../engines.mjs";
 import { buildMcpConfigForProfile } from "../tool-catalog.mjs";
 import { mkdir } from "node:fs/promises";
 import { sessionCommand } from "../limits.mjs";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { inferirFase } from "../phases.mjs";
+import { inferPhase } from "../phases.mjs";
 import { StringDecoder } from "node:string_decoder";
 /** @import { LauncherSession } from "../session-types.d.ts" */
 /** @import { TurnOptions } from "../types.d.ts" */
@@ -70,7 +70,7 @@ export function createLocalRunner(config, state, deps) {
           : sesion.billingAuthorized === true) ||
         env.SB_ALLOW_BILLED_DEEPSEEK === "1";
       if (sesion.motor === "deepseek" && !billingGranted) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "DeepSeek bloqueado por la política de gasto sin autorización explícita de gasto.",
           403,
         );
@@ -420,7 +420,7 @@ export function createLocalRunner(config, state, deps) {
     job.hijo = hijo;
     if (job.cancelada) senalar(hijo, "SIGTERM");
     const detenerVigilante = vigilar(sesion, hijo);
-    const acumulado = nuevoClaude();
+    const acumulado = newClaudeState();
     /** @type {Promise<unknown>} */
     let cambio = Promise.resolve();
     const lineas = createInterface({ input: hijo.stdout });
@@ -432,8 +432,8 @@ export function createLocalRunner(config, state, deps) {
         return;
       }
       if (sesion.motor === "claude" || sesion.motor === "deepseek")
-        leerClaude(acumulado, evento);
-      if (sesion.motor === "agy") leerGemini(acumulado, evento);
+        readClaudeEvent(acumulado, evento);
+      if (sesion.motor === "agy") readGeminiEvent(acumulado, evento);
       if (
         acumulado.sessionId &&
         acumulado.sessionId !== sesion.conversacionId
@@ -456,7 +456,7 @@ export function createLocalRunner(config, state, deps) {
         cambio = cambio.then(() =>
           registro.actualizar(sesion.id, {
             ultimaAccion: actividad.etiqueta,
-            fase: inferirFase(
+            fase: inferPhase(
               evento.item?.type ||
                 evento.message?.content?.find(
                   /** @param {{type?: string, name?: string}} c */

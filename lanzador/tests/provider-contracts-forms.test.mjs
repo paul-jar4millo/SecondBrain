@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { test } from "node:test";
 
-import { crearServidor } from "../index.mjs";
+import { createLauncherServer } from "../index.mjs";
 import {
   createClaudeController,
   validateAndExtractElicitationContent,
@@ -130,7 +130,7 @@ test("contrato 5: formulario content completo sin fabricar defaults + rechazos e
 
   const controlToken = "control-secret";
   const hookToken = "hook-secret";
-  const launcher = crearServidor({
+  const launcher = createLauncherServer({
     registro: h.registro,
     ejecutor: h.ejecutor,
     conversations: h.conversations,

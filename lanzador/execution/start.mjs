@@ -1,8 +1,8 @@
 // Starts a session: validates the request, prepares its workspace and token,
 // and launches its first turn or queues it until a process slot frees up.
 import path from "node:path";
-import { ErrorLanzador } from "../errors.mjs";
-import { validarAdjuntosMotor } from "../engines.mjs";
+import { LauncherError } from "../errors.mjs";
+import { validateEngineAttachments } from "../engines.mjs";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { runFile } from "./process-tools.mjs";
@@ -76,7 +76,7 @@ export function createStarter(config, state, deps) {
       motor === "deepseek" &&
       !verifiedGrant
     ) {
-      throw new ErrorLanzador(
+      throw new LauncherError(
         "DeepSeek bloqueado por la política de gasto sin autorización explícita de gasto.",
         403,
       );
@@ -106,25 +106,25 @@ export function createStarter(config, state, deps) {
             (memberId ? c.id === memberId : c.coordinator),
         ) || null;
       if (!card) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "Integrante fuera del manifiesto aprobado.",
           403,
         );
       }
       if ((card.motor || card.engine) !== motor) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "El manifiesto del encargo no permite cambiar el motor de esta integrante.",
           409,
         );
       }
       if (card.model && modelo && modelo !== card.model) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "El manifiesto del encargo fija el modelo de esta integrante y no permite cambiarlo sin editar el equipo.",
           409,
         );
       }
       if (card.effort && esfuerzo && esfuerzo !== card.effort) {
-        throw new ErrorLanzador(
+        throw new LauncherError(
           "El manifiesto del encargo fija el esfuerzo de esta integrante y no permite cambiarlo sin editar el equipo.",
           409,
         );
@@ -149,7 +149,7 @@ export function createStarter(config, state, deps) {
 
     const targetCwd = context?.cwd || proyectos[projectKey];
     const validatedAttachments = structured
-      ? validarAdjuntosMotor(motor, attachments, targetCwd)
+      ? validateEngineAttachments(motor, attachments, targetCwd)
       : [];
     const isolateChild = Boolean(
       padreId &&

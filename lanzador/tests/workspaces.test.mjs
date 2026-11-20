@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { abrirEspacios } from "../workspaces.mjs";
+import { openWorkspaces } from "../workspaces.mjs";
 
 test("vincula proyectos sin confundir su identidad con el repositorio y detecta conflictos", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-spaces-"));
@@ -14,7 +14,7 @@ test("vincula proyectos sin confundir su identidad con el repositorio y detecta 
     proyectos: { repo: dir },
     workspaces: path.join(dir, "workspaces"),
   };
-  const spaces = await abrirEspacios(options);
+  const spaces = await openWorkspaces(options);
   const free = await spaces.resolver("p1");
   assert.equal(free.repositorio, null);
   assert.ok(free.cwd.startsWith(options.workspaces + path.sep));
@@ -41,7 +41,7 @@ test("vincula proyectos sin confundir su identidad con el repositorio y detecta 
     }),
   );
   await assert.rejects(spaces.resolver("../vault"));
-  const reopened = await abrirEspacios(options);
+  const reopened = await openWorkspaces(options);
   assert.equal((await reopened.resolver("p1")).repositorio, "repo");
   await reopened.vincular({
     id: "p1",

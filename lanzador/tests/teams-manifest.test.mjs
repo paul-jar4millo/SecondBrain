@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { abrirEquipos } from "../teams.mjs";
+import { openTeams } from "../teams.mjs";
 import { manifiesto, sha } from "./helpers-manifest.mjs";
 
 const coordinadora = {
@@ -31,7 +31,7 @@ const tarjeta = (id, motor, extra = {}) => ({
 async function almacen(t, opciones) {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-team-mf-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  return { dir, equipos: await abrirEquipos(dir, opciones) };
+  return { dir, equipos: await openTeams(dir, opciones) };
 }
 
 test("el manifiesto transporta modelo, esfuerzo y rol a cada hija, también con el mismo motor repetido", async (t) => {
@@ -64,7 +64,7 @@ test("el manifiesto transporta modelo, esfuerzo y rol a cada hija, también con 
       ["m-c", "modelo-m-c", "medium", "Rol m-c"],
     ],
   );
-  const recuperado = await abrirEquipos(dir);
+  const recuperado = await openTeams(dir);
   assert.equal(recuperado.estado("h2").miembros.length, 4);
   assert.equal(recuperado.estado("h2").manifestSha256, mf.sha256);
 });

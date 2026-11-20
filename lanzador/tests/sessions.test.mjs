@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { abrirRegistro } from "../sessions.mjs";
+import { openSessionRegistry } from "../sessions.mjs";
 
 test("persiste sesiones concurrentes con índices de copia distintos y recupera sesiones interrumpidas", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-sesiones-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const archivo = path.join(dir, "estado.json");
-  const registro = await abrirRegistro(archivo);
+  const registro = await openSessionRegistry(archivo);
   const eventos = [];
   registro.subscribe((estado) => eventos.push(estado));
   const [a, b] = await Promise.all([
@@ -32,7 +32,7 @@ test("persiste sesiones concurrentes con índices de copia distintos y recupera 
   const disco = JSON.parse(await readFile(archivo, "utf8"));
   assert.equal(disco.length, 2);
   assert.equal(eventos.length, 3);
-  const recuperado = await abrirRegistro(archivo);
+  const recuperado = await openSessionRegistry(archivo);
   assert.equal(
     recuperado.leer().find((s) => s.id === a.id).estado,
     "terminada",
@@ -48,7 +48,7 @@ test("persiste sesiones concurrentes con índices de copia distintos y recupera 
 test("rechaza motores, orígenes y cambios de identidad inválidos", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-sesiones-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(dir, "estado.json"));
+  const registro = await openSessionRegistry(path.join(dir, "estado.json"));
   await assert.rejects(registro.crear({ motor: "otro", origen: "sala" }));
   await assert.rejects(registro.crear({ motor: "claude", origen: "otro" }));
   const s = await registro.crear({ motor: "claude", origen: "sala" });
@@ -59,7 +59,7 @@ test("restart releases an idle interactive harness while retaining its native id
   const dir = await mkdtemp(path.join(tmpdir(), "sb-restart-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const file = path.join(dir, "sessions.json");
-  const registro = await abrirRegistro(file);
+  const registro = await openSessionRegistry(file);
   const s = await registro.crear({
     motor: "claude",
     origen: "sala",
@@ -72,7 +72,7 @@ test("restart releases an idle interactive harness while retaining its native id
     terminal: "saved screen",
     conversacionId: s.id,
   });
-  const reopened = await abrirRegistro(file);
+  const reopened = await openSessionRegistry(file);
   const saved = reopened.leer()[0];
   assert.equal(saved.interactiva, false);
   assert.equal(saved.estado, "interrumpida");
@@ -83,7 +83,7 @@ test("restart releases an idle interactive harness while retaining its native id
 test("elimina solo conversaciones detenidas y no deja que el observador las reviva", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-sesiones-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await abrirRegistro(path.join(dir, "estado.json"));
+  const registro = await openSessionRegistry(path.join(dir, "estado.json"));
   const s = await registro.crear({
     motor: "claude",
     origen: "sala",

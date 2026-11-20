@@ -16,10 +16,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createBrainMcp } from "../index.mjs";
 import { createApplication } from "../../service/index.mjs";
-import { abrirRegistro } from "../../lanzador/sessions.mjs";
-import { abrirEquipos } from "../../lanzador/teams.mjs";
-import { crearEjecutor } from "../../lanzador/executor.mjs";
-import { crearServidor } from "../../lanzador/index.mjs";
+import { openSessionRegistry } from "../../lanzador/sessions.mjs";
+import { openTeams } from "../../lanzador/teams.mjs";
+import { createExecutor } from "../../lanzador/executor.mjs";
+import { createLauncherServer } from "../../lanzador/index.mjs";
 
 const carta = (id, characterId, engine, model, coordinator = false) => ({
   id,
@@ -42,10 +42,10 @@ test("un encargo de cuatro tarjetas delega por manifiesto, repite motor y se int
   await writeFile(path.join(vault, "Home.md"), "# Sintético\n");
   const fake = path.join(dir, "fake.mjs");
   await writeFile(fake, "setInterval(() => {}, 1000)");
-  const registro = await abrirRegistro(
+  const registro = await openSessionRegistry(
     path.join(dir, "state", "sesiones.json"),
   );
-  const equipos = await abrirEquipos(path.join(dir, "state", "equipos"), {
+  const equipos = await openTeams(path.join(dir, "state", "equipos"), {
     activo: (id) =>
       registro
         .leer()
@@ -53,7 +53,7 @@ test("un encargo de cuatro tarjetas delega por manifiesto, repite motor y se int
           (s) => s.id === id && ["pendiente", "trabajando"].includes(s.estado),
         ),
   });
-  const ejecutor = crearEjecutor({
+  const ejecutor = createExecutor({
     registro,
     equipos,
     env: { ...process.env, SB_LANZADOR_DATA_DIR: path.join(dir, "datos") },
@@ -63,7 +63,7 @@ test("un encargo de cuatro tarjetas delega por manifiesto, repite motor y se int
   });
   const validados = [];
   const hash = (s) => createHash("sha256").update(s).digest("hex");
-  const launcher = crearServidor({
+  const launcher = createLauncherServer({
     registro,
     equipos,
     ejecutor,
