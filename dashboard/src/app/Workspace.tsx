@@ -261,6 +261,7 @@ export function Workspace() {
   );
   const tools: { path: string; label: string; glyph: GlyphName }[] = [
     { path: "/projects", label: t("tools.projects"), glyph: "proyectos" },
+    { path: "/threads", label: t("tools.threads"), glyph: "equipo" },
     { path: "/team", label: t("tools.team"), glyph: "equipo" },
     { path: "/tasks", label: t("tools.tasks"), glyph: "tareas" },
     { path: "/finance", label: t("tools.finance"), glyph: "finanzas" },
