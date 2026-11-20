@@ -40,6 +40,13 @@ import { createWorkOrderStore } from "./work-orders.mjs";
 import { createUserRequestStore } from "./user-requests.mjs";
 import { createEffectsExecutor } from "./effects-executor.mjs";
 import { createSessionBridges } from "./agent-bridges.mjs";
+import {
+  agentHeaders,
+  body,
+  relayArtifactDownload,
+  send,
+  validateNotePath,
+} from "./http/io.mjs";
 
 /** @import { ApplicationOptions, HttpLogRecord, HttpRequest, LauncherSessionSummary, ScopedRecord, ToolProfile } from "./types.d.ts" */
 /** @import { WorkOrderManifest } from "./work-order-types.d.ts" */
@@ -235,21 +242,6 @@ export async function createApplication(options = {}) {
     return /billing|financial_spend|deepseek|api_facturada/i.test(
       `${grantReq.action || ""} ${grantReq.scope || ""}`,
     );
-  };
-  /** @param {HttpRequest} request */
-  const agentHeaders = (request) => {
-    const rawAgent =
-      typeof request.headers["x-sb-agente"] === "string"
-        ? request.headers["x-sb-agente"].trim()
-        : "";
-    const rawSession =
-      typeof request.headers["x-sb-sesion"] === "string"
-        ? request.headers["x-sb-sesion"].trim()
-        : "";
-    return {
-      agentId: rawAgent || null,
-      sessionUuid: /^[a-f0-9-]{36}$/i.test(rawSession) ? rawSession : null,
-    };
   };
   /**
    * @param {HttpRequest} request
@@ -469,51 +461,6 @@ export async function createApplication(options = {}) {
     watcher.on("error", (e) =>
       console.error("Se dejó de vigilar una carpeta del vault:", e.message),
     );
-  /** @param {HttpRequest} request */
-  async function body(request) {
-    let size = 0;
-    const chunks = [];
-    for await (const chunk of request) {
-      size += chunk.length;
-      if (size > 12 * 1024 * 1024)
-        throw new Failure("La petición supera 12 MB.", 413);
-      chunks.push(chunk);
-    }
-    // Parse and schema validation fail differently: only the first is "invalid JSON".
-    let value;
-    try {
-      value = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
-    } catch {
-      throw new Failure("JSON inválido.");
-    }
-    const route = new URL(
-      request.url ?? "/",
-      "http://localhost",
-    ).pathname.slice("/api/v1".length);
-    const parsed = routePolicy(request.method, route)?.body.safeParse(value);
-    if (!parsed?.success)
-      throw new Failure(
-        "Cuerpo de petición inválido" +
-          (parsed?.error ? ": " + summarizeIssues(parsed.error.issues) : "."),
-      );
-    return parsed.data;
-  }
-  /** @param {unknown} relative */
-  const validateNotePath = (relative) => {
-    if (typeof relative !== "string" || !relative.endsWith(".md"))
-      throw new Failure("Solo se admiten notas Markdown.");
-  };
-  /**
-   * @param {ServerResponse} response
-   * @param {number} status
-   * @param {unknown} [value] Omitted for bodiless replies such as 204.
-   */
-  function send(response, status, value) {
-    response.writeHead(status, {
-      "Content-Type": "application/json; charset=utf-8",
-    });
-    response.end(value === undefined ? "" : JSON.stringify(value));
-  }
   /** @param {HttpRequest} request */
   const actorOf = (request) => {
     if (auth.isRoomAgent(request)) {
@@ -835,34 +782,6 @@ export async function createApplication(options = {}) {
         /** A query value the route's schema requires, so already validated. */
         const required = (/** @type {string} */ name) =>
           /** @type {string} */ (consulta.get(name));
-        /**
-         * @param {ServerResponse} res
-         * @param {Response} upstream
-         * @param {{ fileName?: string, id?: string, version?: number, sha256?: string, authorId?: string, fileRef?: string }} [meta]
-         */
-        const relayArtifactDownload = async (res, upstream, meta = {}) => {
-          const buf = Buffer.from(await upstream.arrayBuffer());
-          const rawName = upstream.headers.get("x-artifact-filename");
-          const fileName =
-            meta.fileName ||
-            (rawName ? decodeURIComponent(rawName) : "artifact.bin");
-          res.writeHead(200, {
-            ...downloadHeaders({ name: fileName, size: buf.length }),
-            "X-Artifact-Id":
-              upstream.headers.get("x-artifact-id") || meta.id || "",
-            "X-Artifact-Version":
-              upstream.headers.get("x-artifact-version") ||
-              (meta.version !== undefined ? String(meta.version) : ""),
-            "X-Artifact-Sha256":
-              upstream.headers.get("x-artifact-sha256") || meta.sha256 || "",
-            "X-Artifact-Author":
-              upstream.headers.get("x-artifact-author") || meta.authorId || "",
-            "X-Artifact-FileRef":
-              upstream.headers.get("x-artifact-fileref") ||
-              (meta.fileRef ? encodeURIComponent(meta.fileRef) : ""),
-          });
-          res.end(buf);
-        };
         /** @type {Partial<Record<string, () => Promise<unknown>>>} */
         const routes = {
           "GET /health": async () => {
@@ -2285,16 +2204,6 @@ export async function createApplication(options = {}) {
     dataDirectory,
     close,
   };
-}
-/**
- * Field paths and zod messages only: never the submitted values.
- * @param {import("zod").z.ZodIssue[]} issues
- */
-function summarizeIssues(issues) {
-  const shown = issues
-    .slice(0, 5)
-    .map((i) => `${i.path.join(".") || "(raíz)"} (${i.message})`);
-  return shown.join("; ") + (issues.length > 5 ? "; …" : ".");
 }
 /**
  * @param {import("./vault-types.d.ts").VaultItem[]} items
