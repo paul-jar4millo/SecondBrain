@@ -438,6 +438,9 @@ function isPidAlive(pid) {
   }
 }
 
+// Two full turns through service and launcher; a busy CI runner needs the margin.
+const E2E_TIMEOUT_MS = 15000;
+
 async function waitFor(predicate, timeoutMs = 4000, stepMs = 20) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -2135,6 +2138,10 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
   }
 
   let turnIdx = 0;
+  // Turn 1 stays open until the next message is sent, so that message is
+  // queued and runs as a follow-up turn: the race a fast agent creates.
+  let releaseTurn1;
+  const turn1Held = new Promise((r) => (releaseTurn1 = r));
   const registro = await abrirRegistro(
     path.join(lanzadorData, "sesiones.json"),
   );
@@ -2210,13 +2217,17 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
                               },
                             },
                           });
-                          send({
-                            method: "turn/completed",
-                            params: {
-                              threadId: "th-art",
-                              turn: { id: tid, status: "completed" },
-                            },
-                          });
+                          const complete = () =>
+                            send({
+                              method: "turn/completed",
+                              params: {
+                                threadId: "th-art",
+                                turn: { id: tid, status: "completed" },
+                              },
+                            });
+                          if (tid === "turn-art-1")
+                            void turn1Held.then(complete);
+                          else complete();
                         },
                       );
                     }
@@ -2359,7 +2370,7 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
       `${baseApi}/encargos/detalle?id=${workOrderId}&cursor=0`,
     ).then((r) => r.json());
     return det.snapshot.artifacts.length === 1;
-  });
+  }, E2E_TIMEOUT_MS);
 
   // Turn 2 overwrites SAME path informe/entrega.md -> publishes v2
   const mRes = await fetch(`${baseApi}/agentes/conversacion/mensajes`, {
@@ -2373,13 +2384,15 @@ test("regresión: publicación productiva ctx.artifact (2 versiones inmutables e
     }),
   });
   assert.equal(mRes.status, 200);
+  assert.equal((await mRes.json()).queued, true);
+  releaseTurn1();
 
   const detBeforeReload = await waitFor(async () => {
     const det = await fetch(
       `${baseApi}/encargos/detalle?id=${workOrderId}&cursor=0`,
     ).then((r) => r.json());
     return det.snapshot.artifacts.length === 2 ? det : null;
-  });
+  }, E2E_TIMEOUT_MS);
   assert.equal(
     detBeforeReload.events.filter((e) => e.type === "artifact.published")
       .length,

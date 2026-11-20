@@ -1037,6 +1037,20 @@ a {
 .notification-list > button > span {
   flex: 1;
 }
+.notification-list > .system-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--s12);
+  border-top: 1px solid var(--line);
+  padding: var(--s12) var(--s4);
+}
+.notification-list > .system-notice > svg {
+  flex: none;
+  color: var(--danger);
+}
+.notification-list > .system-notice strong {
+  font-weight: 600;
+}
 .notification-list strong {
   font-weight: 400;
   display: block;

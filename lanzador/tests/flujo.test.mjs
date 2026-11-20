@@ -444,7 +444,14 @@ test("al terminar el programa el stream avisa y una sesión guardada entrega su 
     controlador.abort();
     return sse.cerrar();
   });
-  await sse.hasta((e) => e.some((x) => x.evento === "snapshot"));
+  // The output must be on screen before the program ends, as with a real one.
+  await sse.hasta((e) =>
+    e.some(
+      (x) =>
+        (x.evento === "snapshot" || x.evento === "salida") &&
+        x.datos.datos.includes("adiós"),
+    ),
+  );
   await ejecutor.cancelar(sesion.id);
   await ejecutor.esperar(sesion.id);
   await sse.hasta((e) =>
