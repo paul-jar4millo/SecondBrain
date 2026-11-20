@@ -1,4 +1,5 @@
 import { parseDocument, Document } from "yaml";
+/** @import { VaultKind, VaultMetadata } from "./vault-types.d.ts" */
 export const kinds = new Set([
   "note",
   "project",
@@ -24,6 +25,7 @@ export const excludedRoots = new Set([
   "SecondBrain",
   "secrets",
 ]);
+/** @type {Partial<Record<string, VaultKind>>} */
 export const aliases = {
   nota: "note",
   recurso: "note",
@@ -115,6 +117,7 @@ export const fields = [
 ];
 export const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** @param {string} text */
 export function split(text) {
   const m = text.match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   const doc = m
@@ -123,8 +126,16 @@ export function split(text) {
   const body = m ? text.slice(m[0].length) : text;
   return { doc, body, newline: text.includes("\r\n") ? "\r\n" : "\n" };
 }
+/**
+ * @param {Document} doc
+ * @returns {VaultMetadata}
+ */
 export function plain(doc) {
   const ancestors = new WeakSet();
+  /**
+   * @param {unknown} value
+   * @returns {unknown}
+   */
   const convert = (value) => {
     if (!value || typeof value !== "object") return value;
     if (ancestors.has(value)) throw new Error("Cyclic YAML metadata");
@@ -142,21 +153,25 @@ export function plain(doc) {
   try {
     const object = convert(doc.toJS({ maxAliasCount: 50, mapAsMap: true }));
     return object && typeof object === "object" && !Array.isArray(object)
-      ? object
+      ? /** @type {VaultMetadata} */ (object)
       : {};
   } catch {
     return {};
   }
 }
+/** @param {unknown} value */
 export const displayText = (value) =>
   typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
+/** @param {unknown} v */
 export const dateString = (v) => (typeof v === "string" ? v : undefined);
+/** @param {string} s */
 export const cleanTitle = (s) =>
   s
     .replace(/<!--\s*sb-task:[\s\S]*?-->/g, "")
     .replace(/\s+\^[\w-]+\s*$/, "")
     .replace(/\s*(?:📅|⏳)\s*\d{4}-\d{2}-\d{2}/gu, "")
     .trim();
+/** @param {unknown} v */
 export function day(v) {
   return (
     typeof v === "string" &&

@@ -2,23 +2,36 @@ import { mkdir, readFile, writeFile, rename, stat } from "node:fs/promises";
 import path from "node:path";
 
 // Operational project/repository links are independent from the knowledge vault.
+/**
+ * @param {{ archivo: string, proyectos: Record<string, string>, workspaces: string }} options
+ */
 export async function abrirEspacios({ archivo, proyectos, workspaces }) {
+  /** @type {string[]} */
   const repositorios = [];
   for (const [name, dir] of Object.entries(proyectos)) {
-    const git = await stat(path.join(dir, ".git")).catch(() => null);
+    const git = await stat(path.join(dir, ".git")).catch(
+      /** @returns {null} */ () => null,
+    );
     if (git && (git.isDirectory() || git.isFile())) repositorios.push(name);
   }
+  /** @type {{ revision: number, vinculos: Record<string, string | null> }} */
   let state = await readFile(archivo, "utf8")
     .then(JSON.parse)
     .catch((e) => {
       if (e.code !== "ENOENT") throw e;
       return { revision: 0, vinculos: {} };
     });
+  /** @type {Promise<unknown>} */
   let queue = Promise.resolve();
+  /**
+   * @param {unknown} id
+   * @returns {id is string}
+   */
   const valid = (id) =>
     typeof id === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(id);
   return {
     leer: () => structuredClone({ ...state, repositorios }),
+    /** @param {{ id: string, repositorio: string | null, revision: number }} datos */
     vincular(datos) {
       const operation = queue.then(async () => {
         if (
@@ -46,6 +59,7 @@ export async function abrirEspacios({ archivo, proyectos, workspaces }) {
       queue = operation.catch(() => {});
       return operation;
     },
+    /** @param {unknown} id */
     async resolver(id) {
       if (!valid(id)) throw new Error("Proyecto inválido");
       const repositorio = state.vinculos[id] ?? null;

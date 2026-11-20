@@ -12,6 +12,8 @@ import {
   nuevoClaude,
 } from "./motores.mjs";
 
+/** @import { LauncherSession } from "./session-types.d.ts" */
+
 const AGENTE = {
   claude: "ambar",
   codex: "menta",
@@ -24,11 +26,13 @@ const MAX_TITULO = 200;
 const MAX_DESCRIPCION = 20000;
 const TIEMPO_REDACCION = 120000;
 
+/** @param {unknown} titulo */
 export const esConvencional = (titulo) =>
   typeof titulo === "string" &&
   titulo.length <= MAX_TITULO &&
   CONVENCIONAL.test(titulo);
 
+/** @param {unknown} texto */
 export function slug(texto, max = 40) {
   const limpio = String(texto ?? "")
     .normalize("NFD")
@@ -41,9 +45,11 @@ export function slug(texto, max = 40) {
   return limpio || "cambios";
 }
 
+/** @param {Pick<LauncherSession, "motor" | "encargo" | "id">} sesion */
 export const nombreRama = (sesion) =>
   `sb/${AGENTE[sesion.motor] ?? "agente"}-${slug(primeraLinea(sesion.encargo))}-${sesion.id.slice(0, 6)}`;
 
+/** @param {string} encargo */
 function tipoDe(encargo) {
   if (
     /\b(corrige|corregir|arregla|arreglar|fix|bug|error|falla)\b/i.test(encargo)
@@ -56,12 +62,14 @@ function tipoDe(encargo) {
   return "feat";
 }
 
+/** @param {unknown} texto */
 const primeraLinea = (texto) =>
   String(texto ?? "")
     .split("\n")
     .map((l) => l.trim())
     .find(Boolean) ?? "";
 
+/** @param {string} ts */
 const hora = (ts) => {
   const d = new Date(ts);
   return Number.isNaN(d.getTime())
@@ -72,6 +80,7 @@ const hora = (ts) => {
 /**
  * Deterministic title and description from what the launcher already knows:
  * the brief, the agent's last reply, the changed files and the turn log.
+ * @param {{ sesion: Pick<LauncherSession, "encargo" | "resultado" | "checkpoints">, archivos?: { estado: string, ruta: string, binario?: boolean, añadidas?: number, eliminadas?: number }[], ultimaRespuesta?: string }} input
  */
 export function propuestaPr({ sesion, archivos = [], ultimaRespuesta = "" }) {
   const encargo = primeraLinea(sesion.encargo);
@@ -113,6 +122,7 @@ export function propuestaPr({ sesion, archivos = [], ultimaRespuesta = "" }) {
   };
 }
 
+/** @param {string} texto */
 function extraerJson(texto) {
   const inicio = texto.indexOf("{");
   const fin = texto.lastIndexOf("}");
@@ -127,6 +137,7 @@ function extraerJson(texto) {
 /**
  * Pull-request flow and optional drafting by the session's own engine.
  * `ejecutor` is the git/gh runner of git.mjs; `info(cwd)` tells repo facts.
+ * @param {{ git: ReturnType<typeof import("./git.mjs").crearGit>, info: ReturnType<typeof import("./checkpoints.mjs").crearCheckpoints>["info"], env?: NodeJS.ProcessEnv, lanzar?: typeof spawn, comando?: typeof comandoMotor }} options
  */
 export function crearPr({
   git: ejecutor,
@@ -138,6 +149,7 @@ export function crearPr({
   const { git, gh } = ejecutor;
   const enCurso = new Set();
 
+  /** @param {string} cwd */
   async function ramaPorDefecto(cwd) {
     const ref = await git(cwd, [
       "symbolic-ref",
@@ -164,6 +176,7 @@ export function crearPr({
     throw new ErrorLanzador("No se pudo determinar la rama por defecto.");
   }
 
+  /** @param {{ sesion: LauncherSession, cwd: string, titulo: string, descripcion: string, borrador?: boolean }} input */
   async function crear({ sesion, cwd, titulo, descripcion, borrador = false }) {
     if (!esConvencional(titulo))
       throw new ErrorLanzador(
@@ -255,7 +268,7 @@ export function crearPr({
           const datos = JSON.parse(r.stdout);
           return datos.state === "OPEN" ? datos.url : null;
         },
-        () => null,
+        /** @returns {null} */ () => null,
       );
       if (abierto) return { rama, commit, url: abierto, existente: true };
       let salida;
@@ -294,7 +307,10 @@ export function crearPr({
     }
   }
 
-  /** One short headless run of the session's engine, only when the user asks. */
+  /**
+   * One short headless run of the session's engine, only when the user asks.
+   * @param {{ sesion: LauncherSession, cwd: string, propuesta: ReturnType<typeof propuestaPr>, parche?: string, catalogo?: Partial<Record<string, Parameters<typeof modeloEconomico>[1]>> }} input
+   */
   async function redactar({
     sesion,
     cwd,
@@ -326,6 +342,7 @@ export function crearPr({
     // replace its messages. Its provider id is marked so it is never imported.
     const interno = randomUUID();
     const marcadas = new Set();
+    /** @param {unknown} nativo */
     const marcar = (nativo) => {
       if (typeof nativo !== "string" || marcadas.has(nativo)) return;
       marcadas.add(nativo);
@@ -335,8 +352,9 @@ export function crearPr({
       spec.args = [...spec.args, "--session-id", interno];
       await marcar(interno);
     }
-    const proveedor =
-      { codex: "chatgpt", agy: "gemini" }[sesion.motor] || sesion.motor;
+    /** @type {Partial<Record<string, string>>} */
+    const proveedores = { codex: "chatgpt", agy: "gemini" };
+    const proveedor = proveedores[sesion.motor] || sesion.motor;
     const hijo = lanzar(spec.bin, spec.args, {
       cwd,
       env: { ...entornoDe(proveedor, env), SB_SESSION_ID: interno },

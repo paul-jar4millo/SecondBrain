@@ -1,24 +1,52 @@
 import { StringDecoder } from "node:string_decoder";
 
-/** Newline-delimited JSON-RPC; no PTY, ANSI parsing or transcript polling. */
+/** @typedef {number | string} RpcId */
+/** @typedef {{ written: boolean, rpcId: RpcId }} RpcWriteAcknowledgment */
+/** @typedef {{ writeAck: Promise<RpcWriteAcknowledgment>, isWritable: () => boolean }} RpcRequestMetadata */
+/**
+ * @typedef {object} RpcOptions
+ * @property {(method: string, params: unknown) => unknown} [notify]
+ * @property {(method: string, params: unknown, id: RpcId, metadata: RpcRequestMetadata) => unknown} [request]
+ * @property {(reason: string) => void} [onClose]
+ * @property {number} [timeout]
+ */
+/**
+ * @typedef {object} RpcMessage
+ * @property {RpcId} [id]
+ * @property {string} [method]
+ * @property {unknown} [params]
+ * @property {unknown} [result]
+ * @property {{ code?: number, message?: string, data?: unknown }} [error]
+ */
+/**
+ * @typedef {object} PendingCall
+ * @property {(result: unknown) => void} resolve
+ * @property {(error: Error) => void} reject
+ * @property {NodeJS.Timeout | null} timer
+ */
+
+/**
+ * Newline-delimited JSON-RPC; no PTY, ANSI parsing or transcript polling.
+ * @param {import("node:child_process").ChildProcess} child
+ * @param {RpcOptions} [options]
+ */
 export function providerRpc(
   child,
   {
-    notify = /** @type {(...args: any[]) => any} */ (() => {}),
-    request = /** @type {(...args: any[]) => Promise<any>} */ (
-      async () => {
-        throw new Error("Método no compatible");
-      }
-    ),
-    onClose = /** @type {(...args: any[]) => any} */ (() => {}),
+    notify = () => {},
+    request = async () => {
+      throw new Error("Método no compatible");
+    },
+    onClose = () => {},
     timeout = 30000,
-  } = /** @type {any} */ ({}),
+  } = {},
 ) {
   let sequence = 0;
   let buffer = "";
   let closed = false;
   let exited = false;
   const decoder = new StringDecoder("utf8");
+  /** @type {Map<RpcId, PendingCall>} */
   const pending = new Map();
   const isWritable = () =>
     !closed &&
@@ -30,11 +58,17 @@ export function providerRpc(
       !child.stdin.writableEnded &&
       (child.exitCode === null || child.exitCode === undefined),
     );
+  /** @param {unknown} value */
   const serialize = (value) => JSON.stringify(value) + "\n";
+  /** @param {unknown} value */
   const write = (value) => {
     if (!isWritable()) throw new Error("Proveedor desconectado");
     child.stdin.write(serialize(value));
   };
+  /**
+   * @param {unknown} value
+   * @returns {Promise<{ bytes: number }>}
+   */
   const writeAsync = (value) =>
     new Promise((resolve, reject) => {
       if (!isWritable()) {
@@ -103,6 +137,7 @@ export function providerRpc(
       const line = buffer.slice(0, end);
       buffer = buffer.slice(end + 1);
       if (!line.trim()) continue;
+      /** @type {RpcMessage} */
       let message;
       try {
         message = JSON.parse(line);
@@ -112,8 +147,11 @@ export function providerRpc(
         return;
       }
       if (message.method && message.id !== undefined) {
+        /** @type {(ack: RpcWriteAcknowledgment) => void} */
         let resolveWriteAck;
+        /** @type {(reason: unknown) => void} */
         let rejectWriteAck;
+        /** @type {Promise<RpcWriteAcknowledgment>} */
         const writeAck = new Promise((resolve, reject) => {
           resolveWriteAck = resolve;
           rejectWriteAck = reject;
@@ -168,7 +206,16 @@ export function providerRpc(
     isClosed: () => closed,
     isWritable,
     writeAsync,
+    /**
+     * @param {string} method
+     * @param {unknown} params
+     */
     notify: (method, params) => write({ jsonrpc: "2.0", method, params }),
+    /**
+     * @param {string} method
+     * @param {unknown} params
+     * @returns {Promise<unknown>}
+     */
     call(method, params, ms = timeout) {
       return new Promise((resolve, reject) => {
         const id = ++sequence;

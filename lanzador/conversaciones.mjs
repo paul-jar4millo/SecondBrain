@@ -1,10 +1,33 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+/** @import { Dirent } from "node:fs" */
+/** @import { SessionMessage, SessionRegistry, SessionState } from "./session-types.d.ts" */
+/** @import { ClaudeStreamEvent, GeminiStreamEvent } from "./motor-types.d.ts" */
+
+/** @typedef {{ type: string, text?: string }} TranscriptBlock */
+/**
+ * @typedef {object} TranscriptRecord
+ * @property {string} [type]
+ * @property {boolean} [isSidechain]
+ * @property {string} [cwd]
+ * @property {string} [content]
+ * @property {ClaudeStreamEvent["message"] & { content?: string | TranscriptBlock[] }} [message]
+ * @property {GeminiStreamEvent["step_update"]} [step_update]
+ * @property {{ id?: string, type?: string, role?: string, content?: TranscriptBlock[], info?: { last_token_usage?: { input_tokens?: number, output_tokens?: number } } }} [payload]
+ */
+/** @typedef {{ motor: "codex", archivo: string, id?: never } | { motor: "claude" | "deepseek" | "agy", archivo: string, id: string }} TranscriptSource */
+/** @typedef {{ id: string, estado: SessionState }} TranscriptLink */
+
 const UUID = /^[a-f0-9-]{36}$/i;
+/** @param {NodeJS.ProcessEnv} env */
 const dirInternas = (env) => path.join(env.HOME, "estado/lanzador/internas");
 
-/** Marks a provider conversation as an internal run, never shown as a chat. */
+/**
+ * Marks a provider conversation as an internal run, never shown as a chat.
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string} [nativo]
+ */
 export async function marcarInterna(env, nativo) {
   if (!env?.HOME || !UUID.test(nativo)) return;
   await mkdir(dirInternas(env), { recursive: true, mode: 0o700 });
@@ -12,6 +35,10 @@ export async function marcarInterna(env, nativo) {
     mode: 0o600,
   });
 }
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string} [nativo]
+ */
 const esInterna = (env, nativo) =>
   UUID.test(nativo ?? "")
     ? stat(path.join(dirInternas(env), nativo + ".json")).then(
@@ -22,10 +49,15 @@ const esInterna = (env, nativo) =>
 
 export const LIMITE_CONTEXTO = 400_000;
 
-/** Last request's context, never the accumulated token bill. */
+/**
+ * Last request's context, never the accumulated token bill.
+ * @param {string} motor
+ * @param {string} texto
+ */
 export function leerContexto(motor, texto) {
   let usados = null;
   for (const linea of texto.split("\n")) {
+    /** @type {TranscriptRecord} */
     let e;
     try {
       e = JSON.parse(linea);
@@ -68,9 +100,15 @@ export function leerContexto(motor, texto) {
     : null;
 }
 
+/**
+ * @param {string} motor
+ * @param {string} texto
+ */
 export function leerConversacion(motor, texto) {
+  /** @type {SessionMessage[]} */
   const mensajes = [];
   for (const line of texto.split("\n")) {
+    /** @type {TranscriptRecord} */
     let e;
     try {
       e = JSON.parse(line);
@@ -122,12 +160,16 @@ export function leerConversacion(motor, texto) {
 }
 
 // Only provider-owned operational transcripts; never scan the vault or project files.
+/**
+ * @param {{ registro: Pick<SessionRegistry, "leer" | "actualizar" | "crear">, env: NodeJS.ProcessEnv, proyectos: Readonly<Record<string, string>>, intervalo?: number }} options
+ */
 export function observarConversaciones({
   registro,
   env,
   proyectos,
   intervalo = 2000,
 }) {
+  /** @type {Map<string, string>} */
   const vistos = new Map();
   let ocupado = false;
   let detenido = false;
@@ -135,15 +177,17 @@ export function observarConversaciones({
     if (ocupado || detenido) return;
     ocupado = true;
     try {
+      /** @type {TranscriptSource[]} */
       const fuentes = [];
       const codex = path.join(
         env.CODEX_HOME || path.join(env.HOME, ".codex"),
         "sessions",
       );
+      /** @param {string} dir */
       async function scan(dir, depth = 0) {
         if (depth > 4) return;
         for (const entry of await readdir(dir, { withFileTypes: true }).catch(
-          () => [],
+          /** @returns {Dirent[]} */ () => [],
         )) {
           if (entry.isSymbolicLink()) continue;
           const full = path.join(dir, entry.name);
@@ -153,18 +197,18 @@ export function observarConversaciones({
         }
       }
       await scan(codex);
-      for (const [motor, configDir] of [
+      for (const [motor, configDir] of /** @type {const} */ ([
         ["claude", env.AGENTES_CLAUDE_DIR || path.join(env.HOME, "claude")],
         ["deepseek", env.AGENTES_DEEPSEEK_DIR],
-      ]) {
+      ])) {
         if (!configDir) continue;
         const folder = path.join(configDir, "projects");
         for (const dir of await readdir(folder, { withFileTypes: true }).catch(
-          () => [],
+          /** @returns {Dirent[]} */ () => [],
         )) {
           if (!dir.isDirectory() || dir.isSymbolicLink()) continue;
           for (const file of await readdir(path.join(folder, dir.name)).catch(
-            () => [],
+            /** @returns {string[]} */ () => [],
           ))
             if (/^[a-f0-9-]{36}\.jsonl$/i.test(file))
               fuentes.push({
@@ -176,7 +220,7 @@ export function observarConversaciones({
       }
       const agy = path.join(env.HOME, ".gemini/antigravity-cli/brain");
       for (const dir of await readdir(agy, { withFileTypes: true }).catch(
-        () => [],
+        /** @returns {Dirent[]} */ () => [],
       ))
         if (dir.isDirectory() && /^[a-f0-9-]{36}$/i.test(dir.name))
           fuentes.push({
@@ -196,8 +240,8 @@ export function observarConversaciones({
             path.join(env.HOME, "estado/lanzador/links", fuente.id + ".json"),
             "utf8",
           )
-            .then(JSON.parse)
-            .catch(() => null);
+            .then(/** @returns {TranscriptLink} */ (value) => JSON.parse(value))
+            .catch(/** @returns {null} */ () => null);
           const revision = s.mtimeMs + ":" + (link?.estado || "");
           if (
             s.size > 16 * 1024 * 1024 ||
@@ -209,10 +253,11 @@ export function observarConversaciones({
           if (!mensajes.length) continue;
           const contexto = leerContexto(fuente.motor, texto);
           if (fuente.motor === "codex") {
+            /** @type {TranscriptRecord["payload"]} */
             let meta;
             for (const line of texto.split("\n")) {
               try {
-                const e = JSON.parse(line);
+                const e = /** @type {TranscriptRecord} */ (JSON.parse(line));
                 if (e.type === "session_meta") {
                   meta = e.payload;
                   break;
@@ -272,11 +317,12 @@ export function observarConversaciones({
                 )
             )
               continue;
+            /** @type {string | undefined} */
             let cwd;
             if (["claude", "deepseek"].includes(fuente.motor)) {
               for (const l of texto.split("\n")) {
                 try {
-                  cwd = JSON.parse(l).cwd;
+                  cwd = /** @type {TranscriptRecord} */ (JSON.parse(l)).cwd;
                   if (cwd) break;
                 } catch {}
               }

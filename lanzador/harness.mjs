@@ -3,12 +3,16 @@ import xterm from "@xterm/headless";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { opcionesClaude } from "./motores.mjs";
 
+/** @import { TerminalEvent, TerminalSnapshot } from "./types.d.ts" */
+/** @import { LauncherSession } from "./session-types.d.ts" */
+
 const { Terminal } = xterm;
 
 /**
  * A repository's own .mcp.json wins over the user's config. SecondBrain's runs
  * the server over `ssh` from the owner's PC, so inside the container it died with
  * CONNECTION_CLOSED. Harnesses always get the local server, whatever the folder.
+ * @param {NodeJS.ProcessEnv} [entorno]
  */
 export function mcpLocal(entorno = {}) {
   if (!entorno.SB_BRAIN_TOKEN_FILE) return [];
@@ -34,6 +38,11 @@ export function mcpLocal(entorno = {}) {
   ];
 }
 
+/**
+ * @param {Pick<LauncherSession, "id" | "motor" | "modelo" | "esfuerzo" | "conversacionId">} sesion
+ * @param {string} brief
+ * @param {NodeJS.ProcessEnv} entorno
+ */
 export function comandoHarness(sesion, brief, entorno) {
   const { motor, modelo, esfuerzo, conversacionId } = sesion;
   if (motor === "claude" || motor === "deepseek")
@@ -99,9 +108,14 @@ const RESPUESTAS = new RegExp(
     String.raw`\[(?:\?[\d;]*c|>\d+(?:;\d+)+c|\d+;\d+R|\??[\d;]+\$y)`,
   "g",
 );
+/** @param {string} texto */
 export const quitarRespuestas = (texto) => texto.replace(RESPUESTAS, "");
 
-/** Applies the size rule shared by every resize request. */
+/**
+ * Applies the size rule shared by every resize request.
+ * @param {number} cols
+ * @param {number} rows
+ */
 export function tamanoPermitido(cols, rows) {
   if (!Number.isInteger(cols) || !Number.isInteger(rows))
     throw new Error("Tamaño inválido");
@@ -130,8 +144,10 @@ export function crearTerminal({
   });
   const serializador = new SerializeAddon();
   pantalla.loadAddon(serializador);
+  /** @type {Set<(event: TerminalEvent) => void>} */
   const oyentes = new Set();
   let seq = 0;
+  /** @param {TerminalEvent} evento */
   const avisar = (evento) => {
     for (const oyente of oyentes) {
       try {
@@ -153,6 +169,7 @@ export function crearTerminal({
     get rows() {
       return pantalla.rows;
     },
+    /** @param {unknown} texto */
     append(texto) {
       const datos = quitarRespuestas(String(texto));
       if (!datos) return;
@@ -160,7 +177,10 @@ export function crearTerminal({
       pantalla.write(datos);
       avisar({ tipo: "salida", datos, seq });
     },
-    /** Resolves once every chunk appended so far has been parsed. */
+    /**
+     * Resolves once every chunk appended so far has been parsed.
+     * @returns {Promise<TerminalSnapshot>}
+     */
     snapshot() {
       const hasta = seq;
       return new Promise((resolve) => {
@@ -176,11 +196,16 @@ export function crearTerminal({
     },
     /** Current state without waiting for pending writes (periodic persistence). */
     serializar,
+    /**
+     * @param {number} nuevasCols
+     * @param {number} nuevasFilas
+     */
     redimensionar(nuevasCols, nuevasFilas) {
       if (nuevasCols === pantalla.cols && nuevasFilas === pantalla.rows) return;
       pantalla.resize(nuevasCols, nuevasFilas);
       avisar({ tipo: "tamano", cols: nuevasCols, rows: nuevasFilas });
     },
+    /** @param {(event: TerminalEvent) => void} fn */
     suscribir(fn) {
       oyentes.add(fn);
       return () => oyentes.delete(fn);
@@ -196,11 +221,13 @@ export function crearTerminal({
  * Per-reader coalescing: small PTY chunks become one `salida` every `ms`, so a
  * redraw that arrives in pieces costs one network write. `desde` and `seq` bound
  * the chunks inside, letting the client notice a gap.
+ * @param {(batch: { datos: string, desde: number, seq: number }) => void} enviar
  */
 export function coalescer(enviar, ms = 24) {
   let datos = "";
   let desde = 0;
   let seq = 0;
+  /** @type {NodeJS.Timeout | undefined} */
   let timer;
   const vaciar = () => {
     clearTimeout(timer);
@@ -211,6 +238,10 @@ export function coalescer(enviar, ms = 24) {
     enviar(lote);
   };
   return {
+    /**
+     * @param {string} texto
+     * @param {number} numero
+     */
     agregar(texto, numero) {
       if (!datos) desde = numero;
       datos += texto;

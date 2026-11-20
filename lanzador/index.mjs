@@ -28,6 +28,9 @@ import {
 } from "./provider-conversations.mjs";
 import { createToolCatalogStore } from "./catalogo-herramientas.mjs";
 
+/** @import { LauncherRequestBody, LauncherServerOptions } from "./launcher-server-types.d.ts" */
+/** @import { ExecutionRequest } from "./types.d.ts" */
+
 // Plain Errors thrown while checking a request; they are the caller's fault.
 const VALIDACIONES = new Set([
   "Campo no modificable",
@@ -187,6 +190,10 @@ export async function arrancar(env = process.env) {
   }
 }
 
+/**
+ * @param {unknown} header
+ * @param {string} hash
+ */
 function autorizado(header, hash) {
   if (typeof header !== "string" || !header.startsWith("Bearer ")) return false;
   const esperado = Buffer.from(hash, "hex");
@@ -198,6 +205,11 @@ function autorizado(header, hash) {
 
 // The catalog checks both what the caller asked for and what the approved
 // manifest card fixes, so a card cannot carry an unavailable model.
+/**
+ * @param {Pick<ReturnType<typeof crearCatalogo>, "validar">} catalogo
+ * @param {Pick<LauncherRequestBody, "motor" | "modelo" | "esfuerzo" | "manifest" | "memberId">} datos
+ * @param {{ coordinadora: boolean }} options
+ */
 async function validarSeleccion(catalogo, datos, { coordinadora }) {
   await catalogo.validar(datos.motor, datos.modelo, datos.esfuerzo);
   const team = Array.isArray(datos.manifest?.team) ? datos.manifest.team : [];
@@ -212,6 +224,7 @@ async function validarSeleccion(catalogo, datos, { coordinadora }) {
     await catalogo.validar(datos.motor, card.model, card.effort || undefined);
 }
 
+/** @param {LauncherServerOptions} options */
 export function crearServidor({
   registro,
   ejecutor,
@@ -233,12 +246,18 @@ export function crearServidor({
     controlHash === hookHash
   )
     throw new Error("Credenciales de control y hooks inválidas");
+  /** @type {Awaited<ReturnType<typeof createToolCatalogStore>> | null} */
   let fallbackToolCatalog = null;
   const getToolCatalog = async () =>
     toolCatalog ||
     (fallbackToolCatalog ??= await createToolCatalogStore({ env: {} }));
   return http.createServer(async (req, res) => {
+    /** @type {LauncherRequestBody | undefined} */
     let datos;
+    /**
+     * @param {number} status
+     * @param {unknown} [data]
+     */
     const enviar = (status, data) => {
       res.writeHead(status, {
         "Content-Type": "application/json",
@@ -261,9 +280,11 @@ export function crearServidor({
         return enviar(200, { motores: CAPACIDADES, requisitos: REQUISITOS });
       if (req.method === "GET" && accionSesion && acciones) {
         if (accionSesion[2] === "diff") {
+          /** @param {string | null} v */
           const numero = (v) => (v === null ? undefined : Number(v));
           const desde = numero(ruta.searchParams.get("desde"));
           const hasta = ruta.searchParams.get("hasta");
+          /** @param {number | undefined} v */
           const valido = (v) =>
             v === undefined || (Number.isInteger(v) && v >= 1);
           if (
@@ -469,7 +490,12 @@ export function crearServidor({
       if (!datos || typeof datos !== "object" || Array.isArray(datos))
         return enviar(400, { error: "Petición inválida." });
       if (req.url === "/espacios" && espacios)
-        return enviar(200, await espacios.vincular(datos));
+        return enviar(
+          200,
+          await espacios.vincular(
+            /** @type {Parameters<typeof espacios.vincular>[0]} */ (datos),
+          ),
+        );
       if (req.url === "/herramientas/perfiles") {
         const cat = await getToolCatalog();
         try {
@@ -506,7 +532,13 @@ export function crearServidor({
         if (!session?.structured)
           throw new ErrorLanzador("Conversación no disponible.", 404);
         if (conversationRoute[2] === "answer")
-          return enviar(200, await conversations.answer(session.id, datos));
+          return enviar(
+            200,
+            await conversations.answer(
+              session.id,
+              /** @type {Parameters<typeof conversations.answer>[1]} */ (datos),
+            ),
+          );
         if (conversationRoute[2] === "messages")
           return enviar(200, await ejecutor.enviarMensaje(session.id, datos));
         if (conversationRoute[2] === "queue/cancel")
@@ -667,7 +699,7 @@ export function crearServidor({
             if (para && para !== datos.sesion)
               await registro.actualizar(datos.sesion, {
                 relevo: {
-                  id: resultado.id,
+                  id: /** @type {{ id: string }} */ (resultado).id,
                   tipo: accionEquipo === "mensaje" ? "mensaje" : "entregable",
                   para,
                 },
@@ -706,7 +738,7 @@ export function crearServidor({
         return enviar(204);
       }
       if (
-        ["modelo", "esfuerzo"].some(
+        /** @type {const} */ (["modelo", "esfuerzo"]).some(
           (k) => datos[k] !== undefined && typeof datos[k] !== "string",
         )
       )
@@ -738,10 +770,12 @@ export function crearServidor({
       await validarSeleccion(catalogo, datos, { coordinadora: true });
       return enviar(
         202,
-        await ejecutor.encargar({
-          ...datos,
-          billingGrantVerified: datos.billingGrantVerified === true,
-        }),
+        await ejecutor.encargar(
+          /** @type {ExecutionRequest} */ ({
+            ...datos,
+            billingGrantVerified: datos.billingGrantVerified === true,
+          }),
+        ),
       );
     } catch (error) {
       if (error instanceof ErrorLanzador && !res.headersSent)

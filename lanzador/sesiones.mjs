@@ -9,6 +9,12 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
+/** @import { CreateSessionInput, LauncherEngine, LauncherSession, SessionChanges, SessionObserver, SessionOrigin, SessionPruneHandler, SessionSnapshot } from "./session-types.d.ts" */
+
+/** @typedef {Pick<LauncherSession, "terminal" | "mensajes">} SessionDetail */
+/** @typedef {LauncherSession & { _detalle?: string }} SessionIndexEntry */
+/** @typedef {{ silencioso?: boolean }} TransactionOptions */
+
 const MOTORES = new Set(["claude", "codex", "agy", "deepseek"]);
 const ORIGENES = new Set(["sala", "remote", "cron", "equipo", "encargo"]);
 const ACTIVOS = new Set(["pendiente", "trabajando"]);
@@ -51,6 +57,10 @@ const ESTADOS = new Set([
   "interrumpida",
 ]);
 
+/**
+ * @template Value
+ * @param {Value} value
+ */
 function congelar(value) {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     for (const child of Object.values(value)) congelar(child);
@@ -59,21 +69,31 @@ function congelar(value) {
   return value;
 }
 
+/**
+ * @param {string} archivo
+ * @param {{ retencionDias?: number, onPrune?: SessionPruneHandler | null }} [options]
+ */
 export async function abrirRegistro(
   archivo,
   { retencionDias = 90, onPrune = null } = {},
 ) {
+  /** @type {SessionIndexEntry[]} */
   let sesiones;
   try {
-    sesiones = JSON.parse(await readFile(archivo, "utf8"));
-    if (!Array.isArray(sesiones))
+    const indice = /** @type {unknown} */ (
+      JSON.parse(await readFile(archivo, "utf8"))
+    );
+    if (!Array.isArray(indice))
       throw new Error("Registro de sesiones inválido");
+    sesiones = /** @type {SessionIndexEntry[]} */ (indice);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
     sesiones = [];
   }
   const detalles = archivo + ".d";
+  /** @type {Map<string, string>} */
   const referencias = new Map();
+  /** @type {Map<string, SessionDetail>} */
   const conocidos = new Map();
   let migrar = false;
   for (const sesion of sesiones) {
@@ -96,8 +116,8 @@ export async function abrirRegistro(
     if (sesion._detalle) {
       if (!/^[a-f0-9]{64}\.json$/.test(sesion._detalle))
         throw new Error("Detalle de sesión inválido");
-      const detalle = JSON.parse(
-        await readFile(path.join(detalles, sesion._detalle), "utf8"),
+      const detalle = /** @type {SessionDetail} */ (
+        JSON.parse(await readFile(path.join(detalles, sesion._detalle), "utf8"))
       );
       referencias.set(sesion.id, sesion._detalle);
       Object.assign(sesion, detalle);
@@ -109,11 +129,15 @@ export async function abrirRegistro(
     } else if (sesion.terminal !== undefined || sesion.mensajes !== undefined)
       migrar = true;
   }
+  /** @type {Set<SessionObserver>} */
   const oyentes = new Set();
+  /** @type {Promise<unknown>} */
   let cola = Promise.resolve();
+  /** @type {SessionSnapshot | undefined} */
   let instantanea;
   const leer = () => (instantanea ??= congelar(structuredClone(sesiones)));
   let pruneHandler = onPrune;
+  /** @type {LauncherSession[]} */
   const pendingPruned = [];
   function podar() {
     const corte = Date.now() - retencionDias * 86400000;
@@ -142,6 +166,7 @@ export async function abrirRegistro(
     await mkdir(path.dirname(archivo), { recursive: true });
     podar();
     const indice = [];
+    /** @type {Map<string, string>} */
     const siguientes = new Map();
     for (const s of sesiones) {
       const { terminal, mensajes, ...meta } = s;
@@ -205,13 +230,20 @@ export async function abrirRegistro(
   }
   // Reclaim obsolete revisions after the durable index has been recovered.
   const vigentes = new Set(referencias.values());
-  for (const nombre of await readdir(detalles).catch((error) => {
-    if (error.code !== "ENOENT") throw error;
-    return [];
-  })) {
+  for (const nombre of await readdir(detalles).catch(
+    /** @returns {string[]} */ (error) => {
+      if (error.code !== "ENOENT") throw error;
+      return [];
+    },
+  )) {
     if (/^[a-f0-9]{64}\.json(?:\.tmp)?$/.test(nombre) && !vigentes.has(nombre))
       await rm(path.join(detalles, nombre), { force: true });
   }
+  /**
+   * @template Result
+   * @param {() => Result} fn
+   * @param {TransactionOptions} [options]
+   */
   function transaccion(fn, { silencioso = false } = {}) {
     const siguiente = cola.then(async () => {
       // Mutations replace fields, never edit nested messages or terminal data.
@@ -247,14 +279,17 @@ export async function abrirRegistro(
         } catch {}
       }
     },
+    /** @param {SessionObserver} fn */
     subscribe(fn) {
       oyentes.add(fn);
       return () => oyentes.delete(fn);
     },
+    /** @param {SessionPruneHandler | null} fn */
     setOnPrune(fn) {
       pruneHandler = typeof fn === "function" ? fn : null;
       void drenarPodadas();
     },
+    /** @param {CreateSessionInput} input */
     crear({
       id = null,
       motor,
@@ -314,10 +349,11 @@ export async function abrirRegistro(
               ),
             ]
           : [];
+        /** @type {LauncherSession} */
         const sesion = {
           id: sesionId,
-          motor,
-          origen,
+          motor: /** @type {LauncherEngine} */ (motor),
+          origen: /** @type {SessionOrigin} */ (origen),
           equipoId,
           padreId,
           proyecto,
@@ -356,6 +392,11 @@ export async function abrirRegistro(
         return sesion;
       });
     },
+    /**
+     * @param {string} id
+     * @param {string} equipoId
+     * @returns {Promise<LauncherSession>}
+     */
     vincularEquipo(id, equipoId) {
       return transaccion(() => {
         const sesion = sesiones.find((s) => s.id === id);
@@ -368,6 +409,7 @@ export async function abrirRegistro(
     /**
      * Hides a finished conversation for good. A tombstone keeps its provider id
      * so the transcript observer never brings it back as a new session.
+     * @param {string} id
      */
     eliminar(id) {
       return transaccion(() => {
@@ -375,14 +417,14 @@ export async function abrirRegistro(
         if (!sesion) throw new Error("Sesión inexistente");
         if (ACTIVOS.has(sesion.estado) || sesion.interactiva)
           throw new Error("Detén la sesión antes de eliminarla");
-        for (const campo of [
+        for (const campo of /** @type {const} */ ([
           "mensajes",
           "terminal",
           "resultado",
           "error",
           "checkpoints",
           "checkpointError",
-        ])
+        ]))
           delete sesion[campo];
         sesion.encargo = null;
         sesion.eliminada = true;
@@ -390,6 +432,12 @@ export async function abrirRegistro(
         return { id };
       });
     },
+    /**
+     * @param {string} id
+     * @param {SessionChanges} cambios
+     * @param {TransactionOptions} [opciones]
+     * @returns {Promise<LauncherSession>}
+     */
     actualizar(id, cambios, opciones) {
       return transaccion(() => {
         const sesion = sesiones.find((s) => s.id === id);

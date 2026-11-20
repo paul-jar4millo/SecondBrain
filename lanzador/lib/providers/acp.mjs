@@ -16,7 +16,7 @@ import {
 } from "./shared.mjs";
 
 /** @typedef {import("./controller-types.mjs").ProviderTurnContext & import("./shared.mjs").AcpLaunchContext} AcpContext */
-/** @typedef {import("./controller-types.mjs").RpcRequestMetadata} RpcRequestMetadata */
+/** @typedef {Partial<import("../../provider-rpc.mjs").RpcRequestMetadata>} RpcRequestMetadata */
 /** @typedef {{ type?: string, text?: string, path?: string }} AcpContentBlock */
 /** @typedef {{ path?: string }} AcpLocation */
 /**

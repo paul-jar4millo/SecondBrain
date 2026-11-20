@@ -11,7 +11,11 @@ import {
 } from "./vault-format.mjs";
 import { validate } from "./vault-validation.mjs";
 import path from "node:path";
-/** @this {import("./vault.mjs").Vault} */
+/** @import { VaultMetadata, VaultMutation, VaultRecord } from "./vault-types.d.ts" */
+/**
+ * @this {import("./vault.mjs").Vault}
+ * @param {VaultMutation} mutation
+ */
 export async function apply({ mutationId, baseVersion, entity }) {
   if (!uuid.test(mutationId || ""))
     throw new Failure("La operación necesita una identidad válida.");
@@ -82,6 +86,7 @@ export async function apply({ mutationId, baseVersion, entity }) {
     old?.item.sourceKind === "inline-task" ||
     (!old && item.kind === "task")
   ) {
+    /** @type {(Pick<VaultRecord, "relative" | "text" | "parts"> & { fileHash: string | null }) | undefined} */
     let parent = old;
     if (!parent) {
       const project = snapshot.records.get(item.projectId);
@@ -97,6 +102,7 @@ export async function apply({ mutationId, baseVersion, entity }) {
       }
     }
 
+    /** @type {VaultMetadata} */
     const extra = {
       ...(old?.sb || {}),
       createdByApp: old ? old.sb.createdByApp === true : true,
@@ -172,6 +178,7 @@ export async function apply({ mutationId, baseVersion, entity }) {
         if (item[key]) doc.set(fm, item[key]);
         else doc.delete(fm);
       }
+    /** @type {VaultMetadata} */
     const sb = {
       ...(old?.sb || {}),
       id: item.id,

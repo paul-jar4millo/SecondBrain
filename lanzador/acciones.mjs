@@ -2,11 +2,22 @@ import { ErrorLanzador } from "./errores.mjs";
 import { capacidadesDe } from "./motores.mjs";
 import { propuestaPr } from "./pr.mjs";
 
+/** @import { LauncherSession, SessionRegistry } from "./session-types.d.ts" */
+
 const ACTIVAS = new Set(["pendiente", "trabajando"]);
 
 /**
  * Git-backed actions of a session (revert, diff, pull request). Each one checks
  * the engine's capabilities first and answers 409 in Spanish instead of failing midway.
+ * @param {{
+ *   registro: SessionRegistry,
+ *   seguimiento: ReturnType<typeof import("./checkpoints.mjs").crearSeguimiento>,
+ *   checkpoints: ReturnType<typeof import("./checkpoints.mjs").crearCheckpoints>,
+ *   pr: ReturnType<typeof import("./pr.mjs").crearPr>,
+ *   catalogo: ReturnType<typeof import("./modelos.mjs").crearCatalogo>,
+ *   proyectos?: Record<string, string>,
+ *   items?: ReturnType<typeof import("./items.mjs").crearItems>,
+ * }} options
  */
 export function crearAcciones({
   registro,
@@ -17,20 +28,28 @@ export function crearAcciones({
   proyectos = {},
   items,
 }) {
+  /** @param {LauncherSession} s */
   const cwdDe = (s) => s.directorio || proyectos[s.proyecto] || null;
+  /** @param {string} id */
   const sesionDe = (id) => {
     const sesion = registro.leer().find((s) => s.id === id && !s.eliminada);
     if (!sesion) throw new ErrorLanzador("Sesión inexistente.", 404);
     return sesion;
   };
+  /** @param {LauncherSession} sesion */
   async function capacidades(sesion) {
     const cwd = cwdDe(sesion);
     return capacidadesDe(sesion, cwd ? await checkpoints.info(cwd) : {});
   }
+  /**
+   * @param {LauncherSession} sesion
+   * @param {string} texto
+   */
   const detener = (sesion, texto) => {
     if (ACTIVAS.has(sesion.estado)) throw new ErrorLanzador(texto);
   };
 
+  /** @param {string} id */
   function ultimaRespuesta(id) {
     const sub = items?.suscribir(id, () => {});
     try {
@@ -45,6 +64,11 @@ export function crearAcciones({
     }
   }
 
+  /**
+   * @param {string} id
+   * @param {number} [desde]
+   * @param {number} [hasta]
+   */
   async function diff(id, desde, hasta) {
     const sesion = sesionDe(id);
     const c = await capacidades(sesion);
@@ -55,6 +79,7 @@ export function crearAcciones({
     return seguimiento.diff(id, desde, hasta);
   }
 
+  /** @param {string} id */
   async function propuesta(id) {
     const sesion = sesionDe(id);
     const c = await capacidades(sesion);
@@ -64,7 +89,7 @@ export function crearAcciones({
       );
     const { archivos } = await seguimiento
       .diff(id)
-      .catch(() => ({ archivos: [] }));
+      .catch(/** @returns {{ archivos: [] }} */ () => ({ archivos: [] }));
     return propuestaPr({
       sesion,
       archivos,
@@ -84,12 +109,18 @@ export function crearAcciones({
       return Promise.all(
         sesiones.map(async (s) => ({
           ...s,
-          capacidades: await capacidades(s).catch(() => null),
+          capacidades: await capacidades(s).catch(
+            /** @returns {null} */ () => null,
+          ),
         })),
       );
     },
     diff,
     propuesta,
+    /**
+     * @param {string} id
+     * @param {number} n
+     */
     async revertir(id, n) {
       const sesion = sesionDe(id);
       detener(sesion, "Detén el turno antes de revertir");
@@ -102,10 +133,11 @@ export function crearAcciones({
         throw new ErrorLanzador("Punto de control inválido.", 400);
       return seguimiento.revertir(id, n);
     },
-    async pr(
-      id,
-      { titulo, descripcion, borrador = false } = /** @type {any} */ ({}),
-    ) {
+    /**
+     * @param {string} id
+     * @param {{ titulo?: string, descripcion?: string, borrador?: boolean }} [options]
+     */
+    async pr(id, { titulo, descripcion, borrador = false } = {}) {
       const sesion = sesionDe(id);
       detener(sesion, "Detén el turno antes de crear el PR");
       const c = await capacidades(sesion);
@@ -126,6 +158,7 @@ export function crearAcciones({
         borrador: borrador === true,
       });
     },
+    /** @param {string} id */
     async redactar(id) {
       const sesion = sesionDe(id);
       const c = await capacidades(sesion);

@@ -2552,7 +2552,7 @@ function summarizeIssues(issues) {
   return shown.join("; ") + (issues.length > 5 ? "; …" : ".");
 }
 /**
- * @param {{ id: string, kind: string, title: string, status: string, deleted?: boolean, startsAt?: string, dueDate?: string, date?: string, updatedAt: string }[]} items
+ * @param {import("./vault-types.d.ts").VaultItem[]} items
  */
 function reminders(items) {
   const now = Date.now();

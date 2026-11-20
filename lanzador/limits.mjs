@@ -2,7 +2,13 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 const run = promisify(execFile);
 
+/** @param {NodeJS.ProcessEnv} [env] */
 export function readLimits(env = {}) {
+  /**
+   * @param {string} key
+   * @param {number} fallback
+   * @param {number} max
+   */
   const integer = (key, fallback, max) => {
     const value = env[key] ?? String(fallback);
     if (!/^[1-9][0-9]*$/.test(value) || Number(value) > max)
@@ -15,6 +21,11 @@ export function readLimits(env = {}) {
   };
 }
 
+/**
+ * @param {{ bin: string, args: string[] }} spec
+ * @param {string} id
+ * @param {NodeJS.ProcessEnv} [env]
+ */
 export function sessionCommand(spec, id, env = {}) {
   if (env.SB_SESSION_SCOPES !== "1") return spec;
   if (!/^[a-z0-9-]{1,80}$/i.test(id))
@@ -38,6 +49,10 @@ export function sessionCommand(spec, id, env = {}) {
   };
 }
 
+/**
+ * @param {string} id
+ * @param {NodeJS.ProcessEnv} [env]
+ */
 export async function stopSessionScope(id, env = {}) {
   if (env.SB_SESSION_SCOPES !== "1") return;
   if (!/^[a-z0-9-]{1,80}$/i.test(id))

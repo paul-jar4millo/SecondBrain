@@ -33,6 +33,10 @@ import { Journal } from "./journal.mjs";
 
 export { hash, actorContext, stableId, Failure } from "./vault-identity.mjs";
 import { hash, actorContext, stableId, Failure } from "./vault-identity.mjs";
+
+/** @import { JournalEntry, VaultIssue, VaultItem, VaultMetadata, VaultMutation, VaultRecord, VaultSnapshot } from "./vault-types.d.ts" */
+
+/** @param {string} start */
 export async function discoverVault(start) {
   let current = path.resolve(start);
   while (true) {
@@ -52,6 +56,11 @@ export async function discoverVault(start) {
   }
 }
 export class Vault {
+  /**
+   * @param {string} root
+   * @param {string} [journalDirectory]
+   * @param {{ history?: import("./history.mjs").History | null, versioning?: import("./vault-git.mjs").GitHistory | null }} [options]
+   */
   constructor(
     root,
     journalDirectory = path.join(root, ".second-brain-runtime"),
@@ -62,13 +71,15 @@ export class Vault {
     this.versioning = versioning;
     this.queue = Promise.resolve();
     this.last = null;
+    /** @type {Map<string, { signature: string, text: string, parts: ReturnType<typeof split> }>} */
     this.fileCache = new Map();
     this.metrics = { fileReads: 0, cacheHits: 0 };
     this.journalDirectory = journalDirectory;
     this.journal = null;
+    /** @type {VaultIssue[]} */
     this.recoveryWarnings = [];
     // Set only while importItems() runs a batch (see vault-import.mjs).
-    /** @type {Awaited<ReturnType<Vault["snapshot"]>> | null} */
+    /** @type {VaultSnapshot | null} */
     this.batchSnapshot = null;
     /** @type {Set<string> | null} */
     this.pendingPaths = null;
@@ -82,6 +93,10 @@ export class Vault {
     await this.queue;
     return this.snapshot();
   }
+  /**
+   * @template T
+   * @param {() => T | Promise<T>} fn
+   */
   async transaction(fn) {
     const journal = new Journal(this, this.journalDirectory);
     this.journal = journal;
@@ -97,6 +112,7 @@ export class Vault {
       this.journal = null;
     }
   }
+  /** @param {JournalEntry[]} entries */
   async remember(entries) {
     if (!entries.length) return;
     // The write is already committed: a history failure is reported, never undone.
@@ -114,6 +130,10 @@ export class Vault {
       );
     }
   }
+  /**
+   * @template T
+   * @param {() => T | Promise<T>} fn
+   */
   async exclusive(fn) {
     const previous = this.queue;
     /** @type {(value?: unknown) => void} */
@@ -128,6 +148,7 @@ export class Vault {
   }
   async files() {
     const out = [];
+    /** @param {string} relative */
     const walk = async (relative) => {
       let entries;
       try {
@@ -157,6 +178,7 @@ export class Vault {
     }
     return out.sort();
   }
+  /** @param {unknown} relative */
   async safe(relative, allowMissing = false) {
     if (
       typeof relative !== "string" ||
@@ -187,6 +209,10 @@ export class Vault {
     }
     return full;
   }
+  /**
+   * @param {string[]} [filePaths]
+   * @returns {Promise<VaultSnapshot>}
+   */
   async snapshot(filePaths) {
     if (this.batchSnapshot && !filePaths) {
       if (this.pendingPaths.size) {
@@ -204,7 +230,9 @@ export class Vault {
       }
       return this.batchSnapshot;
     }
+    /** @type {Map<string, VaultRecord>} */
     const records = new Map();
+    /** @type {Map<string, VaultRecord>} */
     const byPath = new Map();
     const issues = [...this.recoveryWarnings];
     const paths = filePaths || (await this.files());
@@ -246,7 +274,7 @@ export class Vault {
       const metadata = plain(parts.doc);
       const sb =
         metadata.second_brain && typeof metadata.second_brain === "object"
-          ? metadata.second_brain
+          ? /** @type {VaultMetadata} */ (metadata.second_brain)
           : {};
       const rawId = sb.id || metadata.id;
       const id =
@@ -255,9 +283,9 @@ export class Vault {
           : stableId(relative);
       const kind = relative.startsWith("99-Meta/Templates/")
         ? "note"
-        : kinds.has(sb.kind)
+        : kinds.has(/** @type {string} */ (sb.kind))
           ? sb.kind
-          : kinds.has(metadata.type)
+          : kinds.has(/** @type {string} */ (metadata.type))
             ? metadata.type
             : typeof metadata.type === "string" &&
                 Object.hasOwn(aliases, metadata.type)
@@ -269,7 +297,7 @@ export class Vault {
           .filter((key) => metadata[key] !== undefined)
           .map((key) => [key, metadata[key]]),
       );
-      const item = {
+      const item = /** @type {VaultItem} */ ({
         ...sb,
         ...top,
         id,
@@ -300,7 +328,7 @@ export class Vault {
         expiresAt: dateString(metadata.expires),
         deleted: sb.deleted === true,
         validationErrors: undefined,
-      };
+      });
       const invalid = [];
       if (item.area !== undefined) item.area = displayText(item.area);
       for (const key of [
@@ -376,6 +404,7 @@ export class Vault {
           /^(\s*(?:[-*+]|\d+\.)\s+)\[([ xX/-])\]\s+(.*)$/,
         );
         if (!match) continue;
+        /** @type {VaultMetadata} */
         let extra = {};
         try {
           const raw = match[3].match(/<!--\s*sb-task:(.*?)-->/)?.[1];
@@ -397,8 +426,7 @@ export class Vault {
         const sourceLine =
           text.slice(0, text.length - parts.body.length).split("\n").length +
           index;
-        /** @type {Record<string, any>} */
-        const task = {
+        const task = /** @type {VaultItem} */ ({
           ...extra,
           id: taskId,
           kind: "task",
@@ -422,7 +450,7 @@ export class Vault {
           sourceLine,
           sourceKind: "inline-task",
           area: item.area,
-        };
+        });
         delete task.lastMutation;
         if (records.has(taskId)) {
           const message = "Identificador duplicado en el vault.";
@@ -456,6 +484,11 @@ export class Vault {
     this.last = { records, byPath, items, issues };
     return this.last;
   }
+  /**
+   * @param {string} relative
+   * @param {string} text
+   * @param {string | null} expected
+   */
   async atomic(relative, text, expected) {
     const full = await this.safe(relative, true);
     await mkdir(path.dirname(full), { recursive: true });
@@ -484,10 +517,12 @@ export class Vault {
         );
       if (this.journal)
         await this.journal.record(relative, existing ?? null, text);
-      const latest = await readFile(full, "utf8").catch((e) => {
-        if (e.code === "ENOENT") return null;
-        throw e;
-      });
+      const latest = await readFile(full, "utf8").catch(
+        /** @returns {null} */ (e) => {
+          if (e.code === "ENOENT") return null;
+          throw e;
+        },
+      );
       if (
         (expected === null && latest !== null) ||
         (expected !== null && hash(latest ?? "") !== expected)
@@ -513,6 +548,7 @@ export class Vault {
       await unlink(temp).catch(() => {});
     }
   }
+  /** @param {VaultMutation} mutation */
   async mutate(mutation) {
     return this.exclusive(() => this.transaction(() => this.apply(mutation)));
   }

@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import type { RpcWriteAcknowledgment } from "../../provider-rpc.mjs";
 import type {
   ProfileContext,
   ProviderAttachment,
@@ -24,19 +25,12 @@ export interface ProviderControl {
   ) => Promise<unknown>;
 }
 
-export interface RpcWriteAcknowledgment {
-  written: boolean;
-  rpcId: string | number;
-}
-
-export interface RpcRequestMetadata {
-  writeAck?: Promise<RpcWriteAcknowledgment>;
-  isWritable?: () => boolean;
-}
-
 export interface ProviderRequestTransport {
   connectionId: string;
   writeAck?: Promise<RpcWriteAcknowledgment>;
+  callbackAck?: Promise<{ callbackReturned: boolean }>;
+  transportMode?: "sdk_callback_return";
+  transportObservable?: boolean;
   isConnectionAlive?: () => boolean;
 }
 

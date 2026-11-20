@@ -15,11 +15,43 @@ import {
   waitChildExit,
 } from "./shared.mjs";
 
+/** @typedef {import("@anthropic-ai/claude-agent-sdk").SDKUserMessage} ClaudeUserMessage */
+/** @typedef {import("@anthropic-ai/claude-agent-sdk").SDKMessage & { is_interrupt?: boolean }} ClaudeMessage */
+/** @typedef {import("@anthropic-ai/claude-agent-sdk").Options} ClaudeOptions */
+/** @typedef {import("@anthropic-ai/claude-agent-sdk").SlashCommand} ClaudeSlashCommand */
+/**
+ * @typedef {AsyncIterable<ClaudeMessage, void, unknown> &
+ *   Partial<Pick<import("@anthropic-ai/claude-agent-sdk").Query, "interrupt" | "close">> & {
+ *     supportedCommands?: () => Promise<(ClaudeSlashCommand | string)[]>
+ *   }} ClaudeStream
+ */
+/** @typedef {(params: { prompt: AsyncIterable<ClaudeUserMessage>, options: ClaudeOptions }) => ClaudeStream} ClaudeQuery */
+/**
+ * @typedef {import("./controller-types.mjs").ProviderTurnContext & {
+ *   nextId(): number,
+ *   settingSources?: import("@anthropic-ai/claude-agent-sdk").SettingSource[],
+ *   verifiedBillingGrant?: boolean
+ * }} ClaudeContext
+ */
+/** @typedef {{ status: "completed" | "interrupted", pid?: number | null, persistent: boolean }} ClaudeTurnResult */
+/**
+ * @typedef {import("./controller-types.mjs").ProviderTurnState<ClaudeContext> & {
+ *   toolCalls: Map<string, { id: string, name: string, input: unknown }>,
+ *   killTimer: NodeJS.Timeout | null,
+ *   aborted: boolean,
+ *   resolve: (result: ClaudeTurnResult) => void,
+ *   reject: (reason: unknown) => void
+ * }} ClaudeTurn
+ */
+
 function createInputQueue() {
+  /** @type {ClaudeUserMessage[]} */
   const buffered = [];
+  /** @type {((result: IteratorResult<ClaudeUserMessage, void>) => void)[]} */
   const waiters = [];
   let ended = false;
   return {
+    /** @param {ClaudeUserMessage} msg */
     push(msg) {
       if (ended) return;
       if (waiters.length > 0) {
@@ -36,6 +68,7 @@ function createInputQueue() {
       }
     },
     isEnded: () => ended,
+    /** @returns {AsyncIterator<ClaudeUserMessage, void, unknown>} */
     [Symbol.asyncIterator]() {
       return {
         next() {
@@ -56,16 +89,23 @@ function createInputQueue() {
   };
 }
 
+/** @param {ClaudeQuery | null} [queryOverride] */
 export function createClaudeController(queryOverride = null) {
   const connectionId = randomUUID();
+  /** @type {ClaudeStream | null} */
   let stream = null;
+  /** @type {AbortController | null} */
   let controller = null;
+  /** @type {import("node:child_process").ChildProcess | null} */
   let childProc = null;
+  /** @type {ReturnType<typeof createInputQueue> | null} */
   let inputQueue = null;
+  /** @type {ClaudeTurn | null} */
   let activeTurn = null;
   let closing = false;
   let pumpDead = false;
   let pumpStarted = false;
+  /** @type {Promise<void> | null} */
   let connectPromise = null;
   let motor = "claude";
   const createdAt = new Date().toISOString();
@@ -74,12 +114,18 @@ export function createClaudeController(queryOverride = null) {
   const isAlive = () =>
     !closing && !pumpDead && Boolean(stream) && Boolean(!inputQueue?.isEnded());
 
+  /**
+   * @template {"resolve" | "reject"} Method
+   * @param {ClaudeTurn} turn
+   * @param {Method} method
+   * @param {Parameters<ClaudeTurn[Method]>[0]} payload
+   */
   const settleActiveTurn = (turn, method, payload) => {
     if (!turn || activeTurn !== turn || turn.settled) return;
     turn.settled = true;
     clearTimeout(turn.killTimer);
     activeTurn = null;
-    turn[method](payload);
+    turn[method](/** @type {ClaudeTurnResult} */ (payload));
   };
 
   function ensurePumpStarted() {
@@ -121,7 +167,7 @@ export function createClaudeController(queryOverride = null) {
           }
           if (event.type === "user") {
             for (const block of event.message?.content || []) {
-              if (block.type === "tool_result") {
+              if (typeof block !== "string" && block.type === "tool_result") {
                 turn.ctx.tool(block.tool_use_id, {
                   resultado: text(block.content),
                   estado: block.is_error ? "error" : "ok",
@@ -141,10 +187,13 @@ export function createClaudeController(queryOverride = null) {
                       "synth_artifact_write",
                     ].includes(shortName)
                   ) {
+                    const input = /** @type {Record<string, unknown>} */ (
+                      used.input
+                    );
                     const candidate =
-                      used.input?.file_path ||
-                      used.input?.notebook_path ||
-                      used.input?.path ||
+                      input?.file_path ||
+                      input?.notebook_path ||
+                      input?.path ||
                       null;
                     if (candidate) {
                       turn.pendingWork.push(
@@ -155,7 +204,7 @@ export function createClaudeController(queryOverride = null) {
                           evidenceRefs: [String(block.tool_use_id)],
                           comment: `Herramienta ${used.name}`,
                           publishedKeys: turn.publishedArtifactKeys,
-                        }).catch(() => null),
+                        }).catch(/** @returns {null} */ () => null),
                       );
                     }
                   }
@@ -228,6 +277,7 @@ export function createClaudeController(queryOverride = null) {
     })();
   }
 
+  /** @param {ClaudeContext} ctx */
   async function startStream(ctx) {
     if (isAlive()) return;
     if (connectPromise) return connectPromise;
@@ -235,6 +285,7 @@ export function createClaudeController(queryOverride = null) {
       motor = ctx.session.motor;
       pumpDead = false;
       pumpStarted = false;
+      /** @type {ClaudeQuery} */
       const query =
         queryOverride || (await import("@anthropic-ai/claude-agent-sdk")).query;
       controller = new AbortController();
@@ -255,11 +306,13 @@ export function createClaudeController(queryOverride = null) {
         disallowedTools.push("WebFetch", "WebSearch");
       }
 
+      /** @param {ClaudeTurn} turnRef */
       const buildSdkCallbackAck = (turnRef) => {
-        /** @type {(value?: unknown) => void} */
+        /** @type {(value: { callbackReturned: boolean }) => void} */
         let resolveAck = () => {};
         /** @type {(reason?: unknown) => void} */
         let rejectAck = () => {};
+        /** @type {Promise<{ callbackReturned: boolean }>} */
         const callbackAck = new Promise((r, j) => {
           resolveAck = r;
           rejectAck = j;
@@ -297,7 +350,7 @@ export function createClaudeController(queryOverride = null) {
           settingSources: ctx.settingSources ?? [],
           strictMcpConfig: true,
           mcpServersDelivery: "initialize",
-          mcpServers,
+          mcpServers: /** @type {ClaudeOptions["mcpServers"]} */ (mcpServers),
           ...(disallowedTools.length > 0 ? { disallowedTools } : {}),
           permissionMode: "default",
           includePartialMessages: true,
@@ -317,7 +370,11 @@ export function createClaudeController(queryOverride = null) {
             ? { model: ctx.session.modelo }
             : {}),
           ...(ctx.session.esfuerzo && ctx.session.motor !== "deepseek"
-            ? { effort: ctx.session.esfuerzo }
+            ? {
+                effort: /** @type {ClaudeOptions["effort"]} */ (
+                  ctx.session.esfuerzo
+                ),
+              }
             : {}),
           spawnClaudeCodeProcess: (options) => {
             childProc = trackChildExit(
@@ -375,6 +432,7 @@ export function createClaudeController(queryOverride = null) {
                 throw new Error("Conexión cerrada");
               }
               if (answer.decision !== "accept") {
+                /** @type {import("@anthropic-ai/claude-agent-sdk").ElicitationResult} */
                 const payload = {
                   action: answer.decision === "decline" ? "decline" : "cancel",
                   content: null,
@@ -391,9 +449,13 @@ export function createClaudeController(queryOverride = null) {
                 rejectAck(new Error("Conexión Claude cerrada antes de enviar"));
                 throw new Error("Conexión cerrada");
               }
+              /** @type {import("@anthropic-ai/claude-agent-sdk").ElicitationResult} */
               const payload = {
                 action: "accept",
-                content: validatedContent,
+                content:
+                  /** @type {import("@anthropic-ai/claude-agent-sdk").ElicitationResult["content"]} */ (
+                    validatedContent
+                  ),
               };
               scheduleAfterReturn();
               return payload;
@@ -425,20 +487,27 @@ export function createClaudeController(queryOverride = null) {
                 message: `Herramienta "${name}" no permitida por el perfil activo`,
               };
             }
+            const legacyOptions = /** @type {{ toolUseId?: string }} */ (
+              options
+            );
             const id =
               options.toolUseID ||
-              options.toolUseId ||
+              legacyOptions.toolUseId ||
               `tool-${turn.ctx.nextId()}`;
             const { callbackAck, rejectAck, scheduleAfterReturn } =
               buildSdkCallbackAck(turn);
             try {
               if (name === "AskUserQuestion") {
+                const questionInput =
+                  /** @type {Record<string, unknown> & import("@anthropic-ai/claude-agent-sdk/sdk-tools").AskUserQuestionInput} */ (
+                    input
+                  );
                 const answers = await turn.ctx.ask(
                   id,
                   {
                     kind: "question",
                     title: "Necesito tu respuesta",
-                    questions: input.questions.map((q) => ({
+                    questions: questionInput.questions.map((q) => ({
                       ...q,
                       id: q.question,
                       options: q.options || [],
@@ -459,6 +528,7 @@ export function createClaudeController(queryOverride = null) {
                   );
                   throw new Error("Conexión cerrada");
                 }
+                /** @type {import("@anthropic-ai/claude-agent-sdk").PermissionResult} */
                 const payload = {
                   behavior: "allow",
                   updatedInput: { ...input, answers },
@@ -487,6 +557,7 @@ export function createClaudeController(queryOverride = null) {
                 rejectAck(new Error("Conexión Claude cerrada antes de enviar"));
                 throw new Error("Conexión cerrada");
               }
+              /** @type {import("@anthropic-ai/claude-agent-sdk").PermissionResult} */
               const payload =
                 answer.decision === "accept"
                   ? { behavior: "allow", updatedInput: input }
@@ -511,6 +582,7 @@ export function createClaudeController(queryOverride = null) {
     }
   }
 
+  /** @param {ClaudeContext} ctx */
   async function runTurn(ctx) {
     lastUsedAt = Date.now();
     if (
@@ -533,7 +605,14 @@ export function createClaudeController(queryOverride = null) {
         if (Array.isArray(cmds)) {
           await ctx.onSkillsObserved({
             source: "claude_supported_commands",
-            names: cmds.map((c) => c?.name || c).filter(Boolean),
+            names: cmds
+              .map(
+                (c) =>
+                  /** @type {string} */ (
+                    /** @type {ClaudeSlashCommand} */ (c)?.name || c
+                  ),
+              )
+              .filter(Boolean),
           });
         }
       } catch {
@@ -541,14 +620,18 @@ export function createClaudeController(queryOverride = null) {
       }
     }
 
+    /** @type {ClaudeTurn["resolve"]} */
     let resolveTurn;
+    /** @type {ClaudeTurn["reject"]} */
     let rejectTurn;
+    /** @type {Promise<ClaudeTurnResult>} */
     const completed = new Promise((resolve, reject) => {
       resolveTurn = resolve;
       rejectTurn = reject;
     });
     completed.catch(() => {});
 
+    /** @type {ClaudeTurn} */
     const turn = {
       ctx,
       connectionId,

@@ -3,7 +3,10 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256Hex } from "./lib/hash.mjs";
+/** @import { ProviderMcpServers } from "./lib/providers/shared.mjs" */
+/** @import { CatalogIdentity, CatalogState, CatalogStoreOptions, EvaluateCatalogOptions, EvidenceOptions, HealthCheckOptions, McpConfigOptions, ResolveSkillsOptions, RuntimeProbe, RuntimeProbes, SkillInspection, SkillMaterialization, SkillMaterializationOptions, SkillProvenance, SkillProvenanceInput, SkillProvenanceStage, SkillSpec, ToolProfile, ToolProfileLimits, ToolProfilePatch, ToolProfiles } from "./tool-catalog-types.d.ts" */
 
+/** @type {CatalogState[]} */
 export const CATALOG_STATES = [
   "descubierta",
   "instalada",
@@ -13,6 +16,7 @@ export const CATALOG_STATES = [
   "permitida",
 ];
 
+/** @type {Set<SkillProvenanceStage>} */
 export const SKILL_PROVENANCE_STAGES = new Set([
   "sugerida",
   "materializada",
@@ -30,6 +34,7 @@ export const INHERITED_DESKTOP_CONNECTORS = [
   "playwright-global",
 ];
 
+/** @type {ToolProfiles} */
 export const TOOL_PROFILES_BASE = {
   investigacion: {
     id: "investigacion",
@@ -126,6 +131,7 @@ export const TOOL_PROFILES_BASE = {
   },
 };
 
+/** @type {SkillSpec[]} */
 export const PRODUCT_SKILLS_SPEC = [
   {
     id: "personal-context",
@@ -232,6 +238,7 @@ export const PRODUCT_SKILLS_SPEC = [
   },
 ];
 
+/** @type {SkillSpec[]} */
 const LOCAL_SKILL_SPECS = [
   {
     id: "equipo-cuatro-fases",
@@ -262,11 +269,13 @@ const MCP_ENTRY_PATH = fileURLToPath(
 const DEFAULT_PROBE_FRESHNESS_MS = 15 * 60 * 1000;
 const SHA256_RE = /^[a-f0-9]{64}$/i;
 
+/** @param {string[]} [baseList] @param {string[]} [overrideList] */
 function intersect(baseList = [], overrideList = []) {
   const allowed = new Set(overrideList);
   return baseList.filter((item) => allowed.has(item));
 }
 
+/** @param {unknown} filePath */
 function inspectFileNonEmptySync(filePath) {
   if (!filePath || typeof filePath !== "string") {
     return { exists: false, nonEmpty: false, reason: "ruta no configurada" };
@@ -297,6 +306,7 @@ function inspectFileNonEmptySync(filePath) {
   }
 }
 
+/** @param {unknown} dirPath */
 function inspectDirSync(dirPath) {
   if (!dirPath || typeof dirPath !== "string") return false;
   try {
@@ -306,9 +316,11 @@ function inspectDirSync(dirPath) {
   }
 }
 
+/** @param {string} rawText */
 function parseSkillFrontmatter(rawText) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(rawText);
   if (!m) return null;
+  /** @type {Record<string, string>} */
   const meta = {};
   for (const line of m[1].split(/\r?\n/)) {
     const kv = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line.trim());
@@ -319,7 +331,13 @@ function parseSkillFrontmatter(rawText) {
   return meta;
 }
 
-/** Ensures delegated child cards never exceed the coordinator's bounds. */
+/**
+ * Ensures delegated child cards never exceed the coordinator's bounds.
+ * @template {ToolProfileLimits} Child
+ * @param {ToolProfileLimits | null} parentProfile
+ * @param {Child} childProfile
+ * @returns {Omit<Child, keyof ToolProfileLimits> & ToolProfileLimits}
+ */
 export function narrowChildProfile(parentProfile, childProfile) {
   if (!parentProfile) return structuredClone(childProfile);
   const child = structuredClone(childProfile);
@@ -339,6 +357,7 @@ export function narrowChildProfile(parentProfile, childProfile) {
   return child;
 }
 
+/** @param {EvidenceOptions} options */
 function buildEvidenceMetadata({
   probe,
   nowIso,
@@ -389,6 +408,15 @@ function buildEvidenceMetadata({
   };
 }
 
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @param {RuntimeProbes} probes
+ * @param {string} nowIso
+ * @param {number} nowMs
+ * @param {number} freshnessMs
+ * @param {ToolProfile} profile
+ * @param {CatalogIdentity} identity
+ */
 function defaultEngineEntries(
   env = {},
   probes = {},
@@ -592,6 +620,16 @@ function defaultEngineEntries(
   });
 }
 
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @param {RuntimeProbes} probes
+ * @param {string} nowIso
+ * @param {number} nowMs
+ * @param {number} freshnessMs
+ * @param {ToolProfile} profile
+ * @param {CatalogIdentity} identity
+ * @param {string | null} [cwd]
+ */
 function defaultConnectorEntries(
   env = {},
   probes = {},
@@ -812,18 +850,18 @@ function defaultConnectorEntries(
 /**
  * Generates an explicit isolated MCP server configuration strictly matching the active ToolProfile.
  * Inherited desktop connectors (blender, obscura, jobspy, claude.ai, etc.) are always disabled.
+ * @param {McpConfigOptions} [options]
  */
-export function buildMcpConfigForProfile(
-  {
-    profile = TOOL_PROFILES_BASE.ejecucion,
-    env = /** @type {Record<string, string | undefined>} */ ({}),
-    memberId = null,
-    sessionId = null,
-    sessionTokenFile = null,
-    extraServers = {},
-  } = /** @type {any} */ ({}),
-) {
+export function buildMcpConfigForProfile({
+  profile = TOOL_PROFILES_BASE.ejecucion,
+  env = {},
+  memberId = null,
+  sessionId = null,
+  sessionTokenFile = null,
+  extraServers = {},
+} = {}) {
   const allowedMcps = new Set(profile?.allowedMcps || []);
+  /** @type {ProviderMcpServers} */
   const mcpServers = {};
 
   const tokenFile =
@@ -861,18 +899,18 @@ export function buildMcpConfigForProfile(
   };
 }
 
-export async function createToolCatalogStore(
-  {
-    dataDir = null,
-    env = process.env,
-    probes = {},
-    clock = () => new Date().toISOString(),
-    skillsDir = path.join(MODULE_ROOT, "skills"),
-    freshnessTtlMs = DEFAULT_PROBE_FRESHNESS_MS,
-    operatorBillingAuthorized = false,
-  } = /** @type {any} */ ({}),
-) {
+/** @param {CatalogStoreOptions} [options] */
+export async function createToolCatalogStore({
+  dataDir = null,
+  env = process.env,
+  probes = {},
+  clock = () => new Date().toISOString(),
+  skillsDir = path.join(MODULE_ROOT, "skills"),
+  freshnessTtlMs = DEFAULT_PROBE_FRESHNESS_MS,
+  operatorBillingAuthorized = false,
+} = {}) {
   const profiles = structuredClone(TOOL_PROFILES_BASE);
+  /** @type {Map<string, RuntimeProbe>} */
   const observedProbes = new Map();
   for (const [k, v] of Object.entries(probes || {})) {
     if (k === "billingAuthorized") continue;
@@ -881,6 +919,7 @@ export async function createToolCatalogStore(
   const profileFile = dataDir ? path.join(dataDir, "tool-profiles.json") : null;
   if (profileFile) {
     try {
+      /** @type {Partial<Record<string, Partial<ToolProfile>>> | null} */
       const saved = JSON.parse(await readFile(profileFile, "utf8"));
       if (saved && typeof saved === "object") {
         for (const [id, data] of Object.entries(saved)) {
@@ -902,6 +941,7 @@ export async function createToolCatalogStore(
     await rename(tmp, profileFile);
   }
 
+  /** @param {string | null} [parentProfileId] */
   function resolveProfile(profileId = "ejecucion", parentProfileId = null) {
     const base = profiles[profileId];
     if (!base) {
@@ -919,6 +959,7 @@ export async function createToolCatalogStore(
     return structuredClone(base);
   }
 
+  /** @param {SkillSpec} spec @returns {Promise<SkillInspection>} */
   async function inspectSkillSpec(spec) {
     if (spec.implemented === false || !spec.file) {
       return {
@@ -1008,10 +1049,12 @@ export async function createToolCatalogStore(
       return structuredClone(Object.values(profiles));
     },
 
+    /** @param {string | null} [parentProfileId] */
     getProfile(profileId = "ejecucion", parentProfileId = null) {
       return resolveProfile(profileId, parentProfileId);
     },
 
+    /** @param {string} profileId @param {ToolProfilePatch} patch */
     async updateProfile(profileId, patch) {
       if (!profiles[profileId]) {
         throw new Error(`Perfil de herramientas desconocido: ${profileId}`);
@@ -1042,6 +1085,7 @@ export async function createToolCatalogStore(
       return structuredClone(next);
     },
 
+    /** @param {string} targetId @param {RuntimeProbe} probeData */
     recordObservedRuntimeProbe(targetId, probeData) {
       if (!targetId || typeof probeData !== "object" || !probeData) return null;
       const nowIso = clock();
@@ -1055,18 +1099,17 @@ export async function createToolCatalogStore(
       return structuredClone(entry);
     },
 
-    async runHealthChecks(
-      {
-        targets = ["secondbrain", "git_workspace"],
-        optIn = false,
-        fetchFn = fetch,
-        probeTimeoutMs = 3000,
-        cwd = null,
-        commandRunner = null,
-        tokenFile: overrideTokenFile = null,
-        brainUrl: overrideBrainUrl = null,
-      } = /** @type {any} */ ({}),
-    ) {
+    /** @param {HealthCheckOptions} [options] */
+    async runHealthChecks({
+      targets = ["secondbrain", "git_workspace"],
+      optIn = false,
+      fetchFn = fetch,
+      probeTimeoutMs = 3000,
+      cwd = null,
+      commandRunner = null,
+      tokenFile: overrideTokenFile = null,
+      brainUrl: overrideBrainUrl = null,
+    } = {}) {
       if (!optIn) {
         return {
           executed: false,
@@ -1074,6 +1117,7 @@ export async function createToolCatalogStore(
             "Health checks remotos o de runtime son opt-in; no se ejecutan por defecto.",
         };
       }
+      /** @type {RuntimeProbes} */
       const results = {};
       const nowIso = clock();
       const targetSet = new Set(targets);
@@ -1208,26 +1252,27 @@ export async function createToolCatalogStore(
       return { executed: true, checkedAt: nowIso, results };
     },
 
-    evaluateCatalog(
-      {
-        motor = "codex",
-        profileId = "ejecucion",
-        parentProfileId = null,
-        memberId = null,
-        sessionId = null,
-        cwd = null,
-        extraServers = {},
-        runtimeProbes = {},
-        verifiedOperatorBillingGrant = false,
-      } = /** @type {any} */ ({}),
-    ) {
+    /** @param {EvaluateCatalogOptions} [options] */
+    evaluateCatalog({
+      motor = "codex",
+      profileId = "ejecucion",
+      parentProfileId = null,
+      memberId = null,
+      sessionId = null,
+      cwd = null,
+      extraServers = {},
+      runtimeProbes = {},
+      verifiedOperatorBillingGrant = false,
+    } = {}) {
       const profile = resolveProfile(profileId, parentProfileId);
       // Merge stored verified probes + explicit caller runtimeProbes WITHOUT accepting untrusted billingAuthorized.
+      /** @type {RuntimeProbes} */
       const sanitizedRuntimeProbes = {};
       for (const [k, v] of Object.entries(runtimeProbes || {})) {
         if (k === "billingAuthorized") continue;
         if (v && typeof v === "object") sanitizedRuntimeProbes[k] = v;
       }
+      /** @type {RuntimeProbes} */
       const mergedProbes = {};
       for (const [k, v] of observedProbes.entries()) mergedProbes[k] = v;
       Object.assign(mergedProbes, sanitizedRuntimeProbes);
@@ -1283,18 +1328,17 @@ export async function createToolCatalogStore(
       };
     },
 
-    async resolveSkillsForTask(
-      {
-        motor = "codex",
-        profileId = "ejecucion",
-        parentProfileId = null,
-        taskType = "",
-        skillIds = null,
-        cwd = null,
-        runtimeProbes = {},
-        verifiedOperatorBillingGrant = false,
-      } = /** @type {any} */ ({}),
-    ) {
+    /** @param {ResolveSkillsOptions} [options] */
+    async resolveSkillsForTask({
+      motor = "codex",
+      profileId = "ejecucion",
+      parentProfileId = null,
+      taskType = "",
+      skillIds = null,
+      cwd = null,
+      runtimeProbes = {},
+      verifiedOperatorBillingGrant = false,
+    } = {}) {
       const evaluation = this.evaluateCatalog({
         motor,
         profileId,
@@ -1309,6 +1353,7 @@ export async function createToolCatalogStore(
       const opsSet = new Set(evaluation.profile.allowedOperations || []);
 
       const allSpecs = [...PRODUCT_SKILLS_SPEC, ...LOCAL_SKILL_SPECS];
+      /** @type {SkillSpec[]} */
       let selectedSpecs;
       if (Array.isArray(skillIds) && skillIds.length > 0) {
         const wanted = new Set(skillIds.map(String));
@@ -1413,20 +1458,19 @@ export async function createToolCatalogStore(
       };
     },
 
-    async materializeSkillsForSession(
-      {
-        motor = "agy",
-        profileId = "ejecucion",
-        parentProfileId = null,
-        skillIds = [],
-        cwd = null,
-        geminiDir = null,
-        codexHome = null,
-        claudeConfigDir = null,
-        runtimeProbes = {},
-        verifiedOperatorBillingGrant = false,
-      } = /** @type {any} */ ({}),
-    ) {
+    /** @param {SkillMaterializationOptions} [options] @returns {Promise<SkillMaterialization>} */
+    async materializeSkillsForSession({
+      motor = "agy",
+      profileId = "ejecucion",
+      parentProfileId = null,
+      skillIds = [],
+      cwd = null,
+      geminiDir = null,
+      codexHome = null,
+      claudeConfigDir = null,
+      runtimeProbes = {},
+      verifiedOperatorBillingGrant = false,
+    } = {}) {
       if (!Array.isArray(skillIds) || skillIds.length === 0) {
         return {
           targetRoots: [],
@@ -1446,6 +1490,7 @@ export async function createToolCatalogStore(
       });
       const materialized = [];
       const provenance = [];
+      /** @type {string[]} */
       const createdDirs = [];
       for (const skill of resolution.skills) {
         if (!skill.usable || !skill.file || !skill.sha256) {
@@ -1524,6 +1569,7 @@ export async function createToolCatalogStore(
       };
     },
 
+    /** @param {SkillProvenance[] | undefined} history @param {SkillProvenanceInput} entry @returns {SkillProvenance[]} */
     recordSkillProvenance(history = [], entry) {
       if (
         !entry ||

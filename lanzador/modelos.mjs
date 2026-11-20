@@ -3,6 +3,18 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { entornoDe, DEEPSEEK_MODEL, PENSAMIENTO_DEEPSEEK } from "./motores.mjs";
 
+/** @import { LauncherEngine } from "./session-types.d.ts" */
+/** @typedef {{ id: string, nombre: string, esfuerzo?: string, esfuerzos?: string[] }} LauncherModel */
+/** @typedef {Record<LauncherEngine, LauncherModel[]>} ModelCatalog */
+/**
+ * @typedef {object} CodexModel
+ * @property {string} slug
+ * @property {string} visibility
+ * @property {string} [display_name]
+ * @property {string} [default_reasoning_level]
+ * @property {{ effort: string }[]} [supported_reasoning_levels]
+ */
+
 // What each CLI offers on this server, so a session can run on a chosen model.
 // An empty list only means «the program's default»; it never blocks a session.
 // Effort levels accepted by `claude --effort`: the current Opus, Sonnet and Haiku
@@ -24,8 +36,12 @@ const DEEPSEEK = [
 const ID = /^[A-Za-z0-9][\w.:[\]-]{0,79}$/;
 const ESFUERZO = /^[a-z]{1,10}$/;
 
+/** @param {string} json */
 export function leerModelosCodex(json) {
-  return (JSON.parse(json).models || [])
+  const { models } = /** @type {{ models?: CodexModel[] }} */ (
+    JSON.parse(json)
+  );
+  return (models || [])
     .filter((m) => m.visibility === "list" && ID.test(m.slug))
     .map((m) => ({
       id: m.slug,
@@ -37,7 +53,9 @@ export function leerModelosCodex(json) {
     }));
 }
 
+/** @param {string} salida */
 export function leerModelosAgy(salida) {
+  /** @type {Map<string, LauncherModel>} */
   const vistos = new Map();
   for (const linea of salida.replace(/\x1b\[[0-9;]*m/g, "").split(/\r?\n/)) {
     const m = /^(\S+)\t+(.+?)\s*$/.exec(linea);
@@ -46,6 +64,10 @@ export function leerModelosAgy(salida) {
   return [...vistos.values()];
 }
 
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {Promise<string>}
+ */
 function correrAgy(env) {
   return new Promise((resolve) => {
     let salida = "";
@@ -69,34 +91,45 @@ function correrAgy(env) {
   });
 }
 
+/**
+ * @param {{ env?: NodeJS.ProcessEnv, agy?: () => Promise<string>, leer?: (archivo: string) => Promise<string>, ahora?: () => number }} [options]
+ */
 export function crearCatalogo({
   env = process.env,
   agy = () => correrAgy(env),
   leer = (archivo) => readFile(archivo, "utf8"),
   ahora = Date.now,
 } = {}) {
+  /** @type {{ en: number, valor: ModelCatalog } | null} */
   let cache = null;
+  /** @returns {Promise<ModelCatalog>} */
   async function modelos() {
     if (cache && ahora() - cache.en < 10 * 60_000) return cache.valor;
     const [codex, lira] = await Promise.all([
       env.CODEX_HOME
         ? leer(path.join(env.CODEX_HOME, "models_cache.json"))
             .then(leerModelosCodex)
-            .catch(() => [])
+            .catch(/** @returns {[]} */ () => [])
         : [],
       agy()
         .then(leerModelosAgy)
-        .catch(() => []),
+        .catch(/** @returns {[]} */ () => []),
     ]);
     const valor = { claude: CLAUDE, codex, agy: lira, deepseek: DEEPSEEK };
     // A failed query is retried on the next request instead of being cached.
     if (codex.length && lira.length) cache = { en: ahora(), valor };
     return valor;
   }
-  /** Rejects anything not offered right now: the values become CLI arguments. */
+  /**
+   * Rejects anything not offered right now: the values become CLI arguments.
+   * @param {string} motor
+   * @param {string | null} [modelo]
+   * @param {string | null} [esfuerzo]
+   */
   async function validar(motor, modelo, esfuerzo) {
     if (!modelo && !esfuerzo) return;
-    const lista = (await modelos())[motor] || [];
+    const lista =
+      (await modelos())[/** @type {LauncherEngine} */ (motor)] || [];
     // The program's default model accepts any effort its catalog offers.
     if (!modelo) {
       if (!lista.some((m) => m.esfuerzos?.includes(esfuerzo)))

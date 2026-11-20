@@ -1,4 +1,8 @@
-/** Redact known credentials and caller text before a diagnostic reaches stderr. */
+/**
+ * Redact known credentials and caller text before a diagnostic reaches stderr.
+ * @param {unknown} valor
+ * @param {{ env?: NodeJS.ProcessEnv, textos?: string[] }} [options]
+ */
 export function ocultarDiagnostico(
   valor,
   { env = process.env, textos = [] } = {},

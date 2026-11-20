@@ -1,12 +1,19 @@
 import path from "node:path";
 
+/** @import { AgyQuota, ClaudeStreamEvent, ClaudeUsageSnapshot, CodexUsageSnapshot, DeepSeekBalance, FetchBalance, GeminiStreamEvent, GeminiUsageGroup, MotorOptions, NormalizedAttachment, RawAttachment, RepoCapabilitiesInput, SessionCapabilitiesInput, StreamResult, ToolActivityEvent, UsageWindowId, UsageWindows } from "./motor-types.d.ts" */
+
 // Provider catalog and pure helpers: CLI arguments, child environments and
 // translation of each CLI's output into one shape. No processes start here.
 
+/**
+ * @param {string} motor
+ * @param {string} texto
+ * @param {MotorOptions} [options]
+ */
 export function comandoMotor(
   motor,
   texto,
-  { modelo, esfuerzo, conversacionId } = /** @type {any} */ ({}),
+  { modelo, esfuerzo, conversacionId } = {},
 ) {
   // A brief starting with "-" would be parsed by the CLI as an option.
   const prompt = String(texto).startsWith("-")
@@ -71,11 +78,12 @@ export const PENSAMIENTO_DEEPSEEK = {
   max: "63999",
 };
 
-/** Model, effort and identity flags shared by the headless and interactive Claude Code. */
-export function opcionesClaude(
-  motor,
-  { modelo, esfuerzo } = /** @type {any} */ ({}),
-) {
+/**
+ * Model, effort and identity flags shared by the headless and interactive Claude Code.
+ * @param {string} motor
+ * @param {MotorOptions} [options]
+ */
+export function opcionesClaude(motor, { modelo, esfuerzo } = {}) {
   if (motor === "deepseek") return ["--append-system-prompt", IDENTIDAD_MARINA];
   return [
     ...(modelo ? ["--model", modelo] : []),
@@ -83,11 +91,17 @@ export function opcionesClaude(
   ];
 }
 
-/** Effort for DeepSeek travels as an environment variable, never as a CLI flag. */
-export const entornoEsfuerzo = (motor, esfuerzo) =>
-  motor === "deepseek" && PENSAMIENTO_DEEPSEEK[esfuerzo]
-    ? { MAX_THINKING_TOKENS: PENSAMIENTO_DEEPSEEK[esfuerzo] }
+/**
+ * Effort for DeepSeek travels as an environment variable, never as a CLI flag.
+ * @param {string} motor
+ * @param {string | null} [esfuerzo]
+ */
+export const entornoEsfuerzo = (motor, esfuerzo) => {
+  const key = /** @type {keyof typeof PENSAMIENTO_DEEPSEEK} */ (esfuerzo);
+  return motor === "deepseek" && PENSAMIENTO_DEEPSEEK[key]
+    ? { MAX_THINKING_TOKENS: PENSAMIENTO_DEEPSEEK[key] }
     : {};
+};
 
 export const AGENTES = {
   ambar: { proveedor: "claude", nombre: "Claude", acceso: "suscripcion" },
@@ -100,11 +114,19 @@ export const DEEPSEEK_MODEL = "deepseek-flash[1m]";
 export const DEEPSEEK_LIMITE = 1_000_000;
 export const GEMINI_LIMITE = 1_000_000;
 
-/** Agents get the vault credential; older installs only have the shared token file. */
+/**
+ * Agents get the vault credential; older installs only have the shared token file.
+ * @param {NodeJS.ProcessEnv} env
+ */
 export const archivoTokenVault = (env) =>
   env.AGENTES_BRAIN_TOKEN_FILE ?? env.AGENTES_TOKEN_FILE;
 
-/** Only what a CLI needs: secrets of one provider never reach another's process. */
+/**
+ * Only what a CLI needs: secrets of one provider never reach another's process.
+ * @param {string} proveedor
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {NodeJS.ProcessEnv}
+ */
 export function entornoDe(proveedor, env) {
   const runtime =
     env.SB_SESSION_SCOPES === "1" ? env.XDG_RUNTIME_DIR : undefined;
@@ -127,15 +149,15 @@ export function entornoDe(proveedor, env) {
     ...(tokenVault
       ? {
           SB_BRAIN_TOKEN_FILE: tokenVault,
-          SB_AGENTE: Object.keys(AGENTES).find(
-            (id) => AGENTES[id].proveedor === proveedor,
-          ),
+          SB_AGENTE: /** @type {(keyof typeof AGENTES)[]} */ (
+            Object.keys(AGENTES)
+          ).find((id) => AGENTES[id].proveedor === proveedor),
           SB_BRAIN_URL: env.AGENTES_BRAIN_URL || "http://127.0.0.1:8080/api/v1",
           SB_BRAIN_CLI: env.AGENTES_BRAIN_CLI,
         }
       : {}),
   };
-  const extra = {
+  const extra = /** @type {Partial<Record<string, NodeJS.ProcessEnv>>} */ ({
     claude: {
       CLAUDE_CODE_AUTO_COMPACT_WINDOW: "350000",
       CLAUDE_CODE_OAUTH_TOKEN: env.CLAUDE_CODE_OAUTH_TOKEN,
@@ -158,18 +180,23 @@ export function entornoDe(proveedor, env) {
     },
     chatgpt: { CODEX_HOME: env.CODEX_HOME },
     gemini: {},
-  }[proveedor];
+  })[proveedor];
   return Object.fromEntries(
     Object.entries({ ...base, ...extra }).filter(([, v]) => v !== undefined),
   );
 }
 
+/** @param {number} fraccion */
 const porcentaje = (fraccion) =>
   Math.min(100, Math.max(0, Math.round(fraccion * 1000) / 10));
+/** @param {number} [segundos] */
 const fecha = (segundos) =>
   segundos ? new Date(segundos * 1000).toISOString() : null;
 
-/** Folds Claude Code's stream-json lines; also used for DeepSeek through its Anthropic API. */
+/**
+ * Folds Claude Code's stream-json lines; also used for DeepSeek through its Anthropic API.
+ * @returns {StreamResult}
+ */
 export function nuevoClaude() {
   return {
     sessionId: null,
@@ -182,6 +209,10 @@ export function nuevoClaude() {
   };
 }
 
+/**
+ * @param {StreamResult} r
+ * @param {ClaudeStreamEvent} e
+ */
 export function leerClaude(r, e) {
   if (e.session_id) r.sessionId = e.session_id;
   if (e.type === "assistant" && !e.parent_tool_use_id && e.message?.usage) {
@@ -199,7 +230,10 @@ export function leerClaude(r, e) {
     const i = e.rate_limit_info || {};
     const ventanas = i.unifiedWindows || { [i.rateLimitType]: i };
     for (const [tipo, v] of Object.entries(ventanas)) {
-      const id = { five_hour: "5h", seven_day: "semanal" }[tipo];
+      const id = /** @type {Partial<Record<string, UsageWindowId>>} */ ({
+        five_hour: "5h",
+        seven_day: "semanal",
+      })[tipo];
       if (id)
         r.ventanas[id] = {
           usado:
@@ -224,14 +258,17 @@ export function leerClaude(r, e) {
 /**
  * Codex labels windows by role, not length: a lone weekly window can arrive as
  * primary. Its app server uses camelCase; its rollout files, snake_case.
+ * @param {CodexUsageSnapshot | null} [snapshot]
  */
 export function ventanasCodex(snapshot) {
+  /** @type {UsageWindows} */
   const ventanas = {};
   for (const v of [snapshot?.primary, snapshot?.secondary]) {
     if (!v) continue;
-    const id = { 300: "5h", 10080: "semanal" }[
-      v.windowDurationMins ?? v.window_minutes
-    ];
+    const id = /** @type {Partial<Record<number, UsageWindowId>>} */ ({
+      300: "5h",
+      10080: "semanal",
+    })[v.windowDurationMins ?? v.window_minutes];
     const usado = v.usedPercent ?? v.used_percent;
     if (id && typeof usado === "number")
       ventanas[id] = {
@@ -243,19 +280,27 @@ export function ventanasCodex(snapshot) {
   return ventanas;
 }
 
+/**
+ * @param {number} usado
+ * @param {string | null} reinicia
+ */
 const ventana = (usado, reinicia) => ({
   usado,
   reinicia,
   agotada: usado >= 100,
 });
 
-/** `rate_limits` of Claude Code's status line input: percent used, epoch seconds. */
+/**
+ * `rate_limits` of Claude Code's status line input: percent used, epoch seconds.
+ * @param {ClaudeUsageSnapshot | null} [limites]
+ */
 export function ventanasClaude(limites) {
+  /** @type {UsageWindows} */
   const ventanas = {};
-  for (const [origen, id] of [
+  for (const [origen, id] of /** @type {const} */ ([
     ["five_hour", "5h"],
     ["seven_day", "semanal"],
-  ]) {
+  ])) {
     const v = limites?.[origen];
     if (typeof v?.used_percentage === "number")
       ventanas[id] = ventana(v.used_percentage, fecha(v.resets_at));
@@ -266,14 +311,17 @@ export function ventanasClaude(limites) {
 /**
  * `quota` of Antigravity's status line input: fraction left, ISO date. Claude,
  * GPT and open models draw from the `3p-*` buckets, the rest from `gemini-*`.
+ * @param {AgyQuota | null} [cuota]
+ * @param {string | null} [modelo]
  */
 export function ventanasAgy(cuota, modelo) {
   const familia = /claude|gpt|oss/i.test(modelo || "") ? "3p" : "gemini";
+  /** @type {UsageWindows} */
   const ventanas = {};
-  for (const [sufijo, id] of [
+  for (const [sufijo, id] of /** @type {const} */ ([
     ["5h", "5h"],
     ["weekly", "semanal"],
-  ]) {
+  ])) {
     const v = cuota?.[`${familia}-${sufijo}`];
     if (!v || v.disabled || typeof v.remaining_fraction !== "number") continue;
     const reinicia = Date.parse(v.reset_time);
@@ -285,7 +333,11 @@ export function ventanasAgy(cuota, modelo) {
   return ventanas;
 }
 
-/** The result's usage adds up the whole conversation; only the last reply shows the context. */
+/**
+ * The result's usage adds up the whole conversation; only the last reply shows the context.
+ * @param {StreamResult} r
+ * @param {GeminiStreamEvent} e
+ */
 export function leerGemini(r, e) {
   const id = e.conversation_id || e.result?.conversation_id;
   if (id) r.sessionId = id;
@@ -309,11 +361,18 @@ export function leerGemini(r, e) {
   return r;
 }
 
-/** `agy /usage` also lists per-model limits: the tightest one is what Lira can spend. */
+/**
+ * `agy /usage` also lists per-model limits: the tightest one is what Lira can spend.
+ * @param {GeminiUsageGroup[]} [grupos]
+ */
 export function ventanasGemini(grupos = []) {
+  /** @type {UsageWindows} */
   const ventanas = {};
   for (const b of grupos.flatMap((g) => g.buckets || [])) {
-    const id = { "5h": "5h", weekly: "semanal" }[b.window];
+    const id = /** @type {Partial<Record<string, UsageWindowId>>} */ ({
+      "5h": "5h",
+      weekly: "semanal",
+    })[b.window];
     if (!id || b.id?.startsWith("3p-")) continue;
     const usado = porcentaje(1 - b.remaining_fraction);
     if (!(ventanas[id]?.usado >= usado))
@@ -326,7 +385,10 @@ export function ventanasGemini(grupos = []) {
   return ventanas;
 }
 
-/** Deterministic scene cues from actual provider events; never ask a model to navigate. */
+/**
+ * Deterministic scene cues from actual provider events; never ask a model to navigate.
+ * @param {ToolActivityEvent} e
+ */
 export function actividadEvento(e) {
   const item = e.params?.item || e.item;
   const tool = e.message?.content?.find((c) => c.type === "tool_use");
@@ -340,6 +402,10 @@ export function actividadEvento(e) {
   return null;
 }
 
+/**
+ * @param {string | null} clave
+ * @param {FetchBalance} [fetchFn]
+ */
 export async function saldoDeepSeek(clave, fetchFn = fetch) {
   if (!clave) throw new Error("Saldo DeepSeek no disponible");
   const respuesta = await fetchFn("https://api.deepseek.com/user/balance", {
@@ -347,7 +413,7 @@ export async function saldoDeepSeek(clave, fetchFn = fetch) {
     signal: AbortSignal.timeout(5000),
   });
   if (!respuesta.ok) throw new Error("Saldo DeepSeek no disponible");
-  const datos = await respuesta.json();
+  const datos = /** @type {DeepSeekBalance} */ (await respuesta.json());
   const usd = datos.balance_infos?.find(
     (b) => b.currency === "USD",
   )?.total_balance;
@@ -457,9 +523,14 @@ export const REQUISITOS = {
   redactarPr: "Necesita un repositorio con remoto en GitHub.",
 };
 
-/** Capabilities of one session: the engine's, narrowed by the repository it runs in. */
+/**
+ * Capabilities of one session: the engine's, narrowed by the repository it runs in.
+ * @param {SessionCapabilitiesInput} sesion
+ * @param {RepoCapabilitiesInput} [repo]
+ */
 export function capacidadesDe(sesion, repo = {}) {
-  const base = CAPACIDADES[sesion.motor];
+  const base =
+    CAPACIDADES[/** @type {keyof typeof CAPACIDADES} */ (sesion.motor)];
   if (!base) return null;
   const esRepo = !!repo.esRepo;
   const tieneRemoto = !!repo.tieneRemoto;
@@ -484,54 +555,68 @@ export function capacidadesDe(sesion, repo = {}) {
   };
 }
 
-/** Validate and normalize structured attachments against engine capability and workspace boundary. */
+/**
+ * Validate and normalize structured attachments against engine capability and workspace boundary.
+ * @param {string} motor
+ * @param {unknown} [attachments]
+ * @param {string} [cwd]
+ * @returns {NormalizedAttachment[]}
+ */
 export function validarAdjuntosMotor(motor, attachments = [], cwd = "") {
-  const caps = CAPACIDADES[motor];
+  const caps = CAPACIDADES[/** @type {keyof typeof CAPACIDADES} */ (motor)];
   if (!caps) throw new Error("Motor desconocido");
   const allowed = new Set(caps.adjuntos || ["text"]);
   if (!Array.isArray(attachments)) {
     throw new Error("Lista de adjuntos inválida.");
   }
   const resolvedRoot = cwd ? path.resolve(cwd) : "";
-  return attachments.map((att) => {
-    if (!att || typeof att !== "object" || typeof att.type !== "string") {
-      throw new Error("Adjunto estructurado inválido.");
-    }
-    if (!allowed.has(att.type)) {
-      throw new Error(
-        `El motor ${motor} no soporta adjuntos de tipo «${att.type}».`,
-      );
-    }
-    const normalized = { type: att.type };
-    if (att.type === "text") {
-      normalized.text = String(att.text ?? "");
-      return normalized;
-    }
-    if (att.path !== undefined) {
-      const candidate = resolvedRoot
-        ? path.resolve(resolvedRoot, String(att.path))
-        : String(att.path);
-      if (resolvedRoot) {
-        const rel = path.relative(resolvedRoot, candidate);
-        if (rel.startsWith("..") || path.isAbsolute(rel)) {
-          throw new Error(
-            "Referencia de adjunto fuera del espacio de trabajo permitido.",
-          );
-        }
+  return attachments.map(
+    /** @param {RawAttachment} att */ (att) => {
+      if (!att || typeof att !== "object" || typeof att.type !== "string") {
+        throw new Error("Adjunto estructurado inválido.");
       }
-      normalized.path = candidate;
-    }
-    if (att.url !== undefined) normalized.url = String(att.url);
-    if (att.uri !== undefined) normalized.uri = String(att.uri);
-    if (att.text !== undefined) normalized.text = String(att.text);
-    if (att.mimeType !== undefined) normalized.mimeType = String(att.mimeType);
-    if (att.sha256 !== undefined) normalized.sha256 = String(att.sha256);
-    if (att.ref !== undefined) normalized.ref = String(att.ref);
-    return normalized;
-  });
+      if (!allowed.has(att.type)) {
+        throw new Error(
+          `El motor ${motor} no soporta adjuntos de tipo «${att.type}».`,
+        );
+      }
+      /** @type {NormalizedAttachment} */
+      const normalized = { type: att.type };
+      if (att.type === "text") {
+        normalized.text = String(att.text ?? "");
+        return normalized;
+      }
+      if (att.path !== undefined) {
+        const candidate = resolvedRoot
+          ? path.resolve(resolvedRoot, String(att.path))
+          : String(att.path);
+        if (resolvedRoot) {
+          const rel = path.relative(resolvedRoot, candidate);
+          if (rel.startsWith("..") || path.isAbsolute(rel)) {
+            throw new Error(
+              "Referencia de adjunto fuera del espacio de trabajo permitido.",
+            );
+          }
+        }
+        normalized.path = candidate;
+      }
+      if (att.url !== undefined) normalized.url = String(att.url);
+      if (att.uri !== undefined) normalized.uri = String(att.uri);
+      if (att.text !== undefined) normalized.text = String(att.text);
+      if (att.mimeType !== undefined)
+        normalized.mimeType = String(att.mimeType);
+      if (att.sha256 !== undefined) normalized.sha256 = String(att.sha256);
+      if (att.ref !== undefined) normalized.ref = String(att.ref);
+      return normalized;
+    },
+  );
 }
 
-/** Cheapest model of an engine's catalog; null leaves the program's default. */
+/**
+ * Cheapest model of an engine's catalog; null leaves the program's default.
+ * @param {string} motor
+ * @param {{ id: string }[]} [catalogo]
+ */
 export function modeloEconomico(motor, catalogo = []) {
   const ids = catalogo.map((m) => m.id);
   if (motor === "claude") return ids.find((id) => /haiku/i.test(id)) ?? null;

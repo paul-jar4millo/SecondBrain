@@ -1,6 +1,8 @@
 import { coalescer } from "./harness.mjs";
 import { LOTE_INICIAL } from "./items.mjs";
 
+/** @import { TerminalEvent } from "./types.d.ts" */
+
 const LATIDO = 15000;
 // A reader this far behind is cut off; it reconnects and gets a fresh snapshot.
 const MAX_PENDIENTE = 4 * 1024 * 1024;
@@ -10,6 +12,7 @@ const MAX_PENDIENTE = 4 * 1024 * 1024;
  * `salida` deltas, structured `items`, `estado` and heartbeats. The reader keeps
  * `seq` continuity; any gap means reconnecting for a new snapshot.
  * Throws before writing anything when the session has no terminal.
+ * @param {{ res: import("node:http").ServerResponse, id: string, ejecutor: ReturnType<typeof import("./ejecucion.mjs").crearEjecutor>, registro: import("./session-types.d.ts").SessionRegistry, items?: ReturnType<typeof import("./items.mjs").crearItems>, ms?: number, latido?: number }} options
  */
 export function servirFlujo({
   res,
@@ -28,12 +31,17 @@ export function servirFlujo({
     "X-Accel-Buffering": "no",
   });
   let cerrado = false;
+  /**
+   * @param {string} evento
+   * @param {unknown} datos
+   */
   const enviar = (evento, datos) => {
     if (cerrado) return;
     if (res.writableLength > MAX_PENDIENTE) return cerrar();
     res.write(`event: ${evento}\ndata: ${JSON.stringify(datos)}\n\n`);
   };
   const coalescencia = coalescer((lote) => enviar("salida", lote), ms);
+  /** @type {Extract<TerminalEvent, { tipo: "salida" } >[]} */
   let cola = [];
   let vivo = false;
   let ronda = 0;

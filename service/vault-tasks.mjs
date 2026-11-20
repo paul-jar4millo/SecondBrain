@@ -1,6 +1,9 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { stableId } from "./vault-identity.mjs";
-/** @this {import("./vault.mjs").Vault} */
+/**
+ * @this {import("./vault.mjs").Vault}
+ * @param {string | string[]} id
+ */
 export async function index(id) {
   const ids = Array.isArray(id) ? id : [id];
   if (this.indexBatch) {
@@ -28,7 +31,10 @@ export async function index(id) {
   if (text !== before)
     await this.atomic(relative, text, record?.fileHash ?? null);
 }
-/** @this {import("./vault.mjs").Vault} */
+/**
+ * @this {import("./vault.mjs").Vault}
+ * @param {import("./vault-types.d.ts").VaultItem} item
+ */
 export async function repeat(item) {
   const snapshot = await this.snapshot();
   const id = stableId(item.id + ":next");

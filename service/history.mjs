@@ -18,12 +18,16 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { gunzip, gzip } from "node:zlib";
 
+/** @import { HistoryEntry, JournalEntry } from "./vault-types.d.ts" */
+
+/** @param {string} text */
 const hash = (text) => createHash("sha256").update(text).digest("hex");
 const pack = promisify(gzip);
 const unpack = promisify(gunzip);
 const DAY = 86_400_000;
 
 export class History {
+  /** @param {string} directory */
   constructor(
     directory,
     { days = Number(process.env.HISTORY_DAYS) || 90 } = {},
@@ -33,7 +37,7 @@ export class History {
     this.audit = path.join(directory, "audit.ndjson");
     this.days = days;
   }
-  /** Journal entries of one committed transaction: { relative, before, afterHash }. */
+  /** @param {JournalEntry[]} entries */
   async record(entries, actor = "desconocido", at = Date.now()) {
     await mkdir(this.blobs, { recursive: true, mode: 0o700 });
     let lines = "";
@@ -51,6 +55,10 @@ export class History {
     }
     await appendFile(this.audit, lines, { mode: 0o600 });
   }
+  /**
+   * @param {string} id
+   * @param {string} text
+   */
   async store(id, text) {
     let handle;
     try {
@@ -65,6 +73,7 @@ export class History {
       await handle.close();
     }
   }
+  /** @returns {Promise<HistoryEntry[]>} */
   async entries() {
     let text;
     try {
@@ -82,10 +91,14 @@ export class History {
       }
     });
   }
-  /** Newest first. */
+  /**
+   * Newest first.
+   * @param {string} relative
+   */
   async versions(relative) {
     return (await this.entries()).filter((e) => e.path === relative).reverse();
   }
+  /** @param {string | null} id */
   async read(id) {
     if (!/^[a-f0-9]{64}$/.test(id || "")) return null;
     try {

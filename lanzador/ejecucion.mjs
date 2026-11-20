@@ -31,11 +31,23 @@ import { ocultarDiagnostico } from "./diagnostico.mjs";
 import { sessionCommand, stopSessionScope } from "./limits.mjs";
 import { ErrorLanzador } from "./errores.mjs";
 
+/** @import { ChildProcess } from "node:child_process" */
+/** @import { LauncherSession } from "./session-types.d.ts" */
+/** @import { ToolProfile } from "./tool-catalog-types.d.ts" */
+/** @import { ActiveJob, ExecutionRequest, ExecutorOptions, LiveTerminal, QueuedJob, ResourceQueueEntry, TerminalEvent, TerminalInput, TurnOptions } from "./types.d.ts" */
+
 // Bound the terminal replay kept in each session's detail file.
 const PERSISTIDO = 500;
 const runFile = promisify(execFile);
 
 const SESION_MAX_MIN = 240;
+/** @type {Partial<Record<string, string>>} */
+const PROVIDER_BY_ENGINE = { codex: "chatgpt", agy: "gemini" };
+
+/**
+ * @param {unknown} valor
+ * @param {number} predeterminado
+ */
 function minutosConfigurados(valor, predeterminado) {
   const minutos = Number(valor);
   return (
@@ -43,6 +55,7 @@ function minutosConfigurados(valor, predeterminado) {
   );
 }
 
+/** @param {ExecutorOptions} options */
 export function crearEjecutor({
   registro,
   equipos,
@@ -67,21 +80,39 @@ export function crearEjecutor({
   cancelarTemporizador = clearTimeout,
   registrar = (linea) => console.error(linea),
 }) {
+  /** @type {Map<string, ActiveJob>} */
   const activos = new Map();
+  /** @type {Map<string, LiveTerminal>} */
   const terminales = new Map();
+  /** @type {Map<string, ChildProcess>} */
   const liveProcesses = new Map();
-  /** Processes that already emitted "exit" (exitCode alone misses signals). */
+  /**
+   * Processes that already emitted "exit" (exitCode alone misses signals).
+   * @type {WeakSet<ChildProcess>}
+   */
   const exitedProcesses = new WeakSet();
+  /** @type {Map<string, NodeJS.Timeout>} */
   const idleTimers = new Map();
+  /** @type {Map<string, string>} */
   const sessionTokenFiles = new Map();
+  /** @type {Map<string, ToolProfile>} */
   const sessionProfiles = new Map();
+  /** @type {Map<string, boolean>} */
   const sessionBillingGrants = new Map();
+  /** @type {Map<string, () => Promise<unknown>>} */
   const materializedSkillCleanups = new Map();
   const materializedSkillsBySession = new Map();
+  /** @type {ResourceQueueEntry[]} */
   const resourceQueue = [];
+  /** @type {Map<string, QueuedJob>} */
   const queuedPromises = new Map();
   let nextEnqueueSeq = 1;
+  /** @type {Promise<unknown>} */
   let cola = Promise.resolve();
+  /**
+   * @template T
+   * @param {() => T | Promise<T>} fn
+   */
   function serial(fn) {
     const siguiente = cola.then(fn);
     cola = siguiente.catch(() => {});
@@ -92,6 +123,10 @@ export function crearEjecutor({
       env.SB_LANZADOR_DATA_DIR || path.join(os.tmpdir(), "sb-lanzador");
     return path.join(base, "session-tokens");
   }
+  /**
+   * @param {string} sessionId
+   * @param {string} token
+   */
   async function writeSessionTokenFile(sessionId, token) {
     const dir = sessionTokenDir();
     await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -100,6 +135,7 @@ export function crearEjecutor({
     sessionTokenFiles.set(sessionId, file);
     return file;
   }
+  /** @param {string} sessionId */
   async function cleanupSessionRuntimeSecrets(sessionId) {
     const file = sessionTokenFiles.get(sessionId);
     sessionTokenFiles.delete(sessionId);
@@ -115,6 +151,7 @@ export function crearEjecutor({
       await rm(file, { force: true }).catch(() => {});
     }
   }
+  /** @param {LauncherSession} sesion */
   function resolveSessionEffectiveProfile(sesion) {
     const baseId = sesion.toolProfileId || "ejecucion";
     const baseCatalogProfile =
@@ -127,6 +164,13 @@ export function crearEjecutor({
       ? narrowChildProfile(baseCatalogProfile, override)
       : structuredClone(baseCatalogProfile);
   }
+  /**
+   * @param {NodeJS.ProcessEnv} baseEnv
+   * @param {ToolProfile} profile
+   * @param {string | null} tokenFile
+   * @param {boolean} billingGranted
+   * @param {string} motor
+   */
   function sanitizeChildEnv(
     baseEnv,
     profile,
@@ -162,11 +206,13 @@ export function crearEjecutor({
     }
     return next;
   }
+  /** @param {string} sessionId */
   function acpGeminiDirFor(sessionId) {
     const base =
       env.SB_LANZADOR_DATA_DIR || path.join(os.tmpdir(), "sb-lanzador");
     return path.join(base, "acp-runtime", sessionId, "gemini");
   }
+  /** @param {string} id */
   function limpiarEviccionOciosa(id) {
     const timer = idleTimers.get(id);
     if (timer) {
@@ -174,6 +220,7 @@ export function crearEjecutor({
       idleTimers.delete(id);
     }
   }
+  /** @param {string} id */
   function armarEviccionOciosa(id) {
     limpiarEviccionOciosa(id);
     if (!Number.isFinite(idleControllerMs) || idleControllerMs <= 0) return;
@@ -198,6 +245,7 @@ export function crearEjecutor({
     }
     return ids;
   }
+  /** @param {string} id */
   async function cerrarConexion(
     id,
     reason = "Cierre explícito",
@@ -228,6 +276,7 @@ export function crearEjecutor({
     registro.notificar?.();
     return closed || { closed: false, id, pid: null, reason };
   }
+  /** @param {string[]} [excludeIds] */
   async function evictOneIdle(
     reason = "Evictada por límite de procesos activos",
     excludeIds = [],
@@ -252,6 +301,7 @@ export function crearEjecutor({
       .catch(() => {});
     return evicted;
   }
+  /** @param {string | null} [sessionId] */
   async function asegurarCupo(sessionId = null) {
     const ocupadas = sesionesOcupandoCupo();
     if (sessionId && ocupadas.has(sessionId)) return;
@@ -282,10 +332,15 @@ export function crearEjecutor({
       }),
     );
   }
+  /**
+   * @param {string} src
+   * @param {string} dst
+   */
   async function copiarEntradasProyecto(src, dst) {
     const srcResolved = path.resolve(src);
     const dstResolved = path.resolve(dst);
     const entries = await readdir(srcResolved, { withFileTypes: true }).catch(
+      /** @returns {import("node:fs").Dirent[]} */
       () => [],
     );
     const skip = new Set([
@@ -307,6 +362,7 @@ export function crearEjecutor({
       }).catch(() => {});
     }
   }
+  /** @param {LauncherSession} sesion */
   async function limpiarWorkspaceMiembro(sesion) {
     const ws = sesion?.workspacePath;
     if (!ws || !["git-worktree", "directory"].includes(sesion.workspaceKind)) {
@@ -394,6 +450,7 @@ export function crearEjecutor({
   }
   // Readers learn "the program is gone" from the registry; this runs after the
   // final state was saved, so the notification must follow the release.
+  /** @param {string} id */
   async function liberar(id) {
     const persistentLive = Boolean(conversations?.hasLiveController?.(id));
     if (!persistentLive) {
@@ -419,6 +476,10 @@ export function crearEjecutor({
     }
     registro.notificar?.();
   }
+  /**
+   * @param {ChildProcess} hijo
+   * @param {NodeJS.Signals} signal
+   */
   function senalar(hijo, signal) {
     if (process.platform !== "win32" && hijo.pid) {
       try {
@@ -440,16 +501,28 @@ export function crearEjecutor({
       } catch {}
     }
   }
-  // A checkpoint of the working tree precedes every turn; it never blocks one.
+  /**
+   * A checkpoint of the working tree precedes every turn; it never blocks one.
+   * @param {string} id
+   * @param {string} texto
+   */
   const marcar = (id, texto) =>
     seguimiento ? seguimiento.marcar(id, texto) : Promise.resolve(null);
-  // Keep enough overlap to redact a credential or assignment crossing the tail.
+  /**
+   * Keep enough overlap to redact a credential or assignment crossing the tail.
+   * @param {string} brief
+   */
   const margenDiagnostico = (brief) =>
     2000 +
     Math.max(
       brief.length,
       ...Object.values(env).map((v) => (typeof v === "string" ? v.length : 0)),
     );
+  /**
+   * @param {LauncherSession} sesion
+   * @param {string} brief
+   * @param {Record<string, unknown>} datos
+   */
   function diagnosticar(sesion, brief, datos) {
     try {
       registrar(
@@ -465,7 +538,9 @@ export function crearEjecutor({
                   : value;
               return [
                 key,
-                key === "diagnostico" ? limpio.slice(-2000) : limpio,
+                key === "diagnostico"
+                  ? /** @type {string} */ (limpio).slice(-2000)
+                  : limpio,
               ];
             }),
           ),
@@ -475,8 +550,15 @@ export function crearEjecutor({
       /* Diagnostics never reject a background job. */
     }
   }
+  /**
+   * @param {LauncherSession} sesion
+   * @param {string} brief
+   * @param {string} cwd
+   * @param {TurnOptions} [turnOptions]
+   */
   function lanzarTrabajo(sesion, brief, cwd, turnOptions = {}) {
     limpiarEviccionOciosa(sesion.id);
+    /** @type {ActiveJob} */
     const job = { hijo: null, cancelada: false, promesa: null };
     activos.set(sesion.id, job);
     job.promesa = Promise.resolve()
@@ -536,9 +618,15 @@ export function crearEjecutor({
         if (sesion.structured && !job.cancelada) await drenarCola(sesion.id);
       });
   }
+  /**
+   * @param {LauncherSession} sesion
+   * @param {ChildProcess} hijo
+   */
   function vigilar(sesion, hijo) {
     const job = activos.get(sesion.id);
+    /** @type {NodeJS.Timeout | undefined} */
     let escalada;
+    /** @type {NodeJS.Timeout | undefined} */
     let inactivo;
     const actividad = () => {
       cancelarTemporizador(inactivo);
@@ -581,6 +669,12 @@ export function crearEjecutor({
     job.detenerVigilante = detener;
     return detener;
   }
+  /**
+   * @param {LauncherSession} sesion
+   * @param {string} brief
+   * @param {string} cwd
+   * @param {TurnOptions} [turnOptions]
+   */
   async function correr(sesion, brief, cwd, turnOptions = {}) {
     sesion = { ...sesion };
     if (sesion.structured) {
@@ -597,8 +691,7 @@ export function crearEjecutor({
           403,
         );
       }
-      const proveedor =
-        { codex: "chatgpt", agy: "gemini" }[sesion.motor] || sesion.motor;
+      const proveedor = PROVIDER_BY_ENGINE[sesion.motor] || sesion.motor;
       const profile = resolveSessionEffectiveProfile(sesion);
       const sessionTokenFile = sessionTokenFiles.get(sesion.id) || null;
       const baseEnv = sanitizeChildEnv(
@@ -625,6 +718,7 @@ export function crearEjecutor({
         sessionId: sesion.id,
         sessionTokenFile,
       });
+      /** @type {NodeJS.ProcessEnv} */
       const childEnv = {
         ...baseEnv,
         ...mcpConfig.envOverrides,
@@ -653,6 +747,7 @@ export function crearEjecutor({
           })
           .catch(() => {});
       }
+      /** @type {Promise<unknown>} */
       let provenanceSync = Promise.resolve();
       try {
         const requestedSkills = Array.isArray(sesion.skillIds)
@@ -740,7 +835,9 @@ export function crearEjecutor({
           observeSkills: Boolean(requestedSkills.length > 0),
           onSkillsObserved:
             toolCatalog && requestedSkills.length > 0
-              ? async (obs) => {
+              ? /** @param {{ source: string, names: string[] }} obs */ async (
+                  obs,
+                ) => {
                   if (!obs || !Array.isArray(obs.names)) return;
                   const cleanNames = [...new Set(obs.names.map(String))];
                   observedBuckets.push({
@@ -782,6 +879,10 @@ export function crearEjecutor({
                   await provenanceSync;
                 }
               : null,
+          /**
+           * @param {string} bin
+           * @param {string[]} args
+           */
           spawn(bin, args, processEnv = childEnv) {
             const spec = sessionCommand({ bin, args }, sesion.id, env);
             const child = spawn(spec.bin, spec.args, {
@@ -826,6 +927,7 @@ export function crearEjecutor({
             if (job.cancelada) senalar(child, "SIGTERM");
             return child;
           },
+          /** @param {string} id */
           onNativeId: (id) =>
             registro.actualizar(sesion.id, { conversacionId: id }),
         });
@@ -912,8 +1014,7 @@ export function crearEjecutor({
       sesion.id,
       env,
     );
-    const proveedor =
-      { codex: "chatgpt", agy: "gemini" }[sesion.motor] || sesion.motor;
+    const proveedor = PROVIDER_BY_ENGINE[sesion.motor] || sesion.motor;
     const childEnv = {
       ...entornoDe(proveedor, env),
       ...entornoEsfuerzo(sesion.motor, sesion.esfuerzo),
@@ -936,6 +1037,7 @@ export function crearEjecutor({
     if (job.cancelada) senalar(hijo, "SIGTERM");
     const detenerVigilante = vigilar(sesion, hijo);
     const acumulado = nuevoClaude();
+    /** @type {Promise<unknown>} */
     let cambio = Promise.resolve();
     const lineas = createInterface({ input: hijo.stdout });
     lineas.on("line", (linea) => {
@@ -972,8 +1074,10 @@ export function crearEjecutor({
             ultimaAccion: actividad.etiqueta,
             fase: inferirFase(
               evento.item?.type ||
-                evento.message?.content?.find((c) => c.type === "tool_use")
-                  ?.name ||
+                evento.message?.content?.find(
+                  /** @param {{type?: string, name?: string}} c */
+                  (c) => c.type === "tool_use",
+                )?.name ||
                 "",
             ),
           }),
@@ -1025,13 +1129,15 @@ export function crearEjecutor({
       detenerVigilante();
     }
   }
+  /**
+   * @param {LauncherSession} sesion
+   * @param {string} brief
+   * @param {string} cwd
+   */
   async function correrRemoto(sesion, brief, cwd) {
     /** @type {Record<string, string | undefined>} */
     const childEnv = {
-      ...entornoDe(
-        { agy: "gemini", codex: "chatgpt" }[sesion.motor] || sesion.motor,
-        env,
-      ),
+      ...entornoDe(PROVIDER_BY_ENGINE[sesion.motor] || sesion.motor, env),
       ...entornoEsfuerzo(sesion.motor, sesion.esfuerzo),
       SB_SESSION_ID: sesion.id,
       TERM: "xterm-256color",
@@ -1071,7 +1177,7 @@ export function crearEjecutor({
     job.hijo = hijo;
     job.nativo = true;
     if (job.cancelada) senalar(hijo, "SIGTERM");
-    const terminal = crearTerminal();
+    const terminal = /** @type {LiveTerminal} */ (crearTerminal());
     terminal.generacion = randomUUID();
     if (sesion.terminal) terminal.append(sesion.terminal + "\r\n");
     terminales.set(sesion.id, terminal);
@@ -1079,6 +1185,7 @@ export function crearEjecutor({
     // between would otherwise reach only the watchdog, and a fast exit would
     // never be seen.
     let pending = "";
+    /** @type {Promise<unknown>} */
     let changes = Promise.resolve();
     // Persisting the replay is not news: telling every client each 10 s would
     // make phones refetch the session list for nothing.
@@ -1173,6 +1280,7 @@ export function crearEjecutor({
       detenerVigilante();
     }
   }
+  /** @param {ExecutionRequest} input */
   async function iniciar({
     id = null,
     motor,
@@ -1455,7 +1563,9 @@ export function crearEjecutor({
     }
     const cwdFinal = context?.cwd || proyectos[proyecto];
     if (queueSlot) {
+      /** @type {() => void} */
       let resolvePromise;
+      /** @type {Promise<void>} */
       const promise = new Promise((resolve) => {
         resolvePromise = resolve;
       });
@@ -1475,11 +1585,15 @@ export function crearEjecutor({
     });
     return registro.leer().find((s) => s.id === sesion.id) || sesion;
   }
-  /** Sessions whose next queued message is being started. */
+  /**
+   * Sessions whose next queued message is being started.
+   * @type {Set<string>}
+   */
   const drenando = new Set();
   /**
    * Starts the next queued message of an idle structured session. Called when
    * a turn ends and after a message is queued, since either can happen first.
+   * @param {string} id
    */
   async function drenarCola(id) {
     if (!conversations || activos.has(id) || drenando.has(id)) return;
@@ -1489,7 +1603,7 @@ export function crearEjecutor({
     try {
       const siguiente = await conversations
         .consumeNextQueuedMessage(id)
-        .catch(() => null);
+        .catch(/** @returns {null} */ () => null);
       if (!siguiente) return;
       // A later tick lets the finished turn settle before the next one starts.
       await new Promise((r) => setImmediate(r));
@@ -1510,6 +1624,11 @@ export function crearEjecutor({
       drenando.delete(id);
     }
   }
+  /**
+   * @param {string} id
+   * @param {string} brief
+   * @param {TurnOptions} [turnOptions]
+   */
   function continuar(id, brief, turnOptions = {}) {
     return serial(async () => {
       const sesion = registro.leer().find((s) => s.id === id && !s.eliminada);
@@ -1583,6 +1702,7 @@ export function crearEjecutor({
      * Source of a harness screen for readers: a live terminal, or the screen
      * saved when the program last exited. `generacion` changes when the
      * program is started again, so readers know to ask for a new snapshot.
+     * @param {string} id
      */
     flujo(id) {
       const session = registro.leer().find((s) => s.id === id);
@@ -1594,6 +1714,7 @@ export function crearEjecutor({
           generacion: terminal.generacion,
           activa: () => activos.has(id),
           snapshot: () => terminal.snapshot(),
+          /** @param {(event: TerminalEvent) => void} fn */
           suscribir: (fn) => terminal.suscribir(fn),
         };
       return {
@@ -1608,6 +1729,7 @@ export function crearEjecutor({
         suscribir: () => () => {},
       };
     },
+    /** @param {string} id */
     async terminal(id) {
       const fuente = this.flujo(id);
       return {
@@ -1616,11 +1738,16 @@ export function crearEjecutor({
         generacion: fuente.generacion,
       };
     },
+    /**
+     * @param {string} id
+     * @param {TerminalInput} options
+     */
     entrada(id, { raw, texto, cols, rows, controlador, interrumpir }) {
       const job = activos.get(id);
       const session = registro.leer().find((s) => s.id === id);
       if (!job?.nativo || !session?.harness || !job.hijo?.stdin?.writable)
         throw new Error("Terminal no disponible");
+      /** @param {unknown} valor */
       const escribir = (valor) =>
         job.hijo.stdin.write(JSON.stringify(valor) + "\n");
       const tamano = cols !== undefined || rows !== undefined;
@@ -1635,6 +1762,7 @@ export function crearEjecutor({
         throw new Error("Entrada inválida");
       // Every write waits behind a pending checkpoint, so keys never overtake
       // it; with nothing pending a write goes out at once, as it always did.
+      /** @param {() => unknown} fn */
       const enCola = (fn, { espera = false } = {}) => {
         if (!espera && !job.pendientes) return fn();
         job.pendientes = (job.pendientes ?? 0) + 1;
@@ -1645,6 +1773,7 @@ export function crearEjecutor({
           })
           .finally(() => job.pendientes--);
       };
+      /** @param {string} mensaje */
       const antesDelTurno = (mensaje) => {
         job.ultimoTurno = Date.now();
         return marcar(id, mensaje);
@@ -1710,6 +1839,7 @@ export function crearEjecutor({
       }
       return { ok: true };
     },
+    /** @param {string} id */
     eliminar(id) {
       return serial(async () => {
         if (activos.has(id))
@@ -1738,6 +1868,10 @@ export function crearEjecutor({
     continuar,
     activos: () => sesionesOcupandoCupo().size,
     conexionesActivas: () => conversations?.liveSessions?.() ?? [],
+    /**
+     * @param {string} id
+     * @param {string} [reason]
+     */
     cerrarConexion: (id, reason) => serial(() => cerrarConexion(id, reason)),
     cerrarTodo,
     /**
@@ -1818,18 +1952,24 @@ export function crearEjecutor({
       );
       return { ...accepted, command: updatedCmd, started: true };
     },
+    /** @param {string} id */
     listarCola: (id) => {
       if (!conversations) {
         throw new ErrorLanzador("Integración estructurada no instalada.", 503);
       }
       return conversations.listQueue(id);
     },
+    /**
+     * @param {string} id
+     * @param {string} clientMessageId
+     */
     cancelarCola: (id, clientMessageId) => {
       if (!conversations) {
         throw new ErrorLanzador("Integración estructurada no instalada.", 503);
       }
       return conversations.cancelQueuedMessage(id, clientMessageId);
     },
+    /** @param {ExecutionRequest} input */
     encargar({
       id = null,
       motor,
@@ -1884,6 +2024,10 @@ export function crearEjecutor({
         }),
       );
     },
+    /**
+     * @param {string} padreId
+     * @param {Omit<ExecutionRequest, "origen">} input
+     */
     encargarHija(
       padreId,
       {
@@ -2073,6 +2217,7 @@ export function crearEjecutor({
         });
       });
     },
+    /** @param {string} id */
     async cancelar(id, { shutdown = false, reason = "Cierre explícito" } = {}) {
       const queuedIndex = resourceQueue.findIndex(
         (item) => item.sesionId === id,
@@ -2124,6 +2269,10 @@ export function crearEjecutor({
         reloj.unref();
       }
     },
+    /**
+     * @param {string} padreId
+     * @param {string} hijaId
+     */
     async esperarHija(padreId, hijaId, timeout = 300000) {
       const hija = registro
         .leer()
@@ -2148,6 +2297,7 @@ export function crearEjecutor({
         ? { id: hijaId, estado: "pendiente" }
         : actual;
     },
+    /** @param {string} id */
     esperar(id) {
       return (
         activos.get(id)?.promesa ||

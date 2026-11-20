@@ -6,6 +6,7 @@ import git from "isomorphic-git";
 // Runs within the write queue without launching a CLI or contacting GitHub.
 // A separate systemd job pushes committed versions, even if the UI is closed.
 export class GitHistory {
+  /** @param {string} root */
   constructor(root) {
     this.root = path.resolve(root);
   }
@@ -14,6 +15,7 @@ export class GitHistory {
     if ((await realpath(root)) !== (await realpath(this.root)))
       throw new Error("El vault debe tener su propio repositorio Git.");
   }
+  /** @param {Pick<import("./vault-types.d.ts").JournalEntry, "relative">[]} entries */
   async record(entries, actor = "app") {
     if (!entries.length) return;
     await this.check();
@@ -30,6 +32,7 @@ export class GitHistory {
       );
     for (const filepath of files) {
       const exists = await lstat(path.join(this.root, filepath)).catch(
+        /** @returns {null} */
         (error) => {
           if (error.code !== "ENOENT") throw error;
           return null;

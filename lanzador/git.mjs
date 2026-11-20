@@ -19,6 +19,10 @@ const HEREDADAS = [
   "XDG_CONFIG_HOME",
 ];
 
+/**
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {NodeJS.ProcessEnv} [extra]
+ */
 export function entornoGit(env = process.env, extra = {}) {
   return {
     ...Object.fromEntries(
@@ -32,13 +36,26 @@ export function entornoGit(env = process.env, extra = {}) {
   };
 }
 
-/** git and gh through execFile: no shell, a timeout and a minimal environment. */
+/** @typedef {{ env?: NodeJS.ProcessEnv, timeout?: number, max?: number, tolerarExceso?: boolean }} GitOptions */
+/** @typedef {(cwd: string, args: string[], options?: GitOptions) => Promise<{ stdout: string, stderr: string, excedido?: boolean }>} GitCommand */
+
+/**
+ * git and gh through execFile: no shell, a timeout and a minimal environment.
+ * @param {{ env?: NodeJS.ProcessEnv, timeout?: number, ghComando?: string[] }} [options]
+ */
 export function crearGit({
   env = process.env,
   timeout = 60000,
   // Tests run a fake gh as `node fake.mjs`; production uses the real one.
   ghComando = ["gh"],
 } = {}) {
+  /**
+   * @param {string} bin
+   * @param {string} cwd
+   * @param {string[]} args
+   * @param {GitOptions} [opciones]
+   * @returns {ReturnType<GitCommand>}
+   */
   function correr(bin, cwd, args, opciones = {}) {
     return new Promise((resolve, reject) => {
       execFile(
@@ -68,8 +85,12 @@ export function crearGit({
     });
   }
   return {
-    git: (cwd, args, opciones) => correr("git", cwd, args, opciones),
-    gh: (cwd, args, opciones) =>
-      correr(ghComando[0], cwd, [...ghComando.slice(1), ...args], opciones),
+    git: /** @type {GitCommand} */ (
+      (cwd, args, opciones) => correr("git", cwd, args, opciones)
+    ),
+    gh: /** @type {GitCommand} */ (
+      (cwd, args, opciones) =>
+        correr(ghComando[0], cwd, [...ghComando.slice(1), ...args], opciones)
+    ),
   };
 }

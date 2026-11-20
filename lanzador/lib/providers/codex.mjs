@@ -34,7 +34,7 @@ import {
  *     expire(id: string): void
  *   }} CodexContext
  */
-/** @typedef {import("./controller-types.mjs").RpcRequestMetadata} RpcRequestMetadata */
+/** @typedef {Partial<import("../../provider-rpc.mjs").RpcRequestMetadata>} RpcRequestMetadata */
 /** @typedef {{ id?: string, status?: string }} CodexTurnPayload */
 /** @typedef {{ threadId?: string, thread?: { id?: string }, turnId?: string, turn?: CodexTurnPayload }} CodexTurnEvent */
 /**

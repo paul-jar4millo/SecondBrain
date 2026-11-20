@@ -1,6 +1,9 @@
 import { Failure, stableId } from "./vault-identity.mjs";
 import { validate, accountIndex } from "./vault-validation.mjs";
-/** @this {import("./vault.mjs").Vault} */
+/**
+ * @this {import("./vault.mjs").Vault}
+ * @param {(import("./vault-types.d.ts").VaultItem | { id: string, kind: "notification", externalId?: string })[]} items
+ */
 export async function importItems(items) {
   return this.exclusive(async () => {
     try {
@@ -16,6 +19,7 @@ export async function importItems(items) {
           current.items.map((x) => x.externalId).filter(Boolean),
         );
         const incoming = items.filter(
+          /** @returns {x is import("./vault-types.d.ts").VaultItem} */
           (x) =>
             x.kind !== "notification" &&
             !seen.has(x.id) &&

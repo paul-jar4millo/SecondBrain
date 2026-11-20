@@ -5,7 +5,11 @@ import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
-/** True when this file is the program being run, also through a symlinked path. */
+/**
+ * True when this file is the program being run, also through a symlinked path.
+ * @param {string | undefined} argv1
+ * @param {string} url
+ */
 export function esPrincipal(argv1, url) {
   if (!argv1) return false;
   try {
@@ -15,6 +19,7 @@ export function esPrincipal(argv1, url) {
   }
 }
 
+/** @type {Record<string, string>} */
 const AGENTES = {
   ambar: "claude",
   menta: "codex",
@@ -38,6 +43,47 @@ const VALORES = new Set([
 ]);
 const BOOLEANOS = new Set(["harness", "wait", "json", "borrador", "help"]);
 
+/**
+ * @typedef {Record<string, string | boolean> & {
+ *   agente?: string,
+ *   proyecto?: string,
+ *   modelo?: string,
+ *   esfuerzo?: string,
+ *   origen?: string,
+ *   timeout?: string,
+ *   estado?: string,
+ *   titulo?: string,
+ *   descripcion?: string,
+ *   harness?: boolean,
+ *   wait?: boolean,
+ *   json?: boolean,
+ *   borrador?: boolean,
+ *   help?: boolean
+ * }} CliFlags
+ */
+/** @typedef {import("./session-types.d.ts").LauncherSession} CliSession */
+/**
+ * @typedef {object} CliExecutionOptions
+ * @property {NodeJS.ProcessEnv} [env]
+ * @property {(text: string) => unknown} [salida]
+ * @property {(text: string) => unknown} [error]
+ * @property {typeof fetch} [fetchFn]
+ * @property {(ms: number) => Promise<unknown>} [espera]
+ * @property {number} [sondeo]
+ */
+/**
+ * @typedef {object} CliDiff
+ * @property {{ estado: string, ruta: string, binario?: boolean, añadidas: number, eliminadas: number }[]} archivos
+ * @property {string} [parche]
+ * @property {boolean} [recortado]
+ */
+/**
+ * @typedef {{ "/estado": CliSession[], "/sesiones": CliSession } &
+ *   Record<`/sesiones/${string}/diff`, CliDiff> &
+ *   Record<`/sesiones/${string}/pr`, { rama: string, commit: string, url: string }> &
+ *   Record<`/sesiones/${string}/cancelar`, unknown>} CliResponses
+ */
+
 export const AYUDA = `Uso: sb-hilo <comando> [opciones]
 
 Comandos:
@@ -59,7 +105,9 @@ Opciones globales:
 Entorno: LANZADOR_URL (http://127.0.0.1:8092) y LANZADOR_TOKEN_FILE.
 `;
 
+/** @param {string[]} argv */
 export function analizar(argv) {
+  /** @type {CliFlags} */
   const opciones = {};
   const posicionales = [];
   for (let i = 0; i < argv.length; i++) {
@@ -87,6 +135,7 @@ export function analizar(argv) {
 
 const ID = /^[a-f0-9-]{36}$/i;
 
+/** @param {NodeJS.ProcessEnv} env */
 function conectar(env) {
   const url = new URL(env.LANZADOR_URL || "http://127.0.0.1:8092");
   if (
@@ -100,7 +149,11 @@ function conectar(env) {
   return url.origin;
 }
 
-/** Runs one command. Returns the process exit code; output goes through `salida`/`error`. */
+/**
+ * Runs one command. Returns the process exit code; output goes through `salida`/`error`.
+ * @param {string[]} argv
+ * @param {CliExecutionOptions} [options]
+ */
 export async function ejecutarCli(
   argv,
   {
@@ -126,13 +179,16 @@ export async function ejecutarCli(
     salida(AYUDA);
     return comando || opciones.help ? 0 : 2;
   }
+  /** @param {string} mensaje */
   const falla = (mensaje, codigo = 1) => {
     if (json) salida(JSON.stringify({ error: mensaje }) + "\n");
     else error(mensaje + "\n");
     return codigo;
   };
+  /** @param {string} m */
   const uso = (m) => falla(`${m}\n\n${AYUDA}`.trim(), 2);
 
+  /** @type {string} */
   let base;
   let token;
   try {
@@ -147,6 +203,12 @@ export async function ejecutarCli(
     authorization: `Bearer ${token}`,
     "content-type": "application/json",
   };
+  /**
+   * @template {keyof CliResponses} Route
+   * @param {Route} ruta
+   * @param {object} [cuerpo]
+   * @returns {Promise<CliResponses[Route]>}
+   */
   async function pedir(ruta, cuerpo) {
     let respuesta;
     try {
@@ -159,20 +221,26 @@ export async function ejecutarCli(
     } catch {
       throw new Error("El lanzador no responde.");
     }
+    /** @type {unknown} */
     const datos = await respuesta.json().catch(() => ({}));
     if (!respuesta.ok)
       throw new Error(
-        datos.error || `El lanzador rechazó la petición (${respuesta.status}).`,
+        /** @type {{ error?: string }} */ (datos).error ||
+          `El lanzador rechazó la petición (${respuesta.status}).`,
       );
-    return datos;
+    return /** @type {CliResponses[Route]} */ (datos);
   }
+  /** @param {string} id */
   const buscar = async (id) => {
     const sesion = (await pedir("/estado")).find((s) => s.id === id);
     if (!sesion) throw new Error("Sesión inexistente.");
     return sesion;
   };
 
-  /** Last agent reply: the saved result, the chat transcript or, for harnesses, the stream. */
+  /**
+   * Last agent reply: the saved result, the chat transcript or, for harnesses, the stream.
+   * @param {CliSession} sesion
+   */
   async function respuestaDe(sesion) {
     if (sesion.resultado) return sesion.resultado;
     const mensajes = (sesion.mensajes ?? []).filter(
@@ -195,6 +263,7 @@ export async function ejecutarCli(
         pendiente = eventos.pop();
         for (const evento of eventos) {
           if (!/^event: items/m.test(evento)) continue;
+          /** @type {{ items?: { tipo: string, texto?: string }[] }} */
           const datos = JSON.parse(/^data: (.*)$/m.exec(evento)?.[1] ?? "{}");
           const ultimo = (datos.items ?? [])
             .filter((i) => i.tipo === "asistente")
@@ -212,7 +281,11 @@ export async function ejecutarCli(
     return "";
   }
 
-  /** Waits for the session to leave pendiente/trabajando; SSE wakes it, polling backs it up. */
+  /**
+   * Waits for the session to leave pendiente/trabajando; SSE wakes it, polling backs it up.
+   * @param {string} id
+   * @param {number} segundos
+   */
   async function esperar(id, segundos) {
     const limite = Date.now() + segundos * 1000;
     const control = new AbortController();
@@ -250,6 +323,7 @@ export async function ejecutarCli(
     }
   }
 
+  /** @param {CliSession} s */
   const resumen = (s) => ({
     id: s.id,
     agente: NOMBRES[s.motor] ?? s.motor,
@@ -259,10 +333,14 @@ export async function ejecutarCli(
     harness: !!s.harness,
     creada: s.creada ?? null,
   });
+  /** @param {CliSession} s */
   const linea = (s) =>
     `${s.id}  ${(NOMBRES[s.motor] ?? s.motor).padEnd(7)} ${String(s.estado).padEnd(12)} ${s.proyecto ?? "-"}  ${(s.encargo ?? "").replace(/\s+/g, " ").slice(0, 60)}`;
 
-  /** Finishes a command that started a turn: optionally waits and shows the last reply. */
+  /**
+   * Finishes a command that started a turn: optionally waits and shows the last reply.
+   * @param {CliSession} sesion
+   */
   async function cerrar(sesion) {
     let final = sesion;
     let codigo = 0;

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+/** @param {string} file */
 async function bounded(file) {
   try {
     const value = await readFile(file, "utf8");
@@ -8,6 +9,7 @@ async function bounded(file) {
     return null;
   }
 }
+/** @param {{ stateFile?: string, revisionFile?: string, launcherPinFile?: string, runtimeLauncherFile?: string, now?: number }} options */
 export async function operationalStatus({
   stateFile,
   revisionFile,

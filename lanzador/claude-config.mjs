@@ -2,7 +2,24 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { carpetaAgy, esLineaUso, lineaUso } from "./uso.mjs";
 
-/** The owner's own status line wins: without it the agent just shows no bars. */
+/** @typedef {{ command?: string, type?: string, stack_with_default?: boolean }} StatusLine */
+/**
+ * @typedef {{
+ *   projects?: Record<string, { hasTrustDialogAccepted?: boolean }>,
+ *   hasCompletedOnboarding?: boolean,
+ *   statusLine?: StatusLine,
+ *   skipDangerousModePermissionPrompt?: boolean,
+ *   trustedWorkspaces?: string[],
+ * }} ProviderConfig
+ */
+
+/**
+ * The owner's own status line wins: without it the agent just shows no bars.
+ * @param {StatusLine | undefined} actual
+ * @param {string} motor
+ * @param {string} carpeta
+ * @param {string | undefined} firma
+ */
 const lineaMedidora = (actual, motor, carpeta, firma) =>
   actual && !esLineaUso(actual) ? null : lineaUso(motor, carpeta, firma);
 
@@ -12,12 +29,11 @@ const lineaMedidora = (actual, motor, carpeta, firma) =>
  * Each agent keeps its own directory: Marina never reads Ámbar's account.
  * `firma` puts the agent's name in the status line of its terminal; `medir` also
  * records the plan's limits, which only subscription accounts receive.
+ * @param {string | undefined} configDir
+ * @param {string} cwd
+ * @param {{ firma?: string, medir?: boolean }} [options]
  */
-export async function prepararClaude(
-  configDir,
-  cwd,
-  { firma, medir } = /** @type {any} */ ({}),
-) {
+export async function prepararClaude(configDir, cwd, { firma, medir } = {}) {
   if (!configDir || !cwd) return;
   await modificar(path.join(configDir, ".claude.json"), (datos) => {
     const proyecto = datos.projects?.[cwd] || {};
@@ -50,6 +66,8 @@ export async function prepararClaude(
  * Antigravity asks to trust every new folder before it reads input, so Lira's
  * first message would wait forever in a per-project workspace. Trust it first.
  * The limits line stacks under the built-in one instead of replacing it.
+ * @param {string | undefined} home
+ * @param {string} cwd
  */
 export async function prepararAgy(home, cwd) {
   if (!home || !cwd) return;
@@ -76,6 +94,10 @@ export async function prepararAgy(home, cwd) {
   });
 }
 
+/**
+ * @param {string} archivo
+ * @param {(config: ProviderConfig) => boolean | void} cambiar
+ */
 async function modificar(archivo, cambiar) {
   let datos = {};
   try {
