@@ -235,7 +235,7 @@ a {
   width: min(820px, calc(100% - 24px));
   height: 134px;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   align-items: start;
   padding: 0 26px;
   pointer-events: none;
@@ -507,7 +507,7 @@ h4 {
   .hud-moon {
     display: none;
   }
-  /* Six tools share the strip and always fit (375 px included). The room
+  /* Seven tools share the strip and always fit (375 px included). The room
      link is redundant here: tools open as a dialog over the room. */
   .world-shortcuts {
     overflow-x: visible;

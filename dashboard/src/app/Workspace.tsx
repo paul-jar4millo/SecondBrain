@@ -367,7 +367,7 @@ export function Workspace() {
             <Link
               to="/"
               className={inRoom ? "selected" : ""}
-              style={{ "--slot": -3 } as CSSProperties}
+              style={{ "--slot": -3.5 } as CSSProperties}
             >
               <HudGlyph name="sala" />
               <span>{t("tools.room")}</span>
@@ -376,7 +376,7 @@ export function Workspace() {
               <NavLink
                 key={path}
                 to={path}
-                style={{ "--slot": index - 2 } as CSSProperties}
+                style={{ "--slot": index - 2.5 } as CSSProperties}
               >
                 <HudGlyph name={glyph} />
                 <span>{label}</span>
