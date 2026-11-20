@@ -13,3 +13,6 @@ record is never rewritten after it is accepted; a later record supersedes it.
 | [0006](0006-conventional-commits.md)                | Conventional Commits enforced locally and in CI                   | Accepted |
 | [0007](0007-english-identifiers.md)                 | English identifiers, Spanish product                              | Accepted |
 | [0008](0008-npm-workspaces.md)                      | npm workspaces with per-module release lockfiles                  | Accepted |
+| [0009](0009-operational-state-in-sqlite.md)         | Agent operational state lives in SQLite                           | Accepted |
+| [0010](0010-threads-replace-sessions.md)            | Threads replace sessions, PTY terminals and `sb-hilo`             | Accepted |
+| [0011](0011-native-typescript-and-contracts.md)     | Native TypeScript for new backend code and a shared `contracts`   | Accepted |
