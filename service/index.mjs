@@ -33,6 +33,7 @@ import {
   validateNotePath,
 } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
+import { roomRoutes } from "./http/routes/room.mjs";
 import { worldRoutes } from "./http/routes/world.mjs";
 
 /** @import { ApplicationOptions, HttpRequest, ToolProfile } from "./types.d.ts" */
@@ -54,7 +55,6 @@ export async function createApplication(options = {}) {
     vault,
     finance,
     auth,
-    sala,
     lanzador,
     clients,
     watchers,
@@ -379,6 +379,7 @@ export async function createApplication(options = {}) {
         const req = { request, response, consulta, required, callerCap };
         /** @type {Partial<Record<string, () => Promise<unknown>>>} */
         const routes = {
+          ...roomRoutes(context, req),
           ...worldRoutes(context, req),
           "GET /health": async () => {
             const ready = await stat(path.join(root, "Home.md"))
@@ -787,44 +788,6 @@ export async function createApplication(options = {}) {
             const out = await lanzador.eliminar(targetId);
             await auth.revokeCapability({ sessionId: targetId });
             return send(response, 200, out);
-          },
-          "GET /sala": async () => {
-            return send(
-              response,
-              200,
-              sala.leer(consulta.get("espacio") ?? undefined),
-            );
-          },
-          "POST /sala/tablero": async () => {
-            return send(response, 200, await sala.guardar(await body(request)));
-          },
-          "POST /sala/encargos": async () => {
-            return send(
-              response,
-              200,
-              await sala.encargar(await body(request)),
-            );
-          },
-          "POST /sala/agentes": async () => {
-            // Retired: the room has four fixed agents. The body is still
-            // validated so a malformed request keeps answering 400, not 410.
-            await body(request);
-            return send(response, 201, await sala.crearAgente());
-          },
-          "POST /sala/agentes/borrar": async () => {
-            return send(
-              response,
-              200,
-              await sala.borrarAgente(await body(request)),
-            );
-          },
-          "GET /sala/imagen": async () => {
-            return await sala.imagen(
-              new URL(request.url ?? "/", "http://localhost").searchParams.get(
-                "id",
-              ),
-              response,
-            );
           },
           "GET /vault/files": async () => {
             return send(response, 200, await vault.files());
