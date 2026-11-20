@@ -25,6 +25,7 @@
     "ops/homelab/*.mjs",
     "launcher/lib/**/*.mjs",
     "launcher/execution/*.mjs",
+    "launcher/conversation/*.mjs",
     "service/lib/*.mjs",
     "service/http/**/*.mjs",
     "ops/launcher/*.mjs"
