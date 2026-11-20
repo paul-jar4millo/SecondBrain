@@ -6,7 +6,7 @@ import { clone as clonarFigura } from "three/addons/utils/SkeletonUtils.js";
 import { rampa } from "./room-chamber";
 
 // Un tipo por proveedor: silueta (modelo), colores de base y forma de buscar.
-export const TIPOS = {
+export const TYPES = {
   claude: {
     proveedor: "Claude",
     modelo: "ambar",
@@ -36,7 +36,7 @@ export const TIPOS = {
     colores: { pelo: "#4a86ec", ropa: "#232f58", acento: "#3cb4ff" },
   },
 };
-type Tipo = keyof typeof TIPOS;
+type Tipo = keyof typeof TYPES;
 type Colores = Partial<Record<string, string>>;
 export type CharacterSpec = {
   id: string;
@@ -46,18 +46,18 @@ export type CharacterSpec = {
   colores?: Colores;
   [field: string]: unknown;
 };
-type ProgressFn = (nombre: string, loaded: number, total: number) => void;
+type ProgressFn = (name: string, loaded: number, total: number) => void;
 type SkinnedPart = THREE.SkinnedMesh<
   THREE.BufferGeometry,
   THREE.MeshStandardMaterial | THREE.MeshBasicMaterial | THREE.MeshToonMaterial
 >;
 
-const especie = (id: string, nombre: string, tipo: Tipo, enfoque: string) => ({
+const especie = (id: string, name: string, type: Tipo, enfoque: string) => ({
   id,
-  nombre,
-  tipo,
+  nombre: name,
+  tipo: type,
   enfoque,
-  ...TIPOS[tipo],
+  ...TYPES[type],
 });
 export const AGENT_SPECS = [
   especie("ambar", "Ámbar", "claude", "Composición y narrativa"),
@@ -65,7 +65,7 @@ export const AGENT_SPECS = [
   especie("lira", "Lira", "gemini", "Color y brillo"),
   especie("marina", "Marina", "deepseek", "Detalle técnico"),
 ];
-export const JUGADOR = {
+export const PLAYER = {
   id: "tu",
   nombre: "Tú",
   modelo: "jugador",
@@ -87,50 +87,48 @@ const modelos = new Map<string, Promise<GLTF>>();
 const cargador = new GLTFLoader();
 
 export function loadModel(
-  nombre: string,
-  alProgreso?: ProgressFn,
+  name: string,
+  onProgress?: ProgressFn,
 ): Promise<GLTF> {
-  if (!modelos.has(nombre))
+  if (!modelos.has(name))
     modelos.set(
-      nombre,
+      name,
       cargador
-        .loadAsync(
-          `${import.meta.env.BASE_URL}models/sala/${nombre}.glb`,
-          (e) =>
-            alProgreso?.(nombre, e.loaded, e.lengthComputable ? e.total : 0),
+        .loadAsync(`${import.meta.env.BASE_URL}models/sala/${name}.glb`, (e) =>
+          onProgress?.(name, e.loaded, e.lengthComputable ? e.total : 0),
         )
         .then((gltf) => {
           gltf.scene.traverse((o) => {
             if ((o as THREE.Mesh).isMesh)
-              normalesDeContorno((o as THREE.Mesh).geometry);
+              outlineNormals((o as THREE.Mesh).geometry);
           });
           return gltf;
         })
         .catch((error) => {
           // A failed download must not stay cached, or "Reintentar" would replay the error.
-          modelos.delete(nombre);
+          modelos.delete(name);
           throw error;
         }),
     );
-  return modelos.get(nombre) as Promise<GLTF>;
+  return modelos.get(name) as Promise<GLTF>;
 }
 export const MODEL_NAMES = [
   "jugador",
-  ...new Set(Object.values(TIPOS).map((t) => t.modelo)),
+  ...new Set(Object.values(TYPES).map((t) => t.modelo)),
 ];
 /** Loads every figure in parallel; `alProgreso(nombre, cargado, total)` reports bytes. */
-export const cargarTodos = (alProgreso?: ProgressFn) =>
-  Promise.all(MODEL_NAMES.map((nombre) => loadModel(nombre, alProgreso)));
+export const loadAll = (onProgress?: ProgressFn) =>
+  Promise.all(MODEL_NAMES.map((name) => loadModel(name, onProgress)));
 
 // Las costuras de UV separan vértices; el contorno necesita una normal única por posición.
-function normalesDeContorno(geo: THREE.BufferGeometry) {
+function outlineNormals(geo: THREE.BufferGeometry) {
   const pos = geo.attributes.position,
     nor = geo.attributes.normal;
   const suma = new Map<string, number[]>();
-  const clave = (i: number) =>
+  const key = (i: number) =>
     `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
   for (let i = 0; i < pos.count; i++) {
-    const k = clave(i);
+    const k = key(i);
     const s = suma.get(k) || [0, 0, 0];
     s[0] += nor.getX(i);
     s[1] += nor.getY(i);
@@ -139,7 +137,7 @@ function normalesDeContorno(geo: THREE.BufferGeometry) {
   }
   const suave = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
-    const [x, y, z] = suma.get(clave(i)) as number[];
+    const [x, y, z] = suma.get(key(i)) as number[];
     const n = Math.hypot(x, y, z) || 1;
     suave.set([x / n, y / n, z / n], i * 3);
   }
@@ -197,16 +195,16 @@ function texturaCirculo(color: string) {
   circulos.set(color, t);
   return t;
 }
-const planoCirculo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+const circlePlane = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 const ESCALA = 1.18;
 
 /** Crea una figura desde un modelo ya cargado (usar cargarTodos antes). */
 export async function createCharacter(spec: CharacterSpec) {
   const gltf = await loadModel(spec.modelo);
-  const raiz = new THREE.Group();
+  const root = new THREE.Group();
   const figura = clonarFigura(gltf.scene);
   figura.scale.setScalar(ESCALA);
-  raiz.add(figura);
+  root.add(figura);
   const propios = new Map<
     string,
     THREE.MeshBasicMaterial | THREE.MeshToonMaterial
@@ -244,21 +242,21 @@ export async function createCharacter(spec: CharacterSpec) {
     o.material = propios.get(nombre) as THREE.MeshToonMaterial;
     o.castShadow = true;
     o.frustumCulled = false;
-    const linea = new THREE.SkinnedMesh(o.geometry, contorno);
-    linea.bind(o.skeleton, o.bindMatrix);
-    linea.frustumCulled = false;
-    o.parent?.add(linea);
+    const line = new THREE.SkinnedMesh(o.geometry, contorno);
+    line.bind(o.skeleton, o.bindMatrix);
+    line.frustumCulled = false;
+    o.parent?.add(line);
   });
   const teñir = (colores: Colores = {}) => {
-    for (const [mat, clave] of Object.entries(TINTES)) {
+    for (const [mat, key] of Object.entries(TINTES)) {
       const m = propios.get(mat);
-      if (m && colores[clave]) m.color.set(colores[clave]);
+      if (m && colores[key]) m.color.set(colores[key]);
     }
   };
   if (spec.colores) teñir(spec.colores);
 
   const circulo = new THREE.Mesh(
-    planoCirculo,
+    circlePlane,
     new THREE.MeshBasicMaterial({
       map: texturaCirculo(spec.color),
       transparent: true,
@@ -268,7 +266,7 @@ export async function createCharacter(spec: CharacterSpec) {
   );
   circulo.scale.setScalar(1.15);
   circulo.position.y = 0.018;
-  raiz.add(circulo);
+  root.add(circulo);
 
   // Caja invisible para los clics: más barata y fiable que probar contra la malla animada.
   const toque = new THREE.Mesh(
@@ -277,37 +275,37 @@ export async function createCharacter(spec: CharacterSpec) {
   );
   toque.position.y = 0.875;
   toque.visible = false;
-  raiz.add(toque);
+  root.add(toque);
 
   const mezclador = new THREE.AnimationMixer(figura);
-  const acciones = Object.fromEntries(
+  const actions = Object.fromEntries(
     gltf.animations.map((clip) => [clip.name, mezclador.clipAction(clip)]),
   );
   let actual: string | null = null;
-  const poner = (nombre: string) => {
-    if (nombre === actual) return;
-    const siguiente = acciones[nombre] || acciones.quieta;
-    siguiente
+  const put = (name: string) => {
+    if (name === actual) return;
+    const next = actions[name] || actions.quieta;
+    next
       .reset()
       .fadeIn(actual ? 0.14 : 0)
       .play();
-    if (actual) acciones[actual].fadeOut(0.14);
-    actual = nombre;
+    if (actual) actions[actual].fadeOut(0.14);
+    actual = name;
   };
   mezclador.update(Math.random());
-  poner("quieta");
+  put("quieta");
   let proximoParpadeo = 2 + Math.random() * 3,
     parpadeando = 0;
   const cara = (cuadro: number) =>
     texturaCara.forEach((t) => (t.offset.x = cuadro / CUADROS_CARA));
   return {
-    raiz,
+    raiz: root,
     spec,
     toque,
     teñir,
     // accion: 'quieta' | 'camina' | 'teclea' | 'festeja'
-    animar(dt: number, accion: string) {
-      poner(accion);
+    animar(dt: number, action: string) {
+      put(action);
       mezclador.update(dt);
       circulo.rotation.y += dt * 0.5;
       proximoParpadeo -= dt;
@@ -316,7 +314,7 @@ export async function createCharacter(spec: CharacterSpec) {
         proximoParpadeo = 2 + Math.random() * 4;
       }
       if (parpadeando > 0) parpadeando -= dt;
-      cara(accion === "festeja" ? 2 : parpadeando > 0 ? 1 : 0);
+      cara(action === "festeja" ? 2 : parpadeando > 0 ? 1 : 0);
     },
     liberar() {
       mezclador.stopAllAction();

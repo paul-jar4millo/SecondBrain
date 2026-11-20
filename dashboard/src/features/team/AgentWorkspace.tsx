@@ -104,7 +104,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
           remember(`sb-team-agent:${project}`) ||
           preference("defaultAgent")),
     ) || characters[0];
-  const motor = engines[agent.id];
+  const engine = engines[agent.id];
   const [links, setLinks] = useState<ProjectLinks | null>(null);
   const [catalog, setCatalog] = useState<Record<string, Model[]>>({});
   const [error, setError] = useState("");
@@ -112,18 +112,18 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [choice, setChoice] = useState(() => loadChoice(motor));
+  const [choice, setChoice] = useState(() => loadChoice(engine));
   const [query, setQuery] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState("");
-  const draftKey = draftKeyFor(project, motor);
+  const draftKey = draftKeyFor(project, engine);
   const [draft, setDraft] = useState(() => remember(draftKey));
   const draftRef = useRef<HTMLTextAreaElement>(null);
   const draftCursor = useRef<number | null>(null);
   const attachInput = useRef<HTMLInputElement>(null);
   const focusDraft = useRef(false);
   const view = useRef("");
-  view.current = `${project}:${motor}:${routeChat || ""}`;
+  view.current = `${project}:${engine}:${routeChat || ""}`;
   const refreshRevision = useRef(0);
   // Only a conversation without terminal shows its transcript.
   const needsTranscript = useRef(false);
@@ -202,8 +202,8 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
   }, [draft]);
   useEffect(() => {
     setDraft(remember(draftKey));
-    setChoice(loadChoice(motor));
-  }, [draftKey, motor]);
+    setChoice(loadChoice(engine));
+  }, [draftKey, engine]);
   useEffect(() => {
     remember("sb-team-project", project);
   }, [project]);
@@ -214,7 +214,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
   const conversations = sessions
     .filter(
       (s) =>
-        s.motor === motor &&
+        s.motor === engine &&
         (s.espacioId
           ? s.espacioId === project
           : repo
@@ -224,7 +224,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
     )
     .sort((a, b) => (b.creada || "").localeCompare(a.creada || ""));
   const selectedId =
-    routeChat || remember(`sb-chat-selected:${project}:${motor}`);
+    routeChat || remember(`sb-chat-selected:${project}:${engine}`);
   const selected =
     selectedId === "new"
       ? undefined
@@ -245,7 +245,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
     selected &&
     (selected.interactiva ||
       ["pendiente", "trabajando"].includes(selected.estado));
-  const models = catalog[motor] || [];
+  const models = catalog[engine] || [];
   const action = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError("");
@@ -278,7 +278,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
       .filter(Boolean)
       .join("\n\n");
     remember(key, next);
-    if (draftKeyFor(project, motor) === key) setDraft(next);
+    if (draftKeyFor(project, engine) === key) setDraft(next);
   };
   const draftLines = draft.split("\n").length;
   const projectTitle = spaces.find((p) => p.id === project)?.titulo;
@@ -304,7 +304,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
         const submittedDraft = draft;
         void action(async () => {
           const result = (await teamApi("/agentes/sesiones", {
-            motor,
+            motor: engine,
             origen: "sala",
             proyecto: repo || project,
             espacioId: project,
@@ -314,8 +314,8 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
             ...choicePayload(models, choice),
           })) as Conversation;
           if (remember(draftKey) === submittedDraft) remember(draftKey, "");
-          remember(`sb-chat-selected:${project}:${motor}`, result.id);
-          saveChoice(motor, choice);
+          remember(`sb-chat-selected:${project}:${engine}`, result.id);
+          saveChoice(engine, choice);
           if (view.current === submittedView) {
             setDraft((current) => (current === submittedDraft ? "" : current));
             setSessions((current) => [
@@ -412,7 +412,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
       <p className="muted">
         {isDemo
           ? "Las sesiones reales no se inician en la demostración."
-          : motor === "deepseek"
+          : engine === "deepseek"
             ? "Marina usa la API de DeepSeek y consume su saldo. Enter envía, Ctrl + Enter para nueva línea. Puedes arrastrar o pegar archivos de cualquier tipo aquí."
             : "Nada se ejecuta hasta que envías. Puedes arrastrar o pegar archivos de cualquier tipo aquí. Enter envía, Ctrl + Enter para nueva línea."}
       </p>
@@ -487,7 +487,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
           className="button primary"
           onClick={() => {
             focusDraft.current = true;
-            remember(`sb-chat-selected:${project}:${motor}`, "new");
+            remember(`sb-chat-selected:${project}:${engine}`, "new");
             setRoute({ chat: "new" });
           }}
         >
@@ -525,7 +525,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
                 className={s.id === selected?.id ? "active" : ""}
                 key={s.id}
                 onClick={() => {
-                  remember(`sb-chat-selected:${project}:${motor}`, s.id);
+                  remember(`sb-chat-selected:${project}:${engine}`, s.id);
                   setRoute({ chat: s.id });
                   setHistoryOpen(false);
                 }}
@@ -573,7 +573,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
                 setConfirmDelete("");
                 void action(async () => {
                   await teamApi("/agentes/sesiones/eliminar", { id });
-                  remember(`sb-chat-selected:${project}:${motor}`, "");
+                  remember(`sb-chat-selected:${project}:${engine}`, "");
                   setRoute({ chat: null });
                 });
               }}
@@ -620,7 +620,7 @@ export function AgentWorkspace({ onRefresh }: { onRefresh?: () => void }) {
         )}
         <div className="conversation-body">
           {!selected?.structured && (
-            <UsageBars motor={motor} contexto={selected?.contexto} />
+            <UsageBars motor={engine} contexto={selected?.contexto} />
           )}
           {selected?.structured ? (
             <ProviderConversation

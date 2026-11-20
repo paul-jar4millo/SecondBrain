@@ -2,12 +2,11 @@ import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 /**
- * @param {{ tool_name?: unknown, toolName?: unknown, tool?: { name?: unknown } }} entrada
+ * @param {{ tool_name?: unknown, toolName?: unknown, tool?: { name?: unknown } }} entry
  * @param {unknown} id
  */
-export function eventoHook(entrada, id) {
-  const herramienta =
-    entrada?.tool_name || entrada?.toolName || entrada?.tool?.name;
+export function eventHook(entry, id) {
+  const herramienta = entry?.tool_name || entry?.toolName || entry?.tool?.name;
   if (
     typeof id !== "string" ||
     !id ||
@@ -18,29 +17,29 @@ export function eventoHook(entrada, id) {
   return { id: id.slice(0, 100), herramienta: herramienta.slice(0, 100) };
 }
 
-export async function main(entrada = process.stdin) {
+export async function main(entry = process.stdin) {
   try {
-    let texto = "";
+    let text = "";
     // Decode incrementally so a character split between chunks stays whole.
-    entrada.setEncoding("utf8");
-    for await (const parte of entrada) {
-      texto += parte;
-      if (Buffer.byteLength(texto) > 64000) return;
+    entry.setEncoding("utf8");
+    for await (const part of entry) {
+      text += part;
+      if (Buffer.byteLength(text) > 64000) return;
     }
-    const evento = eventoHook(JSON.parse(texto), process.env.SB_SESSION_ID);
-    if (!evento || !process.env.SB_HOOK_TOKEN_FILE) return;
+    const event = eventHook(JSON.parse(text), process.env.SB_SESSION_ID);
+    if (!event || !process.env.SB_HOOK_TOKEN_FILE) return;
     const token = (
       await readFile(process.env.SB_HOOK_TOKEN_FILE, "utf8")
     ).trim();
-    const puerto = Number(process.env.SB_LANZADOR_PORT || 8092);
-    if (!Number.isInteger(puerto) || puerto < 1 || puerto > 65535) return;
-    await fetch(`http://127.0.0.1:${puerto}/eventos`, {
+    const port = Number(process.env.SB_LANZADOR_PORT || 8092);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return;
+    await fetch(`http://127.0.0.1:${port}/eventos`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify(evento),
+      body: JSON.stringify(event),
       signal: AbortSignal.timeout(1000),
     });
   } catch {

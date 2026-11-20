@@ -12,7 +12,7 @@ import {
 const RECENT_MS = 60 * 60_000;
 
 export function ApprovalPanel({ hideEmpty = false }: { hideEmpty?: boolean }) {
-  const [solicitudes, setSolicitudes] = useState<Approval[] | null>(null);
+  const [requests, setRequests] = useState<Approval[] | null>(null);
   const [error, setError] = useState("");
   const [last, setLast] = useState<Receipt | null>(null);
   const [recent, setRecent] = useState<Receipt[]>([]);
@@ -20,13 +20,13 @@ export function ApprovalPanel({ hideEmpty = false }: { hideEmpty?: boolean }) {
   const refresh = useCallback(async () => {
     const actual = ++revision.current;
     try {
-      const lista = isDemo
+      const list = isDemo
         ? []
         : ((await teamApi("/aprobaciones")) as Approval[]);
       if (actual === revision.current) {
-        setSolicitudes(lista);
+        setRequests(list);
         setRecent(
-          lista
+          list
             .filter(
               (s) => s.recibo && (s.resuelta ?? 0) > Date.now() - RECENT_MS,
             )
@@ -45,18 +45,18 @@ export function ApprovalPanel({ hideEmpty = false }: { hideEmpty?: boolean }) {
   }, []);
   useEffect(() => {
     void refresh();
-    const dejar = subscribeChanges(() => void refresh());
+    const leave = subscribeChanges(() => void refresh());
     const contador = revision;
     return () => {
       contador.current++;
-      dejar();
+      leave();
     };
   }, [refresh]);
-  async function decidir(id: string, aprobar: boolean) {
+  async function decide(id: string, approve: boolean) {
     try {
       // One id per click; a lost answer is retried with the same one.
       const answer = (await sendWithRetry((requestId) =>
-        teamApi("/aprobaciones/decidir", { id, aprobar, requestId }),
+        teamApi("/aprobaciones/decidir", { id, aprobar: approve, requestId }),
       )) as { recibo?: Receipt };
       if (answer?.recibo) setLast(answer.recibo);
     } catch (caught) {
@@ -80,9 +80,7 @@ export function ApprovalPanel({ hideEmpty = false }: { hideEmpty?: boolean }) {
           </button>
         </p>
       )}
-      {solicitudes && (
-        <ApprovalQueue solicitudes={solicitudes} onDecision={decidir} />
-      )}
+      {requests && <ApprovalQueue solicitudes={requests} onDecision={decide} />}
       {last && (
         <p className="approval-receipt" role="status">
           {describeReceipt(last)}.
@@ -96,8 +94,8 @@ export function ApprovalPanel({ hideEmpty = false }: { hideEmpty?: boolean }) {
           </p>
         ))}
       {!hideEmpty &&
-        solicitudes &&
-        !solicitudes.some((s) => s.estado === "pendiente") && (
+        requests &&
+        !requests.some((s) => s.estado === "pendiente") && (
           <p className="muted">No hay solicitudes pendientes.</p>
         )}
     </>

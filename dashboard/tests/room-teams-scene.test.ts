@@ -8,21 +8,21 @@ import {
 import { sessionFigure } from "../src/features/room/room-sessions";
 import type { ObservedSession } from "../src/features/room/room-sessions";
 
-const sesion = (
+const session = (
   id: string,
-  motor: ObservedSession["motor"],
+  engine: ObservedSession["motor"],
   extra: Partial<ObservedSession> = {},
 ): ObservedSession => ({
   id,
-  motor,
+  motor: engine,
   copia: 0,
   estado: "trabajando",
   ...extra,
 });
-const equipo = [
-  sesion("lider", "claude", { equipoId: "e1" }),
-  sesion("h1", "codex", { equipoId: "e1", padreId: "lider" }),
-  sesion("h2", "agy", { equipoId: "e1", padreId: "lider" }),
+const team = [
+  session("lider", "claude", { equipoId: "e1" }),
+  session("h1", "codex", { equipoId: "e1", padreId: "lider" }),
+  session("h2", "agy", { equipoId: "e1", padreId: "lider" }),
 ];
 
 describe("figuras de sesión", () => {
@@ -34,8 +34,8 @@ describe("figuras de sesión", () => {
 
 describe("agrupación por equipo", () => {
   it("agrupa a la líder primero y une cada hija con un hilo", () => {
-    const { grupos, hilos } = sceneTeams([...equipo].reverse());
-    expect(grupos).toEqual([
+    const { grupos: groups, hilos } = sceneTeams([...team].reverse());
+    expect(groups).toEqual([
       { equipoId: "e1", miembros: ["ambar", "lira", "menta"] },
     ]);
     expect(hilos.map((h) => [h.de, h.a]).sort()).toEqual([
@@ -45,35 +45,35 @@ describe("agrupación por equipo", () => {
   });
 
   it("el hilo desaparece cuando la hija termina", () => {
-    const terminada = equipo.map((s) =>
+    const terminada = team.map((s) =>
       s.id === "h2" ? { ...s, estado: "terminada" } : s,
     );
-    const { grupos, hilos } = sceneTeams(terminada);
+    const { grupos: groups, hilos } = sceneTeams(terminada);
     expect(hilos.map((h) => h.hijaSesionId)).toEqual(["h1"]);
-    expect(grupos[0].miembros).toEqual(["ambar", "menta"]);
+    expect(groups[0].miembros).toEqual(["ambar", "menta"]);
   });
 
   it("no agrupa una sesión sola ni sesiones sin equipo", () => {
     const solas = [
-      sesion("a", "claude", { equipoId: "e1" }),
-      sesion("b", "codex"),
-      sesion("c", "agy", { equipoId: "e2", estado: "error" }),
+      session("a", "claude", { equipoId: "e1" }),
+      session("b", "codex"),
+      session("c", "agy", { equipoId: "e2", estado: "error" }),
     ];
     expect(sceneTeams(solas)).toEqual({ grupos: [], hilos: [] });
   });
 
   it("separa equipos distintos y ubica cada copia con su figura", () => {
     const dos = [
-      ...equipo,
-      sesion("l2", "deepseek", { equipoId: "e2" }),
-      sesion("c2", "claude", {
+      ...team,
+      session("l2", "deepseek", { equipoId: "e2" }),
+      session("c2", "claude", {
         equipoId: "e2",
         padreId: "l2",
         copia: 1,
       }),
     ];
-    const { grupos, hilos } = sceneTeams(dos);
-    expect(grupos.map((g) => g.equipoId)).toEqual(["e1", "e2"]);
+    const { grupos: groups, hilos } = sceneTeams(dos);
+    expect(groups.map((g) => g.equipoId)).toEqual(["e1", "e2"]);
     expect(hilos.find((h) => h.equipoId === "e2")).toMatchObject({
       de: "marina",
       a: "ambar#1",
@@ -82,9 +82,9 @@ describe("agrupación por equipo", () => {
 
   it("ignora hijas cuya madre ya no está activa", () => {
     const huerfana = [
-      sesion("lider", "claude", { equipoId: "e1", estado: "terminada" }),
-      sesion("h1", "codex", { equipoId: "e1", padreId: "lider" }),
-      sesion("h2", "agy", { equipoId: "e1", padreId: "lider" }),
+      session("lider", "claude", { equipoId: "e1", estado: "terminada" }),
+      session("h1", "codex", { equipoId: "e1", padreId: "lider" }),
+      session("h2", "agy", { equipoId: "e1", padreId: "lider" }),
     ];
     expect(sceneTeams(huerfana).hilos).toEqual([]);
   });
@@ -92,8 +92,8 @@ describe("agrupación por equipo", () => {
 
 describe("puestos alrededor de la mesa", () => {
   it("reparte a cada miembro en un círculo distinto mirando a la mesa", () => {
-    const { grupos } = sceneTeams(equipo);
-    const puestos = teamSeats(grupos);
+    const { grupos: groups } = sceneTeams(team);
+    const puestos = teamSeats(groups);
     expect([...puestos.keys()].sort()).toEqual(["ambar", "lira", "menta"]);
     const coords = [...puestos.values()].map((p) => `${p.x},${p.z}`);
     expect(new Set(coords).size).toBe(3);
@@ -112,22 +112,22 @@ describe("puestos alrededor de la mesa", () => {
 });
 
 describe("relevos reales del lanzador", () => {
-  const conRelevo = equipo.map((s) =>
+  const withRelay = team.map((s) =>
     s.id === "h1"
       ? { ...s, relevo: { id: "r1", tipo: "entregable", para: "lider" } }
       : s,
   );
   it("devuelve solo relevos nuevos entre figuras activas", () => {
-    const { nuevos, ids } = newHandoffs(conRelevo, new Set());
+    const { nuevos: created, ids } = newHandoffs(withRelay, new Set());
     expect(ids).toEqual(["r1"]);
-    expect(nuevos).toEqual([
+    expect(created).toEqual([
       { id: "r1", tipo: "entregable", de: "menta", para: "ambar" },
     ]);
-    expect(newHandoffs(conRelevo, new Set(["r1"])).nuevos).toEqual([]);
+    expect(newHandoffs(withRelay, new Set(["r1"])).nuevos).toEqual([]);
   });
   it("no inventa relevos y descarta los de sesiones terminadas", () => {
-    expect(newHandoffs(equipo, new Set()).nuevos).toEqual([]);
-    const fin = conRelevo.map((s) =>
+    expect(newHandoffs(team, new Set()).nuevos).toEqual([]);
+    const fin = withRelay.map((s) =>
       s.id === "lider" ? { ...s, estado: "terminada" } : s,
     );
     const r = newHandoffs(fin, new Set());
@@ -137,7 +137,7 @@ describe("relevos reales del lanzador", () => {
 });
 
 describe("aprobaciones pendientes", () => {
-  const ahora = 1000;
+  const now = 1000;
   it("marca la figura del agente con una solicitud vigente", () => {
     const ids = figurasEsperandoOk(
       [
@@ -147,17 +147,17 @@ describe("aprobaciones pendientes", () => {
         { actor: "mcp:claude", estado: "pendiente", vence: 5000 },
         { actor: "app", estado: "pendiente", vence: 5000 },
       ],
-      ahora,
+      now,
     );
     expect([...ids]).toEqual(["menta"]);
   });
   it("deja de esperar cuando se decide o vence", () => {
     const base = { actor: "agente:ambar", vence: 2000 };
     expect(
-      figurasEsperandoOk([{ ...base, estado: "pendiente" }], ahora).size,
+      figurasEsperandoOk([{ ...base, estado: "pendiente" }], now).size,
     ).toBe(1);
     expect(
-      figurasEsperandoOk([{ ...base, estado: "rechazada" }], ahora).size,
+      figurasEsperandoOk([{ ...base, estado: "rechazada" }], now).size,
     ).toBe(0);
     expect(
       figurasEsperandoOk([{ ...base, estado: "pendiente" }], 2000).size,

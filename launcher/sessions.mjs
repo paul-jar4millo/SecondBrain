@@ -15,10 +15,10 @@ import path from "node:path";
 /** @typedef {LauncherSession & { _detalle?: string }} SessionIndexEntry */
 /** @typedef {{ silencioso?: boolean }} TransactionOptions */
 
-const MOTORES = new Set(["claude", "codex", "agy", "deepseek"]);
-const ORIGENES = new Set(["sala", "remote", "cron", "equipo", "encargo"]);
-const ACTIVOS = new Set(["pendiente", "trabajando"]);
-const CAMBIOS = new Set([
+const ENGINES = new Set(["claude", "codex", "agy", "deepseek"]);
+const ORIGINS = new Set(["sala", "remote", "cron", "equipo", "encargo"]);
+const ACTIVE = new Set(["pendiente", "trabajando"]);
+const CHANGES = new Set([
   "interactiva",
   "remotoUrl",
   "conversacionId",
@@ -48,7 +48,7 @@ const CAMBIOS = new Set([
   "motivoCola",
   "enqueueOrder",
 ]);
-const ESTADOS = new Set([
+const STATES = new Set([
   "pendiente",
   "trabajando",
   "terminada",
@@ -70,18 +70,18 @@ function congelar(value) {
 }
 
 /**
- * @param {string} archivo
+ * @param {string} file
  * @param {{ retencionDias?: number, onPrune?: SessionPruneHandler | null }} [options]
  */
 export async function openSessionRegistry(
-  archivo,
-  { retencionDias = 90, onPrune = null } = {},
+  file,
+  { retencionDias: retentionDays = 90, onPrune = null } = {},
 ) {
   /** @type {SessionIndexEntry[]} */
   let sesiones;
   try {
     const indice = /** @type {unknown} */ (
-      JSON.parse(await readFile(archivo, "utf8"))
+      JSON.parse(await readFile(file, "utf8"))
     );
     if (!Array.isArray(indice))
       throw new Error("Registro de sesiones inválido");
@@ -90,17 +90,17 @@ export async function openSessionRegistry(
     if (error.code !== "ENOENT") throw error;
     sesiones = [];
   }
-  const detalles = archivo + ".d";
+  const detalles = file + ".d";
   /** @type {Map<string, string>} */
-  const referencias = new Map();
+  const references = new Map();
   /** @type {Map<string, SessionDetail>} */
-  const conocidos = new Map();
-  let migrar = false;
+  const known = new Map();
+  let migrate = false;
   for (const sesion of sesiones) {
     // A legacy creation date does not tell us when the last turn finished.
     // Give undated finished sessions a complete retention window on migration.
     if (
-      !ACTIVOS.has(sesion.estado) &&
+      !ACTIVE.has(sesion.estado) &&
       !sesion.interactiva &&
       !Number.isFinite(Date.parse(sesion.finalizada ?? ""))
     ) {
@@ -109,82 +109,82 @@ export async function openSessionRegistry(
         Number.isFinite(Date.parse(sesion.actualizada))
           ? sesion.actualizada
           : new Date().toISOString();
-      migrar = true;
+      migrate = true;
     }
     if (
       sesion.eliminada &&
       !Number.isFinite(Date.parse(sesion.eliminadaEn ?? ""))
     ) {
       sesion.eliminadaEn = sesion.finalizada;
-      migrar = true;
+      migrate = true;
     }
     if (sesion._detalle) {
       if (!/^[a-f0-9]{64}\.json$/.test(sesion._detalle))
         throw new Error("Detalle de sesión inválido");
-      const detalle = /** @type {SessionDetail} */ (
+      const detail = /** @type {SessionDetail} */ (
         JSON.parse(await readFile(path.join(detalles, sesion._detalle), "utf8"))
       );
-      referencias.set(sesion.id, sesion._detalle);
-      Object.assign(sesion, detalle);
-      conocidos.set(sesion.id, {
+      references.set(sesion.id, sesion._detalle);
+      Object.assign(sesion, detail);
+      known.set(sesion.id, {
         terminal: sesion.terminal,
         mensajes: sesion.mensajes,
       });
       delete sesion._detalle;
     } else if (sesion.terminal !== undefined || sesion.mensajes !== undefined)
-      migrar = true;
+      migrate = true;
   }
   /** @type {Set<SessionObserver>} */
-  const oyentes = new Set();
+  const listeners = new Set();
   /** @type {Promise<unknown>} */
-  let cola = Promise.resolve();
+  let queue = Promise.resolve();
   /** @type {SessionSnapshot | undefined} */
-  let instantanea;
-  const leer = () => (instantanea ??= congelar(structuredClone(sesiones)));
+  let snapshot;
+  const read = () => (snapshot ??= congelar(structuredClone(sesiones)));
   let pruneHandler = onPrune;
   /** @type {LauncherSession[]} */
   const pendingPruned = [];
-  function podar() {
-    const corte = Date.now() - retencionDias * 86400000;
-    const conservadas = [];
-    const podadas = [];
+  function prune() {
+    const cutoff = Date.now() - retentionDays * 86400000;
+    const kept = [];
+    const pruned = [];
     for (const s of sesiones) {
-      const conservar =
-        ACTIVOS.has(s.estado) ||
+      const keep =
+        ACTIVE.has(s.estado) ||
         s.interactiva ||
-        !(Date.parse(s.eliminadaEn || s.finalizada || s.creada) < corte);
-      if (conservar) conservadas.push(s);
-      else podadas.push(s);
+        !(Date.parse(s.eliminadaEn || s.finalizada || s.creada) < cutoff);
+      if (keep) kept.push(s);
+      else pruned.push(s);
     }
-    sesiones = conservadas;
-    if (podadas.length) pendingPruned.push(...podadas);
-    return podadas.length > 0;
+    sesiones = kept;
+    if (pruned.length) pendingPruned.push(...pruned);
+    return pruned.length > 0;
   }
-  async function drenarPodadas() {
+  async function drainPruned() {
     if (!pruneHandler || pendingPruned.length === 0) return;
-    const lote = pendingPruned.splice(0, pendingPruned.length);
-    for (const s of lote) {
+    const batch = pendingPruned.splice(0, pendingPruned.length);
+    for (const s of batch) {
       await Promise.resolve(pruneHandler(structuredClone(s))).catch(() => {});
     }
   }
-  async function guardar() {
-    await mkdir(path.dirname(archivo), { recursive: true });
-    podar();
+  async function save() {
+    await mkdir(path.dirname(file), { recursive: true });
+    prune();
     const indice = [];
     /** @type {Map<string, string>} */
-    const siguientes = new Map();
+    const next = new Map();
     for (const s of sesiones) {
-      const { terminal, mensajes, ...meta } = s;
-      const previo = conocidos.get(s.id);
-      if (terminal !== undefined || mensajes !== undefined) {
-        let referencia = referencias.get(s.id);
+      const { terminal, mensajes: messages, ...meta } = s;
+      const previous = known.get(s.id);
+      if (terminal !== undefined || messages !== undefined) {
+        let reference = references.get(s.id);
         if (
-          !referencia ||
-          previo?.terminal !== terminal ||
-          previo?.mensajes !== mensajes
+          !reference ||
+          previous?.terminal !== terminal ||
+          previous?.mensajes !== messages
         ) {
-          const contenido = JSON.stringify({ terminal, mensajes });
-          referencia =
+          const contenido = JSON.stringify({ terminal, mensajes: messages });
+          reference =
             createHash("sha256")
               .update(String(s.id))
               .update("\0")
@@ -192,50 +192,48 @@ export async function openSessionRegistry(
               .digest("hex") + ".json";
           await mkdir(detalles, { recursive: true, mode: 0o700 });
           // Immutable content-addressed details are committed by the index rename.
-          const destino = path.join(detalles, referencia);
-          await writeFile(destino + ".tmp", contenido, { mode: 0o600 });
-          await rename(destino + ".tmp", destino);
+          const target = path.join(detalles, reference);
+          await writeFile(target + ".tmp", contenido, { mode: 0o600 });
+          await rename(target + ".tmp", target);
         }
-        siguientes.set(s.id, referencia);
-        meta._detalle = referencia;
+        next.set(s.id, reference);
+        meta._detalle = reference;
       }
       indice.push(meta);
     }
-    const temporal = archivo + ".tmp";
-    await writeFile(temporal, JSON.stringify(indice), {
+    const temporary = file + ".tmp";
+    await writeFile(temporary, JSON.stringify(indice), {
       mode: 0o600,
     });
-    await rename(temporal, archivo);
-    const vigentes = new Set(siguientes.values());
-    const obsoletas = [...referencias.values()].filter(
-      (nombre) => !vigentes.has(nombre),
-    );
-    referencias.clear();
-    conocidos.clear();
+    await rename(temporary, file);
+    const current = new Set(next.values());
+    const stale = [...references.values()].filter((name) => !current.has(name));
+    references.clear();
+    known.clear();
     for (const s of sesiones) {
-      const referencia = siguientes.get(s.id);
-      if (referencia !== undefined) referencias.set(s.id, referencia);
-      conocidos.set(s.id, { terminal: s.terminal, mensajes: s.mensajes });
+      const referencia = next.get(s.id);
+      if (referencia !== undefined) references.set(s.id, referencia);
+      known.set(s.id, { terminal: s.terminal, mensajes: s.mensajes });
     }
-    instantanea = undefined;
-    for (const nombre of obsoletas)
+    snapshot = undefined;
+    for (const nombre of stale)
       await rm(path.join(detalles, nombre), { force: true }).catch(() => {});
-    await drenarPodadas();
+    await drainPruned();
   }
-  const podadas = podar();
-  const interrumpidas = sesiones.filter(
-    (s) => ACTIVOS.has(s.estado) || s.interactiva,
+  const podadas = prune();
+  const interrupted = sesiones.filter(
+    (s) => ACTIVE.has(s.estado) || s.interactiva,
   );
-  if (interrumpidas.length || migrar || podadas) {
-    for (const s of interrumpidas) {
+  if (interrupted.length || migrate || podadas) {
+    for (const s of interrupted) {
       s.estado = "interrumpida";
       s.interactiva = false;
       s.finalizada = new Date().toISOString();
     }
-    await guardar();
+    await save();
   }
   // Reclaim obsolete revisions after the durable index has been recovered.
-  const vigentes = new Set(referencias.values());
+  const vigentes = new Set(references.values());
   for (const nombre of await readdir(detalles).catch(
     /** @returns {string[]} */ (error) => {
       if (error.code !== "ENOENT") throw error;
@@ -250,66 +248,66 @@ export async function openSessionRegistry(
    * @param {() => Result} fn
    * @param {TransactionOptions} [options]
    */
-  function transaccion(fn, { silencioso = false } = {}) {
-    const siguiente = cola.then(async () => {
+  function transaction(fn, { silencioso: silent = false } = {}) {
+    const next = queue.then(async () => {
       // Mutations replace fields, never edit nested messages or terminal data.
-      const anterior = sesiones.map((s) => ({ ...s }));
-      let resultado;
+      const previous = sesiones.map((s) => ({ ...s }));
+      let result;
       try {
-        resultado = fn();
-        await guardar();
+        result = fn();
+        await save();
       } catch (error) {
-        sesiones = anterior;
-        instantanea = undefined;
+        sesiones = previous;
+        snapshot = undefined;
         throw error;
       }
-      if (silencioso) return structuredClone(resultado);
-      for (const oyente of oyentes) {
+      if (silent) return structuredClone(result);
+      for (const listener of listeners) {
         try {
-          oyente(leer());
+          listener(read());
         } catch {
           /* observers do not affect persistence */
         }
       }
-      return structuredClone(resultado);
+      return structuredClone(result);
     });
-    cola = siguiente.catch(() => {});
-    return siguiente;
+    queue = next.catch(() => {});
+    return next;
   }
   return {
-    leer,
+    leer: read,
     notificar() {
-      for (const oyente of oyentes) {
+      for (const listener of listeners) {
         try {
-          oyente(leer());
+          listener(read());
         } catch {}
       }
     },
     /** @param {SessionObserver} fn */
     subscribe(fn) {
-      oyentes.add(fn);
-      return () => oyentes.delete(fn);
+      listeners.add(fn);
+      return () => listeners.delete(fn);
     },
     /** @param {SessionPruneHandler | null} fn */
     setOnPrune(fn) {
       pruneHandler = typeof fn === "function" ? fn : null;
-      void drenarPodadas();
+      void drainPruned();
     },
     /** @param {CreateSessionInput} input */
     crear({
       id = null,
-      motor,
-      origen,
-      equipoId = null,
-      padreId = null,
-      proyecto = null,
-      encargo = null,
-      modelo = null,
-      esfuerzo = null,
-      espacioId = null,
+      motor: engine,
+      origen: origin,
+      equipoId: teamId = null,
+      padreId: parentId = null,
+      proyecto: project = null,
+      encargo: task = null,
+      modelo: model = null,
+      esfuerzo: effort = null,
+      espacioId: spaceId = null,
       harness = false,
       structured = false,
-      directorio = null,
+      directorio: directory = null,
       workOrderId = null,
       memberId = null,
       role = null,
@@ -321,14 +319,14 @@ export async function openSessionRegistry(
       billingGrantVerified = false,
       workspacePath = null,
       workspaceKind = null,
-      enColaRecursos = false,
-      motivoCola = null,
+      enColaRecursos: queuedForResources = false,
+      motivoCola: queueReason = null,
       enqueueOrder = null,
     }) {
-      return transaccion(() => {
-        if (!MOTORES.has(motor) || !ORIGENES.has(origen))
+      return transaction(() => {
+        if (!ENGINES.has(engine) || !ORIGINS.has(origin))
           throw new Error("Motor u origen inválido");
-        let sesionId;
+        let sessionId;
         if (id != null) {
           const requestedId = String(id).trim();
           if (
@@ -337,17 +335,17 @@ export async function openSessionRegistry(
           ) {
             throw new Error("ID de sesión inválido o duplicado");
           }
-          sesionId = requestedId;
+          sessionId = requestedId;
         } else {
-          sesionId = randomUUID();
+          sessionId = randomUUID();
         }
-        const usadas = new Set(
+        const used = new Set(
           sesiones
-            .filter((s) => s.motor === motor && ACTIVOS.has(s.estado))
+            .filter((s) => s.motor === engine && ACTIVE.has(s.estado))
             .map((s) => s.copia),
         );
-        let copia = 0;
-        while (usadas.has(copia)) copia++;
+        let copy = 0;
+        while (used.has(copy)) copy++;
         const cleanSkillIds = Array.isArray(skillIds)
           ? [
               ...new Set(
@@ -356,14 +354,14 @@ export async function openSessionRegistry(
             ]
           : [];
         /** @type {LauncherSession} */
-        const sesion = {
-          id: sesionId,
-          motor: /** @type {LauncherEngine} */ (motor),
-          origen: /** @type {SessionOrigin} */ (origen),
-          equipoId,
-          padreId,
-          proyecto,
-          espacioId,
+        const session = {
+          id: sessionId,
+          motor: /** @type {LauncherEngine} */ (engine),
+          origen: /** @type {SessionOrigin} */ (origin),
+          equipoId: teamId,
+          padreId: parentId,
+          proyecto: project,
+          espacioId: spaceId,
           harness,
           ...(structured ? { structured: true } : {}),
           ...(workOrderId ? { workOrderId } : {}),
@@ -379,37 +377,37 @@ export async function openSessionRegistry(
           ...(billingGrantVerified === true ? { billingAuthorized: true } : {}),
           ...(workspacePath ? { workspacePath } : {}),
           ...(workspaceKind ? { workspaceKind } : {}),
-          ...(enColaRecursos ? { enColaRecursos: true } : {}),
-          ...(motivoCola ? { motivoCola } : {}),
+          ...(queuedForResources ? { enColaRecursos: true } : {}),
+          ...(queueReason ? { motivoCola: queueReason } : {}),
           ...(enqueueOrder !== null && enqueueOrder !== undefined
             ? { enqueueOrder }
             : {}),
-          directorio,
-          copia,
-          encargo: typeof encargo === "string" ? encargo.slice(0, 4000) : null,
+          directorio: directory,
+          copia: copy,
+          encargo: typeof task === "string" ? task.slice(0, 4000) : null,
           creada: new Date().toISOString(),
-          modelo: typeof modelo === "string" ? modelo : null,
-          esfuerzo: typeof esfuerzo === "string" ? esfuerzo : null,
+          modelo: typeof model === "string" ? model : null,
+          esfuerzo: typeof effort === "string" ? effort : null,
           estado: "pendiente",
           fase: null,
           ultimaAccion: null,
         };
-        sesiones.push(sesion);
-        return sesion;
+        sesiones.push(session);
+        return session;
       });
     },
     /**
      * @param {string} id
-     * @param {string} equipoId
+     * @param {string} teamId
      * @returns {Promise<LauncherSession>}
      */
-    vincularEquipo(id, equipoId) {
-      return transaccion(() => {
-        const sesion = sesiones.find((s) => s.id === id);
-        if (!sesion || (sesion.equipoId && sesion.equipoId !== equipoId))
+    vincularEquipo(id, teamId) {
+      return transaction(() => {
+        const session = sesiones.find((s) => s.id === id);
+        if (!session || (session.equipoId && session.equipoId !== teamId))
           throw new Error("Sesión no vinculable");
-        sesion.equipoId = equipoId;
-        return sesion;
+        session.equipoId = teamId;
+        return session;
       });
     },
     /**
@@ -418,12 +416,12 @@ export async function openSessionRegistry(
      * @param {string} id
      */
     eliminar(id) {
-      return transaccion(() => {
-        const sesion = sesiones.find((s) => s.id === id && !s.eliminada);
-        if (!sesion) throw new Error("Sesión inexistente");
-        if (ACTIVOS.has(sesion.estado) || sesion.interactiva)
+      return transaction(() => {
+        const session = sesiones.find((s) => s.id === id && !s.eliminada);
+        if (!session) throw new Error("Sesión inexistente");
+        if (ACTIVE.has(session.estado) || session.interactiva)
           throw new Error("Detén la sesión antes de eliminarla");
-        for (const campo of /** @type {const} */ ([
+        for (const field of /** @type {const} */ ([
           "mensajes",
           "terminal",
           "resultado",
@@ -431,34 +429,34 @@ export async function openSessionRegistry(
           "checkpoints",
           "checkpointError",
         ]))
-          delete sesion[campo];
-        sesion.encargo = null;
-        sesion.eliminada = true;
-        sesion.eliminadaEn = new Date().toISOString();
+          delete session[field];
+        session.encargo = null;
+        session.eliminada = true;
+        session.eliminadaEn = new Date().toISOString();
         return { id };
       });
     },
     /**
      * @param {string} id
-     * @param {SessionChanges} cambios
-     * @param {TransactionOptions} [opciones]
+     * @param {SessionChanges} changes
+     * @param {TransactionOptions} [options]
      * @returns {Promise<LauncherSession>}
      */
-    actualizar(id, cambios, opciones) {
-      return transaccion(() => {
-        const sesion = sesiones.find((s) => s.id === id);
-        if (!sesion) throw new Error("Sesión inexistente");
+    actualizar(id, changes, options) {
+      return transaction(() => {
+        const session = sesiones.find((s) => s.id === id);
+        if (!session) throw new Error("Sesión inexistente");
         // Observers keep polling provider transcripts; a deleted chat stays empty.
-        if (sesion.eliminada) return sesion;
-        if (Object.keys(cambios).some((k) => !CAMBIOS.has(k)))
+        if (session.eliminada) return session;
+        if (Object.keys(changes).some((k) => !CHANGES.has(k)))
           throw new Error("Campo no modificable");
-        if (cambios.estado && !ESTADOS.has(cambios.estado))
+        if (changes.estado && !STATES.has(changes.estado))
           throw new Error("Estado inválido");
-        Object.assign(sesion, cambios);
-        if (cambios.estado && !ACTIVOS.has(cambios.estado))
-          sesion.finalizada = new Date().toISOString();
-        return sesion;
-      }, opciones);
+        Object.assign(session, changes);
+        if (changes.estado && !ACTIVE.has(changes.estado))
+          session.finalizada = new Date().toISOString();
+        return session;
+      }, options);
     },
   };
 }

@@ -5,15 +5,15 @@ import { Failure } from "../../vault.mjs";
 
 /** @type {RouteModule} */
 export const approvalRoutes = (ctx, req) => {
-  const { actorOf, aprobaciones, auth } = ctx;
+  const { actorOf, aprobaciones: approvals, auth } = ctx;
   const { request, response } = req;
   return {
-    "GET /aprobaciones": async () => send(response, 200, aprobaciones.listar()),
+    "GET /aprobaciones": async () => send(response, 200, approvals.listar()),
     "POST /aprobaciones/decidir": async () => {
-      const { id, aprobar, requestId } = await body(request);
-      let resultado;
+      const { id, aprobar: approve, requestId } = await body(request);
+      let result;
       try {
-        resultado = await aprobaciones.decidir(id, aprobar, {
+        result = await approvals.decidir(id, approve, {
           requestId,
           por: auth.state?.username || actorOf(request),
         });
@@ -24,7 +24,7 @@ export const approvalRoutes = (ctx, req) => {
           });
         throw new Failure("Solicitud no pendiente o expirada.", 409);
       }
-      return send(response, 200, { ok: true, ...resultado });
+      return send(response, 200, { ok: true, ...result });
     },
   };
 };

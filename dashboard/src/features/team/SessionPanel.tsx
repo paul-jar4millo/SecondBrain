@@ -50,7 +50,7 @@ const cuando = (iso?: string) =>
       })
     : "";
 
-const nombres: Record<Motor, string> = {
+const names: Record<Motor, string> = {
   claude: "Ámbar · Claude",
   codex: "Menta · Codex",
   agy: "Lira · Antigravity",
@@ -58,18 +58,18 @@ const nombres: Record<Motor, string> = {
 };
 
 export function SessionPanel() {
-  const [sesiones, setSesiones] = useState<Session[]>([]);
-  const [proyectos, setProyectos] = useState<string[]>([]);
-  const [motor, setMotor] = useState<Motor>("claude");
-  const [proyecto, setProyecto] = useState("");
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [projects, setProjects] = useState<string[]>([]);
+  const [engine, setEngine] = useState<Motor>("claude");
+  const [project, setProject] = useState("");
   const [brief, setBrief] = useState("");
-  const [continuar, setContinuar] = useState<string | null>(null);
-  const [equipo, setEquipo] = useState(false);
-  const [abierto, setAbierto] = useState(false);
+  const [proceed, setProceed] = useState<string | null>(null);
+  const [equipo, setTeam] = useState(false);
+  const [abierto, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [conectado, setConectado] = useState(false);
-  const [ocupado, setOcupado] = useState(false);
-  const [catalogo, setCatalogo] = useState<Catalogo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [catalog, setCatalog] = useState<Catalogo | null>(null);
   const [eleccion, setEleccion] = useState(() => loadChoice("claude"));
   const revision = useRef(0);
   const briefRef = useRef<HTMLTextAreaElement>(null);
@@ -81,16 +81,16 @@ export function SessionPanel() {
     briefRef.current.setSelectionRange?.(pos, pos);
   }, [brief]);
   useEffect(() => {
-    if (!abierto || catalogo || isDemo) return;
-    let vivo = true;
+    if (!abierto || catalog || isDemo) return;
+    let alive = true;
     teamApi("/agentes/modelos-lanzador")
-      .then((c) => vivo && setCatalogo(c as Catalogo))
-      .catch(() => vivo && setCatalogo(null));
+      .then((c) => alive && setCatalog(c as Catalogo))
+      .catch(() => alive && setCatalog(null));
     return () => {
-      vivo = false;
+      alive = false;
     };
-  }, [abierto, catalogo]);
-  const modelos = catalogo?.[motor] ?? [];
+  }, [abierto, catalog]);
+  const modelos = catalog?.[engine] ?? [];
   const refresh = useCallback(async () => {
     const actual = ++revision.current;
     try {
@@ -101,8 +101,8 @@ export function SessionPanel() {
             teamApi("/agentes/proyectos-lanzador"),
           ]);
       if (actual === revision.current) {
-        setSesiones(listado as Session[]);
-        setProyectos(repos as string[]);
+        setSessions(listado as Session[]);
+        setProjects(repos as string[]);
         setConectado(!isDemo);
         setError("");
       }
@@ -115,25 +115,25 @@ export function SessionPanel() {
   }, []);
   useEffect(() => {
     void refresh();
-    const dejar = subscribeChanges(() => void refresh());
+    const leave = subscribeChanges(() => void refresh());
     const contador = revision;
     return () => {
       contador.current++;
-      dejar();
+      leave();
     };
   }, [refresh]);
-  const ejecutar = async (accion: () => Promise<unknown>) => {
-    setOcupado(true);
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
     setError("");
     try {
-      await accion();
+      await action();
       await refresh();
       return true;
     } catch (e) {
       setError((e as Error).message || "No se pudo completar la acción.");
       return false;
     } finally {
-      setOcupado(false);
+      setBusy(false);
     }
   };
   return (
@@ -147,8 +147,8 @@ export function SessionPanel() {
           type="button"
           className="button"
           onClick={() => {
-            if (!abierto) setContinuar(null);
-            setAbierto(!abierto);
+            if (!abierto) setProceed(null);
+            setOpen(!abierto);
           }}
           disabled={!conectado}
         >
@@ -172,27 +172,27 @@ export function SessionPanel() {
           className="session-form"
           onSubmit={async (event) => {
             event.preventDefault();
-            const texto = brief.trim();
-            if (!texto || !proyecto) return;
+            const text = brief.trim();
+            if (!text || !project) return;
             const instruccion = equipo
-              ? texto +
+              ? text +
                 "\n\nForma equipo usando la skill equipo-cuatro-fases cuando sea útil."
-              : texto;
-            const ok = await ejecutar(() =>
+              : text;
+            const ok = await run(() =>
               teamApi("/agentes/sesiones", {
-                motor,
+                motor: engine,
                 origen: "sala",
-                proyecto,
+                proyecto: project,
                 brief: instruccion,
-                ...(continuar ? { continuar } : {}),
+                ...(proceed ? { continuar: proceed } : {}),
                 ...choicePayload(modelos, eleccion),
               }),
             );
             if (ok) {
-              saveChoice(motor, eleccion);
+              saveChoice(engine, eleccion);
               setBrief("");
-              setContinuar(null);
-              setAbierto(false);
+              setProceed(null);
+              setOpen(false);
             }
           }}
         >
@@ -200,16 +200,16 @@ export function SessionPanel() {
             Agente
             <select
               aria-label="Agente"
-              value={motor}
+              value={engine}
               onChange={(e) => {
-                const nuevo = e.target.value as Motor;
-                setMotor(nuevo);
-                setEleccion(loadChoice(nuevo));
+                const created = e.target.value as Motor;
+                setEngine(created);
+                setEleccion(loadChoice(created));
               }}
             >
-              {Object.entries(nombres).map(([id, nombre]) => (
+              {Object.entries(names).map(([id, name]) => (
                 <option value={id} key={id}>
-                  {nombre}
+                  {name}
                 </option>
               ))}
             </select>
@@ -219,7 +219,7 @@ export function SessionPanel() {
             choice={eleccion}
             onChange={setEleccion}
           />
-          {motor === "deepseek" && (
+          {engine === "deepseek" && (
             <p className="muted session-model-note">
               Marina corre en DeepSeek con un solo modelo; el razonamiento
               ajusta su presupuesto de pensamiento.
@@ -228,11 +228,11 @@ export function SessionPanel() {
           <label>
             Repositorio
             <select
-              value={proyecto}
-              onChange={(e) => setProyecto(e.target.value)}
+              value={project}
+              onChange={(e) => setProject(e.target.value)}
             >
               <option value="">Selecciona un repositorio</option>
-              {proyectos.map((p) => (
+              {projects.map((p) => (
                 <option key={p} value={p}>
                   {p}
                 </option>
@@ -265,7 +265,7 @@ export function SessionPanel() {
                   }
                   if (!e.shiftKey) {
                     e.preventDefault();
-                    if (brief.trim() && !ocupado && conectado && proyecto) {
+                    if (brief.trim() && !busy && conectado && project) {
                       e.currentTarget.form?.requestSubmit();
                     }
                   }
@@ -277,29 +277,29 @@ export function SessionPanel() {
             <input
               type="checkbox"
               checked={equipo}
-              onChange={(e) => setEquipo(e.target.checked)}
+              onChange={(e) => setTeam(e.target.checked)}
             />{" "}
             Formar equipo si hace falta
           </label>
           <button
             className="button primary"
             type="submit"
-            disabled={ocupado || !conectado || !proyecto || !brief.trim()}
+            disabled={busy || !conectado || !project || !brief.trim()}
           >
-            {continuar ? "Enviar mensaje" : "Iniciar encargo"}
+            {proceed ? "Enviar mensaje" : "Iniciar encargo"}
           </button>
         </form>
       )}
-      {sesiones.length ? (
+      {sessions.length ? (
         <ul className="session-list">
-          {sesiones
+          {sessions
             .slice(-20)
             .reverse()
             .map((s, i) => (
               <li key={s.id}>
                 <div>
                   <strong>
-                    {nombres[s.motor]}
+                    {names[s.motor]}
                     {s.copia ? ` · copia ${s.copia + 1}` : ""}
                   </strong>
                   <p>
@@ -340,10 +340,10 @@ export function SessionPanel() {
                       <button
                         className="button"
                         onClick={() => {
-                          setContinuar(s.id);
-                          setMotor(s.motor);
-                          setProyecto(s.proyecto!);
-                          setAbierto(true);
+                          setProceed(s.id);
+                          setEngine(s.motor);
+                          setProject(s.proyecto!);
+                          setOpen(true);
                         }}
                       >
                         Continuar conversación
@@ -365,9 +365,9 @@ export function SessionPanel() {
                   <button
                     type="button"
                     className="button"
-                    disabled={ocupado}
+                    disabled={busy}
                     onClick={() =>
-                      void ejecutar(() =>
+                      void run(() =>
                         teamApi("/agentes/sesiones/cancelar", { id: s.id }),
                       )
                     }

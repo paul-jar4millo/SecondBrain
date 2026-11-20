@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  characterState,
-  etiquetaRoster,
-} from "../src/features/room/team-panel";
+import { characterState, rosterLabel } from "../src/features/room/team-panel";
 describe("resultados y estado real de la sala", () => {
   it("las acciones del proveedor mandan sobre el rol y terminar no significa seguir trabajando", () => {
     expect(
@@ -24,14 +21,14 @@ describe("resultados y estado real de la sala", () => {
 });
 describe("estado real de las agentes en el mundo", () => {
   it("una entrega con error queda a la vista y no manda a la agente al ocio", () => {
-    const estado = characterState({
+    const state = characterState({
       ocupada: false,
       personaje: { zona: "workshop" },
       ultimo: { estado: "error", fase: "Programar", jobId: "j1" },
     });
-    expect(estado.atencion).toBe(true);
-    expect(estado.zona).toBe("workshop");
-    expect(estado.etiqueta).toBe("Necesita atención");
+    expect(state.atencion).toBe(true);
+    expect(state.zona).toBe("workshop");
+    expect(state.etiqueta).toBe("Necesita atención");
     expect(
       characterState({ ocupada: false, ultimo: { estado: "interrumpido" } })
         .atencion,
@@ -45,11 +42,11 @@ describe("estado real de las agentes en el mundo", () => {
       ocupada: false,
       ultimo: { estado: "listo" },
     });
-    expect(etiquetaRoster(terminado, "Yendo al café")).toBe(
+    expect(rosterLabel(terminado, "Yendo al café")).toBe(
       "Encargo terminado · yendo al café",
     );
     expect(
-      etiquetaRoster(
+      rosterLabel(
         characterState({ ocupada: false, ultimo: undefined }),
         "Tomando un café",
       ),
@@ -60,19 +57,19 @@ describe("estado real de las agentes en el mundo", () => {
       ocupada: true,
       ultimo: { actividad: { zona: "library", etiqueta: "Leyendo archivos" } },
     });
-    expect(etiquetaRoster(trabajando, "Yendo a la biblioteca")).toBe(
+    expect(rosterLabel(trabajando, "Yendo a la biblioteca")).toBe(
       "Leyendo archivos",
     );
     const error = characterState({
       ocupada: false,
       ultimo: { estado: "error" },
     });
-    expect(etiquetaRoster(error, "Tomando un café")).toBe("Necesita atención");
+    expect(rosterLabel(error, "Tomando un café")).toBe("Necesita atención");
   });
   it("sin datos del servidor muestra la rutina y sin rutina el estado", () => {
-    expect(etiquetaRoster(null, "Leyendo")).toBe("Leyendo");
+    expect(rosterLabel(null, "Leyendo")).toBe("Leyendo");
     expect(
-      etiquetaRoster(
+      rosterLabel(
         characterState({ ocupada: false, ultimo: { estado: "listo" } }),
       ),
     ).toBe("Terminado");

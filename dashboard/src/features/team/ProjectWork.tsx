@@ -14,16 +14,16 @@ const personaje: Record<string, string> = {
 export function ProjectWork({ projectId }: { projectId: string }) {
   const team = useTeam();
   const { openAgent } = useUI();
-  const activas = (team.sessions || []).filter(
+  const active = (team.sessions || []).filter(
     (s) =>
       (s.espacioId || s.proyecto) === projectId &&
       ["pendiente", "trabajando"].includes(s.estado),
   );
-  if (!activas.length) return null;
+  if (!active.length) return null;
   return (
     <div className="project-work">
       <h3>En curso</h3>
-      {activas.map((s) => (
+      {active.map((s) => (
         <button
           className="history-link"
           key={s.id}

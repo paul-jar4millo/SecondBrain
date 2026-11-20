@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { montarPanel } from "../src/features/world/panel";
+import { mountPanel } from "../src/features/world/panel";
 import type { WorldData } from "../src/features/world/panel-types";
 
 const video = (id: string, status: string, checks: boolean[]) => ({
@@ -169,7 +169,7 @@ async function mount(view: string, extra = "") {
         ? data
         : {},
   );
-  dispose = montarPanel(document.body, { api, confirm: async () => true });
+  dispose = mountPanel(document.body, { api, confirm: async () => true });
   await vi.waitFor(() =>
     expect(document.querySelector("#main")!.children.length).toBeGreaterThan(0),
   );

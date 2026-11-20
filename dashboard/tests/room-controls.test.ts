@@ -32,9 +32,9 @@ it("teaches walking, reading a zone and opening a tool in that order", () => {
   expect(advanceTour(3, "walk")).toBe(3);
 });
 it("celebrates only a new observed successful job, never history, errors or repeated polls", () => {
-  const state = (estado: string, jobId = "j1") => ({
+  const state = (state: string, jobId = "j1") => ({
     conectado: true,
-    agentes: [{ id: "marina", ultimo: { estado, jobId } }],
+    agentes: [{ id: "marina", ultimo: { estado: state, jobId } }],
   });
   expect(observedCompletions(null, state("listo"))).toEqual([]);
   expect(observedCompletions(state("ejecutando"), state("listo"))).toEqual([

@@ -338,13 +338,13 @@ it("reintenta con el mismo requestId ante fallos de red y no ante errores del se
   await expect(sendWithRetry(siempre, { wait })).rejects.toBe(red);
   expect(siempre).toHaveBeenCalledTimes(4); // first try + 3 retries
 
-  const conflicto = vi.fn(async () => {
+  const conflict = vi.fn(async () => {
     throw Object.assign(new Error("ya resuelta"), { status: 409 });
   });
-  await expect(sendWithRetry(conflicto, { wait })).rejects.toThrow(
+  await expect(sendWithRetry(conflict, { wait })).rejects.toThrow(
     "ya resuelta",
   );
-  expect(conflicto).toHaveBeenCalledTimes(1);
+  expect(conflict).toHaveBeenCalledTimes(1);
   expect(isTransient({ status: 503 })).toBe(true);
   expect(isTransient({ status: 400 })).toBe(false);
 });

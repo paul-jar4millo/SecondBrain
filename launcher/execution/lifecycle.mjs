@@ -14,32 +14,38 @@ import { rm } from "node:fs/promises";
  *   { liberar: (id: string) => Promise<void> }} deps
  */
 export function createLifecycle(config, state, deps) {
-  const { conversations, env, proyectos, registro, seguimiento } = config;
   const {
-    activos,
+    conversations,
+    env,
+    proyectos: projects,
+    registro: registry,
+    seguimiento: tracking,
+  } = config;
+  const {
+    activos: active,
     liveProcesses,
     queuedPromises,
     resourceQueue,
     serial,
-    terminales,
+    terminales: terminals,
   } = state;
   const {
     acpGeminiDirFor,
-    cerrarConexion,
+    cerrarConexion: closeConnection,
     cleanupSessionRuntimeSecrets,
-    limpiarEviccionOciosa,
-    liberar,
-    limpiarWorkspaceMiembro,
-    senalar,
+    limpiarEviccionOciosa: cleanIdleEviction,
+    liberar: release,
+    limpiarWorkspaceMiembro: cleanMemberWorkspace,
+    senalar: signal,
   } = deps;
   /** @param {string} id */
   function eliminar(id) {
     return serial(async () => {
-      if (activos.has(id))
+      if (active.has(id))
         throw new Error("Detén la sesión antes de eliminarla");
-      const previa = registro.leer().find((s) => s.id === id);
-      if (previa?.structured) {
-        limpiarEviccionOciosa(id);
+      const previous = registry.leer().find((s) => s.id === id);
+      if (previous?.structured) {
+        cleanIdleEviction(id);
         await conversations?.remove(id);
         await stopSessionScope(id, env).catch(() => {});
         liveProcesses.delete(id);
@@ -48,25 +54,28 @@ export function createLifecycle(config, state, deps) {
         );
       }
       await cleanupSessionRuntimeSecrets(id);
-      const resultado = await registro.eliminar(id);
-      terminales.delete(id);
-      await limpiarWorkspaceMiembro(previa);
-      if (seguimiento && previa)
-        await seguimiento
-          .borrar(id, previa.directorio || proyectos[String(previa.proyecto)])
+      const result = await registry.eliminar(id);
+      terminals.delete(id);
+      await cleanMemberWorkspace(previous);
+      if (tracking && previous)
+        await tracking
+          .borrar(
+            id,
+            previous.directorio || projects[String(previous.proyecto)],
+          )
           .catch(() => {});
-      return resultado;
+      return result;
     });
   }
   /** @param {string} id */
-  async function cancelar(
+  async function cancel(
     id,
     { shutdown = false, reason = "Cierre explícito" } = {},
   ) {
     const queuedIndex = resourceQueue.findIndex((item) => item.sesionId === id);
     if (queuedIndex !== -1) {
       resourceQueue.splice(queuedIndex, 1);
-      await registro.actualizar(id, {
+      await registry.actualizar(id, {
         estado: "cancelada",
         enColaRecursos: false,
         motivoCola: null,
@@ -78,21 +87,21 @@ export function createLifecycle(config, state, deps) {
       }
       return;
     }
-    const sesion = registro.leer().find((s) => s.id === id && !s.eliminada);
-    const job = activos.get(id);
+    const session = registry.leer().find((s) => s.id === id && !s.eliminada);
+    const job = active.get(id);
     if (!job) {
-      if (sesion?.structured && conversations?.hasLiveController?.(id)) {
-        return cerrarConexion(id, reason);
+      if (session?.structured && conversations?.hasLiveController?.(id)) {
+        return closeConnection(id, reason);
       }
       throw new Error("Sesión no activa");
     }
     job.cancelada = true;
     if (job.cleanupFailed) {
-      await liberar(id);
+      await release(id);
       return;
     }
     if (
-      sesion?.structured &&
+      session?.structured &&
       conversations?.hasLiveController?.(id) &&
       !shutdown
     ) {
@@ -100,28 +109,28 @@ export function createLifecycle(config, state, deps) {
       return;
     }
     conversations?.abort(id);
-    if (sesion?.structured && shutdown) {
+    if (session?.structured && shutdown) {
       await conversations?.shutdown?.(id, { reason });
     }
     if (job.hijo) {
-      senalar(job.hijo, "SIGTERM");
-      const reloj = setTimeout(() => {
-        if (activos.has(id) && job.hijo) senalar(job.hijo, "SIGKILL");
+      signal(job.hijo, "SIGTERM");
+      const clock = setTimeout(() => {
+        if (active.has(id) && job.hijo) signal(job.hijo, "SIGKILL");
       }, 5000);
-      reloj.unref();
+      clock.unref();
     }
   }
   /** @param {string} id */
-  function esperar(id) {
+  function wait(id) {
     return (
-      activos.get(id)?.promesa ||
+      active.get(id)?.promesa ||
       queuedPromises.get(id)?.promise ||
       Promise.resolve()
     );
   }
   return {
-    cancelar,
+    cancelar: cancel,
     eliminar,
-    esperar,
+    esperar: wait,
   };
 }

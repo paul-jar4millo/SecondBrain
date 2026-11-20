@@ -14,7 +14,7 @@ import { createProviderConversations } from "../provider-conversations.mjs";
 test("sesión estructurada de extremo a extremo: pregunta, autenticación, respuesta y reanudación", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-provider-http-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
   let resume;
   let asked;
   let ready = new Promise((r) => {
@@ -37,16 +37,16 @@ test("sesión estructurada de extremo a extremo: pregunta, autenticación, respu
       },
     },
   });
-  const ejecutor = createExecutor({
-    registro,
+  const executor = createExecutor({
+    registro: registry,
     proyectos: { demo: dir },
     conversations,
     env: {},
   });
   const hash = (token) => createHash("sha256").update(token).digest("hex");
   const server = createLauncherServer({
-    registro,
-    ejecutor,
+    registro: registry,
+    ejecutor: executor,
     conversations,
     controlHash: hash("control"),
     hookHash: hash("hook"),
@@ -93,13 +93,13 @@ test("sesión estructurada de extremo a extremo: pregunta, autenticación, respu
     (await post(`/sesiones/${session.id}/conversation/answer`, body)).status,
     200,
   );
-  await ejecutor.esperar(session.id);
-  assert.equal(registro.leer()[0].resultado, "remoto");
-  assert.equal(registro.leer()[0].structured, true);
+  await executor.esperar(session.id);
+  assert.equal(registry.leer()[0].resultado, "remoto");
+  assert.equal(registry.leer()[0].structured, true);
   ready = new Promise((r) => {
     asked = r;
   });
-  await ejecutor.continuar(session.id, "segundo turno");
+  await executor.continuar(session.id, "segundo turno");
   await ready;
   assert.equal(resume, "native-thread");
   const second = (await conversations.snapshot(session.id)).requests.at(-1);
@@ -108,17 +108,17 @@ test("sesión estructurada de extremo a extremo: pregunta, autenticación, respu
     responseId: randomUUID(),
     answers: { mode: "híbrido" },
   });
-  await ejecutor.esperar(session.id);
+  await executor.esperar(session.id);
   assert.equal((await conversations.snapshot(session.id)).requests.length, 2);
 });
 
 test("delegar conserva protocolo, modelo y esfuerzo y separa archivos incluso con el mismo motor", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-provider-team-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const registro = await openSessionRegistry(path.join(dir, "sessions.json"));
+  const registry = await openSessionRegistry(path.join(dir, "sessions.json"));
   const equipos = await openTeams(path.join(dir, "teams"), {
     activo: (id) =>
-      registro.leer().some((s) => s.id === id && s.estado === "trabajando"),
+      registry.leer().some((s) => s.id === id && s.estado === "trabajando"),
   });
   let release;
   const leaderWait = new Promise((r) => {
@@ -134,21 +134,21 @@ test("delegar conserva protocolo, modelo y esfuerzo y separa archivos incluso co
       },
     },
   });
-  const ejecutor = createExecutor({
-    registro,
+  const executor = createExecutor({
+    registro: registry,
     equipos,
     proyectos: { demo: dir },
     conversations,
     env: { SB_LANZADOR_DATA_DIR: path.join(dir, "runtime") },
   });
-  const leader = await ejecutor.encargar({
+  const leader = await executor.encargar({
     motor: "codex",
     origen: "sala",
     proyecto: "demo",
     structured: true,
     brief: "coordina",
   });
-  const child = await ejecutor.encargarHija(leader.id, {
+  const child = await executor.encargarHija(leader.id, {
     motor: "codex",
     modelo: "test-model",
     esfuerzo: "high",
@@ -159,9 +159,9 @@ test("delegar conserva protocolo, modelo y esfuerzo y separa archivos incluso co
   assert.equal(child.esfuerzo, "high");
   assert.notEqual(
     child.directorio,
-    registro.leer().find((s) => s.id === leader.id).directorio,
+    registry.leer().find((s) => s.id === leader.id).directorio,
   );
-  await ejecutor.esperar(child.id);
+  await executor.esperar(child.id);
   release();
-  await ejecutor.esperar(leader.id);
+  await executor.esperar(leader.id);
 });

@@ -3,7 +3,7 @@ import { body, send } from "../io.mjs";
 
 /** @type {RouteModule} */
 export const authRoutes = (ctx, req) => {
-  const { auth, mcpRemoto } = ctx;
+  const { auth, mcpRemoto: mcpRemote } = ctx;
   const { request, response } = req;
   return {
     "GET /auth/status": async () => {
@@ -48,9 +48,9 @@ export const authRoutes = (ctx, req) => {
         await auth.enableTotp((await body(request)).code),
       );
     },
-    "GET /oauth/clientes": async () => send(response, 200, mcpRemoto.listar()),
+    "GET /oauth/clientes": async () => send(response, 200, mcpRemote.listar()),
     "POST /oauth/clientes/revocar": async () => {
-      await mcpRemoto.revocar((await body(request)).id);
+      await mcpRemote.revocar((await body(request)).id);
       return send(response, 200, { ok: true });
     },
   };

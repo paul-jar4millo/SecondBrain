@@ -534,14 +534,14 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
   await acpCtrl.shutdown();
 
   // 2. DeepSeek spending policy blocked BEFORE spawn and BEFORE consultarSaldo, ignoring spoofed billingAuthorized
-  let saldoCalls = 0;
+  let balanceCalls = 0;
   let claudeSdkCalled = false;
-  const registro = await openSessionRegistry(
+  const registry = await openSessionRegistry(
     path.join(dataDir, "sesiones.json"),
   );
   const conversations = createProviderConversations({
     directory: path.join(dataDir, "conv"),
-    registro,
+    registro: registry,
     adapters: {
       claude: {
         createController: () =>
@@ -559,8 +559,8 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
       },
     },
   });
-  const ejecutor = createExecutor({
-    registro,
+  const executor = createExecutor({
+    registro: registry,
     equipos: {
       estado: () => ({ id: "eq-1", miembros: [] }),
       crear: async () => ({ id: "eq-1", miembros: [] }),
@@ -576,7 +576,7 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
     },
     conversations,
     consultarSaldo: async () => {
-      saldoCalls += 1;
+      balanceCalls += 1;
       return 10.0;
     },
     registrar: () => {},
@@ -584,7 +584,7 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
 
   await assert.rejects(
     () =>
-      ejecutor.encargar({
+      executor.encargar({
         motor: "deepseek",
         origen: "encargo",
         proyecto: "demo",
@@ -600,7 +600,7 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
   let observedLeaderEnv = null;
   const conversationsSpy = createProviderConversations({
     directory: path.join(dataDir, "conv2"),
-    registro,
+    registro: registry,
     adapters: {
       claude: {
         createController: () => ({
@@ -617,7 +617,7 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
     },
   });
   const exec2 = createExecutor({
-    registro,
+    registro: registry,
     equipos: {
       estado: () => ({ id: "eq-2", miembros: [] }),
       crear: async () => ({ id: "eq-2", miembros: [] }),
@@ -634,7 +634,7 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
     },
     conversations: conversationsSpy,
     consultarSaldo: async () => {
-      saldoCalls += 1;
+      balanceCalls += 1;
       return 10.0;
     },
     registrar: () => {},
@@ -657,7 +657,7 @@ test("B/E: bloqueo de gasto antes de spawn y consultarSaldo, perfiles edit/shell
       }),
     /gasto/,
   );
-  assert.equal(saldoCalls, 0);
+  assert.equal(balanceCalls, 0);
 
   await exec2.esperar(leader.id);
   assert.equal(observedLeaderEnv.AGENTES_TOKEN_FILE, undefined);

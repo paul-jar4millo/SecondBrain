@@ -134,7 +134,7 @@ export const PUESTOS: Record<string, Point & { nombre: string; zone: string }> =
     },
     revisar: { nombre: "Mesa de revisión", zone: "workshop", x: -8.3, z: -1.2 },
   };
-export function puestoPara(
+export function spotFor(
   id: string,
   { fase = "", zona }: { fase?: string; zona?: string } = {},
 ) {

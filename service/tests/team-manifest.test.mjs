@@ -8,7 +8,7 @@ import path from "node:path";
 import { createApplication } from "../index.mjs";
 import { getCsrfHeaders as csrfHeaders } from "./helpers/csrf.mjs";
 
-const SESION = "a1111111-1111-4111-8111-111111111111";
+const SESSION = "a1111111-1111-4111-8111-111111111111";
 
 const team = () => [
   {
@@ -45,22 +45,22 @@ test("equipo_encargar recibe el manifiesto congelado del encargo y registra la i
   let workOrderId = null;
   const recibidos = [];
   const launcher = http.createServer(async (req, res) => {
-    const partes = [];
-    for await (const parte of req) partes.push(parte);
-    const texto = Buffer.concat(partes).toString("utf8");
+    const parts = [];
+    for await (const part of req) parts.push(part);
+    const text = Buffer.concat(parts).toString("utf8");
     res.setHeader("content-type", "application/json");
     if (req.url === "/estado")
       return res.end(
-        JSON.stringify([{ id: SESION, motor: "claude", workOrderId }]),
+        JSON.stringify([{ id: SESSION, motor: "claude", workOrderId }]),
       );
     if (req.url === "/equipo/encargar") {
-      const datos = JSON.parse(texto);
-      recibidos.push(datos);
+      const data = JSON.parse(text);
+      recibidos.push(data);
       return res.end(
         JSON.stringify({
           id: "b2222222-2222-4222-8222-222222222222",
-          motor: datos.motor,
-          memberId: datos.memberId,
+          motor: data.motor,
+          memberId: data.memberId,
           modelo: "modelo-menta",
           estado: "pendiente",
           enColaRecursos: true,
@@ -110,10 +110,10 @@ test("equipo_encargar recibe el manifiesto congelado del encargo y registra la i
     authorization: "Bearer room-secret",
     "content-type": "application/json",
     "x-sb-agente": "ambar",
-    "x-sb-sesion": SESION,
+    "x-sb-sesion": SESSION,
   };
 
-  const creado = await fetch(`${base}/encargos`, {
+  const created = await fetch(`${base}/encargos`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -123,9 +123,9 @@ test("equipo_encargar recibe el manifiesto congelado del encargo y registra la i
       team: team(),
     }),
   });
-  assert.equal(creado.status, 201);
-  const { encargo } = await creado.json();
-  workOrderId = encargo.id;
+  assert.equal(created.status, 201);
+  const { encargo: task } = await created.json();
+  workOrderId = task.id;
 
   const encargar = (extra = {}) =>
     fetch(`${base}/equipo/encargar`, {
@@ -149,8 +149,8 @@ test("equipo_encargar recibe el manifiesto congelado del encargo y registra la i
     body: JSON.stringify({ workOrderId }),
   });
   assert.equal(iniciado.status, 200);
-  const { encargo: enCurso } = await iniciado.json();
-  const sha256 = enCurso.manifest.sha256;
+  const { encargo: inProgress } = await iniciado.json();
+  const sha256 = inProgress.manifest.sha256;
 
   // An agent cannot grant itself billing or address another work order.
   assert.equal((await encargar({ billingAuthorized: true })).status, 400);
@@ -164,8 +164,8 @@ test("equipo_encargar recibe el manifiesto congelado del encargo y registra la i
     409,
   );
 
-  const respuesta = await encargar({ requestId: "pedido-1" });
-  assert.equal(respuesta.status, 200);
+  const response = await encargar({ requestId: "pedido-1" });
+  assert.equal(response.status, 200);
   assert.equal(recibidos.length, 1);
   assert.equal(recibidos[0].workOrderId, workOrderId);
   assert.equal(recibidos[0].manifestSha256, sha256);
@@ -177,18 +177,18 @@ test("equipo_encargar recibe el manifiesto congelado del encargo y registra la i
     ],
   );
 
-  const integrado = await fetch(`${base}/equipo/integrar`, {
+  const integrated = await fetch(`${base}/equipo/integrar`, {
     method: "POST",
     headers: agente,
     body: JSON.stringify({}),
   });
-  assert.equal(integrado.status, 200);
+  assert.equal(integrated.status, 200);
 
-  const detalle = await fetch(
+  const detail = await fetch(
     `${base}/encargos/detalle?id=${workOrderId}&cursor=0`,
     { headers },
   );
-  const cuerpo = await detalle.json();
+  const cuerpo = await detail.json();
   const eventos = JSON.stringify(cuerpo);
   assert.match(eventos, /exec-menta/);
   assert.match(eventos, /integration_completed/);

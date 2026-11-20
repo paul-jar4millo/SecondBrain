@@ -2,10 +2,10 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { LauncherError } from "./errors.mjs";
-import { marcarInterna } from "./conversations.mjs";
+import { markInternal } from "./conversations.mjs";
 import {
   engineCommand,
-  entornoDe,
+  environmentOf,
   readClaudeEvent,
   readGeminiEvent,
   economyModel,
@@ -14,27 +14,27 @@ import {
 
 /** @import { LauncherSession } from "./session-types.d.ts" */
 
-const AGENTE = {
+const AGENT = {
   claude: "ambar",
   codex: "menta",
   agy: "lira",
   deepseek: "marina",
 };
-const TIPOS = "build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test";
-const CONVENCIONAL = new RegExp(`^(${TIPOS})(\\([\\w./-]+\\))?!?: \\S.*$`);
-const MAX_TITULO = 200;
-const MAX_DESCRIPCION = 20000;
-const TIEMPO_REDACCION = 120000;
+const TYPES = "build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test";
+const CONVENTIONAL = new RegExp(`^(${TYPES})(\\([\\w./-]+\\))?!?: \\S.*$`);
+const MAX_TITLE = 200;
+const MAX_DESCRIPTION = 20000;
+const REDACTION_TIME = 120000;
 
-/** @param {unknown} titulo */
-export const esConvencional = (titulo) =>
-  typeof titulo === "string" &&
-  titulo.length <= MAX_TITULO &&
-  CONVENCIONAL.test(titulo);
+/** @param {unknown} title */
+export const isConventional = (title) =>
+  typeof title === "string" &&
+  title.length <= MAX_TITLE &&
+  CONVENTIONAL.test(title);
 
-/** @param {unknown} texto */
-export function slug(texto, max = 40) {
-  const limpio = String(texto ?? "")
+/** @param {unknown} text */
+export function slug(text, max = 40) {
+  const clean = String(text ?? "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
@@ -42,35 +42,33 @@ export function slug(texto, max = 40) {
     .replace(/^-+|-+$/g, "")
     .slice(0, max)
     .replace(/-+$/g, "");
-  return limpio || "cambios";
+  return clean || "cambios";
 }
 
-/** @param {Pick<LauncherSession, "motor" | "encargo" | "id">} sesion */
-export const nombreRama = (sesion) =>
-  `sb/${AGENTE[sesion.motor] ?? "agente"}-${slug(primeraLinea(sesion.encargo))}-${sesion.id.slice(0, 6)}`;
+/** @param {Pick<LauncherSession, "motor" | "encargo" | "id">} session */
+export const branchName = (session) =>
+  `sb/${AGENT[session.motor] ?? "agente"}-${slug(firstLine(session.encargo))}-${session.id.slice(0, 6)}`;
 
-/** @param {string} encargo */
-function tipoDe(encargo) {
-  if (
-    /\b(corrige|corregir|arregla|arreglar|fix|bug|error|falla)\b/i.test(encargo)
-  )
+/** @param {string} task */
+function typeOf(task) {
+  if (/\b(corrige|corregir|arregla|arreglar|fix|bug|error|falla)\b/i.test(task))
     return "fix";
-  if (/\b(docs?|documenta|documentaci[oó]n|readme)\b/i.test(encargo))
+  if (/\b(docs?|documenta|documentaci[oó]n|readme)\b/i.test(task))
     return "docs";
-  if (/\b(pruebas?|tests?)\b/i.test(encargo)) return "test";
-  if (/\brefactor/i.test(encargo)) return "refactor";
+  if (/\b(pruebas?|tests?)\b/i.test(task)) return "test";
+  if (/\brefactor/i.test(task)) return "refactor";
   return "feat";
 }
 
-/** @param {unknown} texto */
-const primeraLinea = (texto) =>
-  String(texto ?? "")
+/** @param {unknown} text */
+const firstLine = (text) =>
+  String(text ?? "")
     .split("\n")
     .map((l) => l.trim())
     .find(Boolean) ?? "";
 
 /** @param {string} ts */
-const hora = (ts) => {
+const hour = (ts) => {
   const d = new Date(ts);
   return Number.isNaN(d.getTime())
     ? ""
@@ -82,53 +80,59 @@ const hora = (ts) => {
  * the brief, the agent's last reply, the changed files and the turn log.
  * @param {{ sesion: Pick<LauncherSession, "encargo" | "resultado" | "checkpoints">, archivos?: { estado: string, ruta: string, binario?: boolean, añadidas?: number, eliminadas?: number }[], ultimaRespuesta?: string }} input
  */
-export function propuestaPr({ sesion, archivos = [], ultimaRespuesta = "" }) {
-  const encargo = primeraLinea(sesion.encargo);
+export function proposalPr({
+  sesion: session,
+  archivos = [],
+  ultimaRespuesta: lastResponse = "",
+}) {
+  const task = firstLine(session.encargo);
   let titulo;
-  if (esConvencional(encargo.slice(0, 72))) titulo = encargo.slice(0, 72);
+  if (isConventional(task.slice(0, 72))) titulo = task.slice(0, 72);
   else {
-    const sujeto = encargo
+    const subject = task
       .replace(/^[A-ZÁÉÍÓÚÑ]/, (c) => c.toLowerCase())
       .replace(/[.:;]+$/, "");
-    const tipo = tipoDe(encargo);
-    titulo = `${tipo}: ${sujeto || "cambios de la sesión"}`.slice(0, 72).trim();
+    const type = typeOf(task);
+    titulo = `${type}: ${subject || "cambios de la sesión"}`
+      .slice(0, 72)
+      .trim();
   }
-  const secciones = [];
-  const resumen = String(ultimaRespuesta || sesion.resultado || "").trim();
-  if (resumen) secciones.push(`## Resumen\n\n${resumen.slice(0, 1500)}`);
+  const sections = [];
+  const summary = String(lastResponse || session.resultado || "").trim();
+  if (summary) sections.push(`## Resumen\n\n${summary.slice(0, 1500)}`);
   if (archivos.length) {
-    const lineas = archivos
+    const lines = archivos
       .slice(0, 50)
       .map(
         (a) =>
           `- \`${a.estado}\` ${a.ruta}${a.binario ? " (binario)" : ` (+${a.añadidas} −${a.eliminadas})`}`,
       );
-    if (archivos.length > 50) lineas.push(`- … y ${archivos.length - 50} más`);
-    secciones.push(`## Archivos (${archivos.length})\n\n${lineas.join("\n")}`);
+    if (archivos.length > 50) lines.push(`- … y ${archivos.length - 50} más`);
+    sections.push(`## Archivos (${archivos.length})\n\n${lines.join("\n")}`);
   }
-  const turnos = (sesion.checkpoints ?? []).filter(
+  const turns = (session.checkpoints ?? []).filter(
     (c) => c.tipo !== "reversion",
   );
-  if (turnos.length)
-    secciones.push(
-      `## Cambios por turno\n\n${turnos
+  if (turns.length)
+    sections.push(
+      `## Cambios por turno\n\n${turns
         .slice(-20)
-        .map((c, i) => `${i + 1}. ${c.mensaje || "Turno"} (${hora(c.ts)})`)
+        .map((c, i) => `${i + 1}. ${c.mensaje || "Turno"} (${hour(c.ts)})`)
         .join("\n")}`,
     );
   return {
     titulo,
-    descripcion: secciones.join("\n\n").slice(0, MAX_DESCRIPCION),
+    descripcion: sections.join("\n\n").slice(0, MAX_DESCRIPTION),
   };
 }
 
-/** @param {string} texto */
-function extraerJson(texto) {
-  const inicio = texto.indexOf("{");
-  const fin = texto.lastIndexOf("}");
+/** @param {string} text */
+function extractJson(text) {
+  const inicio = text.indexOf("{");
+  const fin = text.lastIndexOf("}");
   if (inicio < 0 || fin <= inicio) return null;
   try {
-    return JSON.parse(texto.slice(inicio, fin + 1));
+    return JSON.parse(text.slice(inicio, fin + 1));
   } catch {
     return null;
   }
@@ -140,17 +144,17 @@ function extraerJson(texto) {
  * @param {{ git: ReturnType<typeof import("./git.mjs").createGit>, info: ReturnType<typeof import("./checkpoints.mjs").createCheckpoints>["info"], env?: NodeJS.ProcessEnv, lanzar?: typeof spawn, comando?: typeof engineCommand }} options
  */
 export function createPrClient({
-  git: ejecutor,
+  git: executor,
   info,
   env = process.env,
-  lanzar = spawn,
-  comando = engineCommand,
+  lanzar: launch = spawn,
+  comando: command = engineCommand,
 }) {
-  const { git, gh } = ejecutor;
-  const enCurso = new Set();
+  const { git, gh } = executor;
+  const inProgress = new Set();
 
   /** @param {string} cwd */
-  async function ramaPorDefecto(cwd) {
+  async function defaultBranch(cwd) {
     const ref = await git(cwd, [
       "symbolic-ref",
       "--short",
@@ -160,41 +164,47 @@ export function createPrClient({
       () => "",
     );
     if (ref) return ref;
-    for (const rama of ["main", "master"]) {
-      for (const completa of [
-        `refs/remotes/origin/${rama}`,
-        `refs/heads/${rama}`,
+    for (const branch of ["main", "master"]) {
+      for (const complete of [
+        `refs/remotes/origin/${branch}`,
+        `refs/heads/${branch}`,
       ])
         if (
-          await git(cwd, ["rev-parse", "--verify", "-q", completa]).then(
+          await git(cwd, ["rev-parse", "--verify", "-q", complete]).then(
             () => true,
             () => false,
           )
         )
-          return rama;
+          return branch;
     }
     throw new LauncherError("No se pudo determinar la rama por defecto.");
   }
 
   /** @param {{ sesion: LauncherSession, cwd: string, titulo: string, descripcion: string, borrador?: boolean }} input */
-  async function crear({ sesion, cwd, titulo, descripcion, borrador = false }) {
-    if (!esConvencional(titulo))
+  async function crear({
+    sesion: session,
+    cwd,
+    titulo,
+    descripcion: description,
+    borrador = false,
+  }) {
+    if (!isConventional(titulo))
       throw new LauncherError(
         "El título debe seguir Conventional Commits, por ejemplo «feat: añade X».",
         400,
       );
-    if (typeof descripcion !== "string" || descripcion.length > MAX_DESCRIPCION)
+    if (typeof description !== "string" || description.length > MAX_DESCRIPTION)
       throw new LauncherError("La descripción es demasiado larga.", 400);
-    if (enCurso.has(sesion.id))
+    if (inProgress.has(session.id))
       throw new LauncherError("Ya hay un PR en curso para esta sesión.");
-    enCurso.add(sesion.id);
+    inProgress.add(session.id);
     try {
       const repo = await info(cwd);
       if (!repo.esRepo || !repo.remotoGithub)
         throw new LauncherError(
           "La sesión no está en un repositorio con remoto en GitHub.",
         );
-      const defecto = await ramaPorDefecto(cwd);
+      const defecto = await defaultBranch(cwd);
       const actual = (
         await git(cwd, ["symbolic-ref", "--short", "HEAD"]).catch(() => {
           throw new LauncherError(
@@ -202,8 +212,8 @@ export function createPrClient({
           );
         })
       ).stdout.trim();
-      const sucio = (await git(cwd, ["status", "--porcelain"])).stdout.trim();
-      const adelantados = await git(cwd, [
+      const dirty = (await git(cwd, ["status", "--porcelain"])).stdout.trim();
+      const ahead = await git(cwd, [
         "rev-list",
         "--count",
         `origin/${defecto}..HEAD`,
@@ -211,18 +221,18 @@ export function createPrClient({
         (r) => Number(r.stdout.trim()) || 0,
         () => 0,
       );
-      const ramaNueva = actual === defecto;
-      if (!sucio && (ramaNueva || !adelantados))
+      const newBranch = actual === defecto;
+      if (!dirty && (newBranch || !ahead))
         throw new LauncherError("No hay cambios para enviar en un PR.");
-      const rama = ramaNueva ? nombreRama(sesion) : actual;
-      if (ramaNueva) {
+      const branch = newBranch ? branchName(session) : actual;
+      if (newBranch) {
         try {
-          await git(cwd, ["checkout", "-b", rama]);
+          await git(cwd, ["checkout", "-b", branch]);
         } catch {
           throw new LauncherError("No se pudo crear la rama del PR.");
         }
       }
-      const identidad = (
+      const identity = (
         await git(cwd, ["config", "user.email"]).catch(() => ({ stdout: "" }))
       ).stdout.trim()
         ? {}
@@ -234,13 +244,13 @@ export function createPrClient({
           };
       try {
         await git(cwd, ["add", "-A"]);
-        const nada = await git(cwd, ["diff", "--cached", "--quiet"]).then(
+        const nothing = await git(cwd, ["diff", "--cached", "--quiet"]).then(
           () => true,
           () => false,
         );
-        if (!nada)
+        if (!nothing)
           await git(cwd, ["commit", "-m", titulo], {
-            env: identidad,
+            env: identity,
             timeout: 120000,
           });
       } catch {
@@ -250,43 +260,43 @@ export function createPrClient({
       }
       const commit = (await git(cwd, ["rev-parse", "HEAD"])).stdout.trim();
       try {
-        await git(cwd, ["push", "-u", "origin", rama], { timeout: 120000 });
+        await git(cwd, ["push", "-u", "origin", branch], { timeout: 120000 });
       } catch {
         throw new LauncherError(
           "No se pudo enviar la rama al remoto. El commit quedó en local.",
           502,
         );
       }
-      const abierto = await gh(cwd, [
+      const open = await gh(cwd, [
         "pr",
         "view",
-        rama,
+        branch,
         "--json",
         "url,state",
       ]).then(
         (r) => {
-          const datos = JSON.parse(r.stdout);
-          return datos.state === "OPEN" ? datos.url : null;
+          const data = JSON.parse(r.stdout);
+          return data.state === "OPEN" ? data.url : null;
         },
         /** @returns {null} */ () => null,
       );
-      if (abierto) return { rama, commit, url: abierto, existente: true };
-      let salida;
+      if (open) return { rama: branch, commit, url: open, existente: true };
+      let output;
       try {
-        salida = (
+        output = (
           await gh(
             cwd,
             [
               "pr",
               "create",
               "--head",
-              rama,
+              branch,
               "--base",
               defecto,
               "--title",
               titulo,
               "--body",
-              descripcion,
+              description,
               ...(borrador ? ["--draft"] : []),
             ],
             { timeout: 120000 },
@@ -298,25 +308,25 @@ export function createPrClient({
           502,
         );
       }
-      const url = /https?:\/\/\S+/.exec(salida)?.[0];
+      const url = /https?:\/\/\S+/.exec(output)?.[0];
       if (!url)
         throw new LauncherError("gh no devolvió la dirección del PR.", 502);
-      return { rama, commit, url, existente: false };
+      return { rama: branch, commit, url, existente: false };
     } finally {
-      enCurso.delete(sesion.id);
+      inProgress.delete(session.id);
     }
   }
 
   /**
    * One short headless run of the session's engine, only when the user asks.
-   * @param {{ sesion: LauncherSession, cwd: string, propuesta: ReturnType<typeof propuestaPr>, parche?: string, catalogo?: Partial<Record<string, Parameters<typeof economyModel>[1]>> }} input
+   * @param {{ sesion: LauncherSession, cwd: string, propuesta: ReturnType<typeof proposalPr>, parche?: string, catalogo?: Partial<Record<string, Parameters<typeof economyModel>[1]>> }} input
    */
-  async function redactar({
+  async function redact({
     sesion,
     cwd,
-    propuesta,
-    parche = "",
-    catalogo = {},
+    propuesta: proposal,
+    parche: patch = "",
+    catalogo: catalog = {},
   }) {
     const prompt = [
       "Redacta el título y la descripción de un pull request, en español.",
@@ -327,87 +337,87 @@ export function createPrClient({
       `Encargo: ${String(sesion.encargo ?? "").slice(0, 1500)}`,
       "",
       "Propuesta actual:",
-      propuesta.titulo,
-      propuesta.descripcion.slice(0, 4000),
+      proposal.titulo,
+      proposal.descripcion.slice(0, 4000),
       "",
       "Parche (recortado):",
-      parche.slice(0, 6000),
+      patch.slice(0, 6000),
     ].join("\n");
-    const spec = comando(sesion.motor, prompt, {
-      modelo: economyModel(sesion.motor, catalogo[sesion.motor]) ?? undefined,
+    const spec = command(sesion.motor, prompt, {
+      modelo: economyModel(sesion.motor, catalog[sesion.motor]) ?? undefined,
     });
     // An internal run is not a conversation: with the session's own id the
     // hooks would link its transcript to that session and the observer would
     // replace its messages. Its provider id is marked so it is never imported.
     const interno = randomUUID();
     const marcadas = new Set();
-    /** @param {unknown} nativo */
-    const marcar = (nativo) => {
-      if (typeof nativo !== "string" || marcadas.has(nativo)) return;
-      marcadas.add(nativo);
-      return marcarInterna(env, nativo).catch(() => {});
+    /** @param {unknown} native */
+    const mark = (native) => {
+      if (typeof native !== "string" || marcadas.has(native)) return;
+      marcadas.add(native);
+      return markInternal(env, native).catch(() => {});
     };
     if (sesion.motor === "claude" || sesion.motor === "deepseek") {
       spec.args = [...spec.args, "--session-id", interno];
-      await marcar(interno);
+      await mark(interno);
     }
     /** @type {Partial<Record<string, string>>} */
-    const proveedores = { codex: "chatgpt", agy: "gemini" };
-    const proveedor = proveedores[sesion.motor] || sesion.motor;
-    const hijo = lanzar(spec.bin, spec.args, {
+    const providers = { codex: "chatgpt", agy: "gemini" };
+    const proveedor = providers[sesion.motor] || sesion.motor;
+    const child = launch(spec.bin, spec.args, {
       cwd,
-      env: { ...entornoDe(proveedor, env), SB_SESSION_ID: interno },
+      env: { ...environmentOf(proveedor, env), SB_SESSION_ID: interno },
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
-    const acumulado = newClaudeState();
-    const lineas = createInterface({ input: hijo.stdout });
-    lineas.on("line", (linea) => {
-      let evento;
+    const accumulated = newClaudeState();
+    const lines = createInterface({ input: child.stdout });
+    lines.on("line", (line) => {
+      let event;
       try {
-        evento = JSON.parse(linea);
+        event = JSON.parse(line);
       } catch {
         return;
       }
-      marcar(
-        evento.session_id ||
-          evento.thread_id ||
-          evento.conversationId ||
-          evento.conversation_id,
+      mark(
+        event.session_id ||
+          event.thread_id ||
+          event.conversationId ||
+          event.conversation_id,
       );
       if (sesion.motor === "claude" || sesion.motor === "deepseek")
-        readClaudeEvent(acumulado, evento);
-      else if (sesion.motor === "agy") readGeminiEvent(acumulado, evento);
+        readClaudeEvent(accumulated, event);
+      else if (sesion.motor === "agy") readGeminiEvent(accumulated, event);
       else if (
-        evento.type === "item.completed" &&
-        evento.item?.type === "agent_message"
+        event.type === "item.completed" &&
+        event.item?.type === "agent_message"
       )
-        acumulado.texto = String(evento.item.text || "");
+        accumulated.texto = String(event.item.text || "");
     });
-    hijo.stderr?.resume();
-    let reloj;
-    const codigo = await new Promise((resolve) => {
-      reloj = setTimeout(() => {
-        hijo.kill("SIGKILL");
+    child.stderr?.resume();
+    let clock;
+    const code = await new Promise((resolve) => {
+      clock = setTimeout(() => {
+        child.kill("SIGKILL");
         resolve(-1);
-      }, TIEMPO_REDACCION);
-      hijo.once("error", () => resolve(-1));
-      hijo.once("close", resolve);
+      }, REDACTION_TIME);
+      child.once("error", () => resolve(-1));
+      child.once("close", resolve);
     });
-    clearTimeout(reloj);
-    const datos =
-      codigo === 0 && !acumulado.error ? extraerJson(acumulado.texto) : null;
-    const titulo = String(datos?.titulo ?? "").trim();
-    if (!esConvencional(titulo) || typeof datos?.descripcion !== "string")
+    clearTimeout(clock);
+    const data =
+      code === 0 && !accumulated.error ? extractJson(accumulated.texto) : null;
+    const title = String(data?.titulo ?? "").trim();
+    if (!isConventional(title) || typeof data?.descripcion !== "string")
       throw new LauncherError(
         "El agente no pudo redactar el PR; se conserva la propuesta.",
         502,
       );
     return {
-      titulo,
-      descripcion: datos.descripcion.slice(0, MAX_DESCRIPCION),
+      titulo: title,
+      descripcion: data.descripcion.slice(0, MAX_DESCRIPTION),
     };
   }
 
-  return { crear, redactar };
+  return { crear, redactar: redact };
 }

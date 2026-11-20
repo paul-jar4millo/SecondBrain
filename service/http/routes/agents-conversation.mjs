@@ -3,24 +3,24 @@ import { body, relayArtifactDownload, send } from "../io.mjs";
 
 /** @type {RouteModule} */
 export const agentConversationRoutes = (ctx, req) => {
-  const { bridges, lanzador } = ctx;
-  const { consulta, request, response } = req;
+  const { bridges, lanzador: launcher } = ctx;
+  const { consulta: query, request, response } = req;
   return {
     "GET /agentes/conversacion/artefactos/descargar": async () => {
-      const upstream = await lanzador.descargarArtefacto(
-        consulta.get("id"),
-        consulta.get("artifactId"),
+      const upstream = await launcher.descargarArtefacto(
+        query.get("id"),
+        query.get("artifactId"),
       );
       await relayArtifactDownload(response, upstream);
       return;
     },
     "POST /agentes/conversacion/responder": async () =>
-      send(response, 200, await lanzador.responder(await body(request))),
+      send(response, 200, await launcher.responder(await body(request))),
     "GET /agentes/conversacion/cola": async () =>
-      send(response, 200, await lanzador.colaConversacion(consulta.get("id"))),
+      send(response, 200, await launcher.colaConversacion(query.get("id"))),
     "POST /agentes/conversacion/mensajes": async () => {
       const payload = await body(request);
-      const sent = await lanzador.enviarMensajeConversacion(payload);
+      const sent = await launcher.enviarMensajeConversacion(payload);
       const link = bridges.linkOf(payload.id);
       if (link) {
         bridges.bridge(payload.id, link.workOrderId, link.fallbackMemberId);
@@ -31,7 +31,7 @@ export const agentConversationRoutes = (ctx, req) => {
       send(
         response,
         200,
-        await lanzador.cancelarColaConversacion(await body(request)),
+        await launcher.cancelarColaConversacion(await body(request)),
       ),
   };
 };

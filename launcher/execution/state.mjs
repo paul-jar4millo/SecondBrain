@@ -7,7 +7,7 @@
 
 export function createExecutionState() {
   /** @type {Map<string, ActiveJob>} */
-  const activos = new Map();
+  const active = new Map();
   /** @type {Map<string, LiveTerminal>} */
   const terminales = new Map();
   /** @type {Map<string, ChildProcessWithoutNullStreams>} */
@@ -42,17 +42,17 @@ export function createExecutionState() {
    * @param {() => T | Promise<T>} fn
    */
   function serial(fn) {
-    const siguiente = cola.then(fn);
-    cola = siguiente.catch(() => {});
-    return siguiente;
+    const next = cola.then(fn);
+    cola = next.catch(() => {});
+    return next;
   }
   /**
    * Sessions whose next queued message is being started.
    * @type {Set<string>}
    */
-  const drenando = new Set();
+  const draining = new Set();
   return {
-    activos,
+    activos: active,
     terminales,
     liveProcesses,
     exitedProcesses,
@@ -66,7 +66,7 @@ export function createExecutionState() {
     queuedPromises,
     takeEnqueueSeq,
     serial,
-    drenando,
+    drenando: draining,
   };
 }
 

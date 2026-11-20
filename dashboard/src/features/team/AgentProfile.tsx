@@ -9,7 +9,7 @@ import { type AgentTarget } from "./team-controller";
 import { useTeam } from "./team-store";
 import { AgentPortrait, agentStatus, StatusTag } from "./TeamPrimitives";
 
-const motorDe: Record<string, string> = {
+const engineOf: Record<string, string> = {
   ambar: "claude",
   menta: "codex",
   lira: "agy",
@@ -47,7 +47,7 @@ export function AgentProfile({
     );
   const sesiones = (state.sessions || []).filter(
     (s) =>
-      s.motor === motorDe[a.id] &&
+      s.motor === engineOf[a.id] &&
       ["pendiente", "trabajando"].includes(s.estado),
   );
   const prompt = () => {

@@ -8,7 +8,7 @@ import { createApplication } from "../index.mjs";
 
 const password = "una-contrasena-muy-larga";
 
-async function conApp(fn) {
+async function withApp(fn) {
   const root = await mkdtemp(path.join(tmpdir(), "sb-mcpr-vault-"));
   const runtime = await mkdtemp(path.join(tmpdir(), "sb-mcpr-data-"));
   for (const d of ["00-Inbox", "02-Areas", "99-Meta"])
@@ -32,7 +32,7 @@ async function conApp(fn) {
   }
 }
 
-async function crearPropietario(base) {
+async function createOwner(base) {
   const csrfRes = await fetch(base + "/api/v1/auth/csrf");
   const cookie = csrfRes.headers
     .getSetCookie()
@@ -59,12 +59,12 @@ const pkce = () => {
   };
 };
 
-async function registrar(base, nombre = "Claude móvil") {
+async function registrar(base, name = "Claude móvil") {
   const r = await fetch(base + "/oauth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      client_name: nombre,
+      client_name: name,
       redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
     }),
   });
@@ -81,9 +81,9 @@ async function autorizar(base, clientId, challenge, pass = password) {
     code_challenge_method: "S256",
     state: "abc",
   });
-  const pagina = await fetch(base + "/oauth/authorize?" + params);
-  assert.equal(pagina.status, 200);
-  assert.match(await pagina.text(), /Claude móvil/);
+  const page = await fetch(base + "/oauth/authorize?" + params);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Claude móvil/);
   return fetch(base + "/oauth/authorize", {
     method: "POST",
     redirect: "manual",
@@ -99,11 +99,11 @@ async function autorizar(base, clientId, challenge, pass = password) {
   });
 }
 
-const token = (base, datos) =>
+const token = (base, data) =>
   fetch(base + "/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(datos),
+    body: new URLSearchParams(data),
   });
 
 async function mcp(base, accessToken, method, params, id = 1) {
@@ -119,15 +119,15 @@ async function mcp(base, accessToken, method, params, id = 1) {
   return { status: r.status, body: await r.json().catch(() => null) };
 }
 
-async function conectar(base) {
-  await crearPropietario(base);
+async function connect(base) {
+  await createOwner(base);
   const clientId = await registrar(base);
   const { verifier, challenge } = pkce();
   const res = await autorizar(base, clientId, challenge);
   assert.equal(res.status, 302);
-  const destino = new URL(res.headers.get("location"));
-  assert.equal(destino.searchParams.get("state"), "abc");
-  const code = destino.searchParams.get("code");
+  const target = new URL(res.headers.get("location"));
+  assert.equal(target.searchParams.get("state"), "abc");
+  const code = target.searchParams.get("code");
   const t = await token(base, {
     grant_type: "authorization_code",
     client_id: clientId,
@@ -140,7 +140,7 @@ async function conectar(base) {
 }
 
 test("el handshake OAuth con PKCE entrega tokens y el MCP remoto responde con las mismas herramientas", () =>
-  conApp(async ({ base }) => {
+  withApp(async ({ base }) => {
     const sin = await fetch(base + "/mcp", { method: "POST", body: "{}" });
     assert.equal(sin.status, 401);
     assert.match(sin.headers.get("www-authenticate"), /resource_metadata=/);
@@ -148,13 +148,11 @@ test("el handshake OAuth con PKCE entrega tokens y el MCP remoto responde con la
       await fetch(base + "/.well-known/oauth-authorization-server")
     ).json();
     assert.deepEqual(meta.code_challenge_methods_supported, ["S256"]);
-    const { tokens, code, clientId, verifier } = await conectar(base);
+    const { tokens, code, clientId, verifier } = await connect(base);
     const lista = await mcp(base, tokens.access_token, "tools/list", {});
     assert.equal(lista.status, 200);
-    const nombres = lista.body.result.tools.map((t) => t.name);
-    assert.ok(
-      nombres.includes("brain_context") && nombres.includes("brain_write"),
-    );
+    const names = lista.body.result.tools.map((t) => t.name);
+    assert.ok(names.includes("brain_context") && names.includes("brain_write"));
     // El código es de un solo uso.
     const otra = await token(base, {
       grant_type: "authorization_code",
@@ -167,8 +165,8 @@ test("el handshake OAuth con PKCE entrega tokens y el MCP remoto responde con la
   }));
 
 test("rechaza contraseña incorrecta, verifier incorrecto y redirect no registrado", () =>
-  conApp(async ({ base }) => {
-    await crearPropietario(base);
+  withApp(async ({ base }) => {
+    await createOwner(base);
     const clientId = await registrar(base);
     const { challenge } = pkce();
     const mala = await autorizar(
@@ -199,17 +197,17 @@ test("rechaza contraseña incorrecta, verifier incorrecto y redirect no registra
         }),
     );
     assert.equal(ajeno.status, 400);
-    const registro = await fetch(base + "/oauth/register", {
+    const registry = await fetch(base + "/oauth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ redirect_uris: ["http://evil.example/cb"] }),
     });
-    assert.equal(registro.status, 400);
+    assert.equal(registry.status, 400);
   }));
 
 test("brain_write por HTTP exige el hash actual, el cliente queda atribuido y revocar da 401", () =>
-  conApp(async ({ base, root }) => {
-    const { tokens, clientId } = await conectar(base);
+  withApp(async ({ base, root }) => {
+    const { tokens, clientId } = await connect(base);
     const llamar = (name, args) =>
       mcp(
         base,
@@ -218,8 +216,8 @@ test("brain_write por HTTP exige el hash actual, el cliente queda atribuido y re
         { name, arguments: args },
         7,
       );
-    const lectura = await llamar("brain_read", { path: "Home.md" });
-    const nota = JSON.parse(lectura.body.result.content[0].text);
+    const read = await llamar("brain_read", { path: "Home.md" });
+    const note = JSON.parse(read.body.result.content[0].text);
     const mala = await llamar("brain_write", {
       path: "Home.md",
       content: "# Nuevo\n",
@@ -233,7 +231,7 @@ test("brain_write por HTTP exige el hash actual, el cliente queda atribuido y re
     const buena = await llamar("brain_write", {
       path: "Home.md",
       content: "# Nuevo\n",
-      expectedHash: nota.hash,
+      expectedHash: note.hash,
     });
     assert.notEqual(buena.body.result.isError, true);
     assert.equal(
@@ -241,14 +239,14 @@ test("brain_write por HTTP exige el hash actual, el cliente queda atribuido y re
       "# Nuevo\n",
     );
     // Refresh rota el token: el anterior deja de servir.
-    const nuevo = await (
+    const created = await (
       await token(base, {
         grant_type: "refresh_token",
         client_id: clientId,
         refresh_token: tokens.refresh_token,
       })
     ).json();
-    assert.ok(nuevo.access_token);
+    assert.ok(created.access_token);
     const reuso = await token(base, {
       grant_type: "refresh_token",
       client_id: clientId,
@@ -261,11 +259,11 @@ test("brain_write por HTTP exige el hash actual, el cliente queda atribuido y re
     const revocado = await fetch(base + "/oauth/revoke", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ token: nuevo.access_token }),
+      body: new URLSearchParams({ token: created.access_token }),
     });
     assert.equal(revocado.status, 200);
     assert.equal(
-      (await mcp(base, nuevo.access_token, "tools/list", {})).status,
+      (await mcp(base, created.access_token, "tools/list", {})).status,
       401,
     );
   }));

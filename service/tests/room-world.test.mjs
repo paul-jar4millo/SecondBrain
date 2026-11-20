@@ -11,7 +11,7 @@ process.env.SB_REFERENCE_BANK = fileURLToPath(
   new URL("./fixtures/reference-bank.json", import.meta.url),
 );
 
-async function iniciar(t, opciones = {}) {
+async function start(t, options = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "sb-sala-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const vault = path.join(root, "vault");
@@ -21,7 +21,7 @@ async function iniciar(t, opciones = {}) {
     vaultRoot: vault,
     dataDirectory: path.join(root, "data"),
     auth: false,
-    ...opciones(root),
+    ...options(root),
   });
   await new Promise((r) => app.server.listen(0, "127.0.0.1", r));
   t.after(() => app.close());
@@ -32,8 +32,8 @@ async function iniciar(t, opciones = {}) {
     .getSetCookie()
     .map((c) => c.split(";")[0])
     .join("; ");
-  const post = (ruta, cuerpo) =>
-    fetch(base + ruta, {
+  const post = (path, cuerpo) =>
+    fetch(base + path, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -58,7 +58,7 @@ async function paquete(root) {
     "png",
   );
   await writeFile(path.join(dir, "archivos/canal/videos/v1/nota.txt"), "txt");
-  const datos = {
+  const data = {
     formato: 1,
     generado: "2026-11-06T00:00:00.000Z",
     videos: [
@@ -72,16 +72,16 @@ async function paquete(root) {
       { id: "analista", name: "Analista", description: "", source: "x.md" },
     ],
   };
-  await writeFile(path.join(dir, "paquete.json"), JSON.stringify(datos));
-  return { dir, datos };
+  await writeFile(path.join(dir, "paquete.json"), JSON.stringify(data));
+  return { dir, datos: data };
 }
 
 test("sala: banco, tablero persistente y proxy limitado al banco", async (t) => {
-  const { base, post } = await iniciar(t, () => ({}));
-  const sala = await (await fetch(base + "/sala")).json();
-  assert.ok(sala.pines.length > 0);
-  assert.deepEqual(sala.tablero, []);
-  const id = sala.pines[0].id;
+  const { base, post } = await start(t, () => ({}));
+  const room = await (await fetch(base + "/sala")).json();
+  assert.ok(room.pines.length > 0);
+  assert.deepEqual(room.tablero, []);
+  const id = room.pines[0].id;
   assert.equal(
     (await post("/sala/tablero", { id: "x", guardar: true })).status,
     404,
@@ -101,43 +101,43 @@ test("sala: banco, tablero persistente y proxy limitado al banco", async (t) => 
 });
 
 test("sala: cada proyecto conserva su tablero y no permite agentes adicionales", async (t) => {
-  const { base, post } = await iniciar(t, () => ({}));
-  const leer = async (e) => (await fetch(`${base}/sala?espacio=${e}`)).json();
-  const { pines } = await leer("general");
+  const { base, post } = await start(t, () => ({}));
+  const read = async (e) => (await fetch(`${base}/sala?espacio=${e}`)).json();
+  const { pines } = await read("general");
   const id = pines[0].id;
   await post("/sala/tablero", { id, guardar: true, espacio: "proyecto-1" });
-  assert.deepEqual((await leer("proyecto-1")).tablero, [id]);
-  assert.deepEqual((await leer("proyecto-2")).tablero, []);
-  assert.deepEqual((await leer("general")).tablero, []);
+  assert.deepEqual((await read("proyecto-1")).tablero, [id]);
+  assert.deepEqual((await read("proyecto-2")).tablero, []);
+  assert.deepEqual((await read("general")).tablero, []);
   assert.equal(
     (await fetch(`${base}/sala?espacio=${encodeURIComponent("../x")}`)).status,
     400,
   );
 
-  const nueva = {
+  const created = {
     nombre: " Coral ",
     tipo: "gemini",
     espacio: "proyecto-1",
     colores: { pelo: "#FF0000" },
   };
-  const creada = await post("/sala/agentes", nueva);
+  const creada = await post("/sala/agentes", created);
   assert.equal(creada.status, 410);
-  assert.equal((await leer("proyecto-1")).agentes.length, 0);
-  assert.equal((await leer("proyecto-2")).agentes.length, 0);
-  assert.equal((await leer("general")).resumen["proyecto-1"].agentes, 0);
+  assert.equal((await read("proyecto-1")).agentes.length, 0);
+  assert.equal((await read("proyecto-2")).agentes.length, 0);
+  assert.equal((await read("general")).resumen["proyecto-1"].agentes, 0);
 
   for (const mala of [
-    { ...nueva, nombre: "  " },
-    { ...nueva, nombre: "x".repeat(25) },
-    { ...nueva, tipo: "otro" },
-    { ...nueva, colores: { pelo: "red" } },
-    { ...nueva, espacio: "a/b" },
+    { ...created, nombre: "  " },
+    { ...created, nombre: "x".repeat(25) },
+    { ...created, tipo: "otro" },
+    { ...created, colores: { pelo: "red" } },
+    { ...created, espacio: "a/b" },
   ])
     assert.equal((await post("/sala/agentes", mala)).status, 410);
 });
 
 test("sala: orders are limited to four agents, survive restart and keep other assignments", async (t) => {
-  const { base, post, root } = await iniciar(t, () => ({}));
+  const { base, post, root } = await start(t, () => ({}));
   const order = {
     id: "marina",
     mode: "work",
@@ -163,7 +163,7 @@ test("sala: orders are limited to four agents, survive restart and keep other as
 });
 
 test("sala: simultaneous orders persist without sharing temporary-file renames", async (t) => {
-  const { post, root } = await iniciar(t, () => ({}));
+  const { post, root } = await start(t, () => ({}));
   const responses = await Promise.all(
     ["ambar", "menta", "lira", "marina"].map((id) =>
       post("/sala/encargos", {
@@ -183,51 +183,51 @@ test("sala: simultaneous orders persist without sharing temporary-file renames",
 });
 
 test("sala: el tablero del formato anterior pasa a la sala general", async (t) => {
-  const { base } = await iniciar(t, (root) => ({
+  const { base } = await start(t, (root) => ({
     dataDirectory: path.join(root, "viejo"),
   }));
   assert.deepEqual((await (await fetch(base + "/sala")).json()).tablero, []);
   const root = await mkdtemp(path.join(tmpdir(), "sb-sala-viejo-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const banco = (await (await fetch(base + "/sala")).json()).pines[0].id;
+  const bank = (await (await fetch(base + "/sala")).json()).pines[0].id;
   await writeFile(
     path.join(root, "sala.json"),
-    JSON.stringify({ tablero: [banco] }),
+    JSON.stringify({ tablero: [bank] }),
   );
-  const sala = await createRoom(root, Error);
-  assert.deepEqual(sala.leer().tablero, [banco]);
-  assert.deepEqual(sala.leer("otro").tablero, []);
+  const room = await createRoom(root, Error);
+  assert.deepEqual(room.leer().tablero, [bank]);
+  assert.deepEqual(room.leer("otro").tablero, []);
 });
 
 test("mundo: sin paquete avisa cómo publicarlo", async (t) => {
-  const { base } = await iniciar(t, () => ({}));
+  const { base } = await start(t, () => ({}));
   const r = await fetch(base + "/mundo/overview");
   assert.equal(r.status, 503);
   assert.match((await r.json()).error, /publicar:panel/);
 });
 
 test("mundo: rechaza un paquete de otro formato", async (t) => {
-  const carpeta = await mkdtemp(path.join(tmpdir(), "sb-canal-"));
-  t.after(() => rm(carpeta, { recursive: true, force: true }));
-  const { dir, datos } = await paquete(carpeta);
+  const folder = await mkdtemp(path.join(tmpdir(), "sb-canal-"));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  const { dir, datos: data } = await paquete(folder);
   await writeFile(
     path.join(dir, "paquete.json"),
-    JSON.stringify({ ...datos, formato: 2 }),
+    JSON.stringify({ ...data, formato: 2 }),
   );
-  const { base } = await iniciar(t, () => ({ mundoPaquete: dir }));
+  const { base } = await start(t, () => ({ mundoPaquete: dir }));
   const r = await fetch(base + "/mundo/overview");
   assert.equal(r.status, 503);
   assert.match((await r.json()).error, /formato/);
 });
 
 test("mundo: sirve solo el paquete y no ejecuta nada", async (t) => {
-  const carpeta = await mkdtemp(path.join(tmpdir(), "sb-canal-"));
-  t.after(() => rm(carpeta, { recursive: true, force: true }));
-  const { dir } = await paquete(carpeta);
-  const { base, post } = await iniciar(t, () => ({ mundoPaquete: dir }));
-  const datos = await (await fetch(base + "/mundo/overview")).json();
-  assert.equal(datos.scannedAt, "2026-11-06T00:00:00.000Z");
-  assert.match(datos.videos[0].poster, /^\/api\/v1\/mundo\/media\?path=/);
+  const folder = await mkdtemp(path.join(tmpdir(), "sb-canal-"));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  const { dir } = await paquete(folder);
+  const { base, post } = await start(t, () => ({ mundoPaquete: dir }));
+  const data = await (await fetch(base + "/mundo/overview")).json();
+  assert.equal(data.scannedAt, "2026-11-06T00:00:00.000Z");
+  assert.match(data.videos[0].poster, /^\/api\/v1\/mundo\/media\?path=/);
   const ruta = (p) => encodeURIComponent(p);
   const imagen = await fetch(
     base + "/mundo/media?path=" + ruta("canal/videos/v1/portada.png"),
@@ -251,10 +251,10 @@ test("mundo: sirve solo el paquete y no ejecuta nada", async (t) => {
 });
 
 test("mundo: briefs, encargos y notas persisten fuera del paquete", async (t) => {
-  const carpeta = await mkdtemp(path.join(tmpdir(), "sb-canal-"));
-  t.after(() => rm(carpeta, { recursive: true, force: true }));
-  const { dir } = await paquete(carpeta);
-  const { base, post } = await iniciar(t, () => ({ mundoPaquete: dir }));
+  const folder = await mkdtemp(path.join(tmpdir(), "sb-canal-"));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  const { dir } = await paquete(folder);
+  const { base, post } = await start(t, () => ({ mundoPaquete: dir }));
   const brief = await post("/mundo/briefs", {
     title: "T",
     brief: "B",
@@ -282,12 +282,12 @@ test("mundo: briefs, encargos y notas persisten fuera del paquete", async (t) =>
     409,
   );
   await post("/mundo/agents", { id: "analista", enabled: true, notes: "n" });
-  const encargo = await post("/mundo/tasks", {
+  const task = await post("/mundo/tasks", {
     agentId: "analista",
     instruction: "x",
   });
-  assert.equal(encargo.status, 201);
-  const { id } = await encargo.json();
+  assert.equal(task.status, 201);
+  const { id } = await task.json();
   assert.equal(
     (await post("/mundo/tasks/status", { id, status: "completed" })).status,
     200,

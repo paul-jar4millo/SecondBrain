@@ -8,7 +8,7 @@ import { pipeline } from "node:stream/promises";
 /** @type {RouteModule} */
 export const fileRoutes = (ctx, req) => {
   const { actorOf, auth, logger, shared } = ctx;
-  const { consulta, request, response } = req;
+  const { consulta: query, request, response } = req;
   return {
     "GET /files": async () => {
       return send(response, 200, {
@@ -17,7 +17,7 @@ export const fileRoutes = (ctx, req) => {
       });
     },
     "GET /files/download": async () => {
-      const { entry, file } = await shared.find(consulta.get("id"));
+      const { entry, file } = await shared.find(query.get("id"));
       // Open before writing the head: a vanished file is a clean 404, not a crash.
       const handle = await open(file, "r").catch((e) => {
         if (e.code === "ENOENT")
@@ -47,7 +47,7 @@ export const fileRoutes = (ctx, req) => {
        * @param {number} max
        */
       const integer = (name, fallback, min, max) => {
-        const raw = consulta.get(name);
+        const raw = query.get(name);
         if (raw === null || raw === "") return fallback;
         const n = Number(raw);
         if (!Number.isSafeInteger(n) || n < min || n > max)
@@ -58,7 +58,7 @@ export const fileRoutes = (ctx, req) => {
       };
       const length = integer("length", 262144, 1, 1024 * 1024);
       const offset = integer("offset", 0, 0, Number.MAX_SAFE_INTEGER);
-      const part = await shared.chunk(consulta.get("id"), offset, length);
+      const part = await shared.chunk(query.get("id"), offset, length);
       return send(response, 200, {
         ...part.entry,
         offset: part.offset,
@@ -85,12 +85,12 @@ export const fileRoutes = (ctx, req) => {
       return send(response, 201, entry);
     },
     "POST /files/raw": async () => {
-      if (auth.isRoomAgent(request) && consulta.get("area") !== "de-agentes")
+      if (auth.isRoomAgent(request) && query.get("area") !== "de-agentes")
         throw new Failure("Las agentes solo pueden subir a «de-agentes».", 403);
       const entry = await shared.putStream({
-        area: consulta.get("area"),
-        name: consulta.get("name"),
-        note: consulta.get("note"),
+        area: query.get("area"),
+        name: query.get("name"),
+        note: query.get("note"),
         actor: actorOf(request),
         stream: request,
       });

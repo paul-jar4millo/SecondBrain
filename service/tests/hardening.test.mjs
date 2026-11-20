@@ -168,10 +168,10 @@ test("recupera solo la última línea truncada y compacta el journal", async (t)
       JSON.stringify(current) +
       '\n{"id":',
   );
-  const cola = await createApprovalQueue(dir, { reloj: () => 10000000003 });
-  t.after(() => cola.cerrar());
+  const queue = await createApprovalQueue(dir, { reloj: () => 10000000003 });
+  t.after(() => queue.cerrar());
   assert.deepEqual(
-    cola.listar().map((r) => r.id),
+    queue.listar().map((r) => r.id),
     ["reciente"],
   );
   assert.equal((await readFile(file, "utf8")).trim().split("\n").length, 1);
@@ -210,11 +210,11 @@ test("serializa guardados concurrentes de Mundo sin perder agentes", async (t) =
       agents: ["ambar", "menta", "lira", "marina"].map((id) => ({ id })),
     }),
   );
-  const mundo = createWorld(dir, Failure);
-  await mundo.configurarAgente({ id: "ambar", enabled: true, notes: "inicio" });
+  const world = createWorld(dir, Failure);
+  await world.configurarAgente({ id: "ambar", enabled: true, notes: "inicio" });
   await Promise.all(
     ["ambar", "menta", "lira", "marina"].map((id) =>
-      mundo.configurarAgente({ id, enabled: true, notes: id }),
+      world.configurarAgente({ id, enabled: true, notes: id }),
     ),
   );
   const data = JSON.parse(

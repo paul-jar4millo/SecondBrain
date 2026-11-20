@@ -27,9 +27,9 @@ export async function createApplication(options = {}) {
     auth,
     clients,
     watchers,
-    stopLanzadorEvents,
-    mcpRemoto,
-    aprobaciones,
+    stopLanzadorEvents: stopLauncherEvents,
+    mcpRemoto: mcpRemote,
+    aprobaciones: approvals,
     workOrders,
     userRequests,
     effects,
@@ -59,7 +59,7 @@ export async function createApplication(options = {}) {
         pathname.startsWith("/oauth/") ||
         pathname.startsWith("/.well-known/oauth-")
       ) {
-        if (await mcpRemoto.manejar(request, response, pathname)) return;
+        if (await mcpRemote.manejar(request, response, pathname)) return;
       }
       if (pathname.startsWith("/api/")) {
         response.setHeader("Cache-Control", "no-store");
@@ -81,12 +81,12 @@ export async function createApplication(options = {}) {
         );
         const consulta = new URL(request.url ?? "/", "http://localhost")
           .searchParams;
-        const accionEquipo = method === "POST" && TEAM_ACTION.exec(route);
-        if (accionEquipo)
+        const teamAction = method === "POST" && TEAM_ACTION.exec(route);
+        if (teamAction)
           return await handleTeamAction(
             context,
             { request, response, callerCap },
-            accionEquipo[1],
+            teamAction[1],
           );
         if (
           policy &&
@@ -146,11 +146,11 @@ export async function createApplication(options = {}) {
   const close = async () => {
     bridges.close();
     clearInterval(maintenance);
-    await aprobaciones.cerrar();
+    await approvals.cerrar();
     await effects.close();
     await userRequests.cerrar();
     await workOrders.close();
-    stopLanzadorEvents();
+    stopLauncherEvents();
     for (const watcher of watchers) watcher.close();
     context.cancelPendingChange();
     for (const client of clients) client.end();

@@ -5,11 +5,11 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
 /** Vault links read as their title: [[a/b-c|Name]] → Name, [[a/b-c]] → b c. */
-export function sinWikilinks(texto: string) {
-  return texto
+export function withoutWikilinks(text: string) {
+  return text
     .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
-    .replace(/\[\[([^\]]+)\]\]/g, (_, ruta: string) =>
-      ruta.split("/").at(-1)!.replace(/\.md$/, "").replace(/-/g, " "),
+    .replace(/\[\[([^\]]+)\]\]/g, (_, path: string) =>
+      path.split("/").at(-1)!.replace(/\.md$/, "").replace(/-/g, " "),
     );
 }
 
@@ -32,8 +32,11 @@ export function escapeCurrencyDollars(source: string): string {
 }
 
 /** Agent Markdown (results, daily note). Raw HTML is never rendered. */
-export function Markdown({ texto }: { texto: string }) {
-  const sinFrontmatter = texto.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+export function Markdown({ texto: text }: { texto: string }) {
+  const withoutFrontmatter = text.replace(
+    /^---\r?\n[\s\S]*?\r?\n---\r?\n?/,
+    "",
+  );
   return (
     <div className="markdown">
       <ReactMarkdown
@@ -48,7 +51,7 @@ export function Markdown({ texto }: { texto: string }) {
           ),
         }}
       >
-        {escapeCurrencyDollars(sinWikilinks(sinFrontmatter))}
+        {escapeCurrencyDollars(withoutWikilinks(withoutFrontmatter))}
       </ReactMarkdown>
     </div>
   );

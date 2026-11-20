@@ -343,20 +343,20 @@ function defaultEngineEntries(
             : "Sin verificación en este runtime (unknown/unverified)",
     });
     const isStale = states.probada && evidence.fresh === false;
-    let causaNoDisponible = null;
+    let unavailableCause = null;
     if (billedBlocked) {
-      causaNoDisponible =
+      unavailableCause =
         "DeepSeek bloqueado por la política de gasto sin autorización humana u operador validada";
     } else if (!states.instalada) {
-      causaNoDisponible = `Motor «${spec.id}» no instalado en el entorno`;
+      unavailableCause = `Motor «${spec.id}» no instalado en el entorno`;
     } else if (!states.configurada || !states.conectada) {
-      causaNoDisponible = spec.unavailableWhenNotConnected;
+      unavailableCause = spec.unavailableWhenNotConnected;
     } else if (!states.probada) {
-      causaNoDisponible = `Motor «${spec.id}» conectado, pendiente de prueba funcional observada (probada=false)`;
+      unavailableCause = `Motor «${spec.id}» conectado, pendiente de prueba funcional observada (probada=false)`;
     } else if (isStale) {
-      causaNoDisponible = `Evidencia de salud vencida para motor «${spec.id}»`;
+      unavailableCause = `Evidencia de salud vencida para motor «${spec.id}»`;
     } else if (!states.permitida) {
-      causaNoDisponible = `Motor «${spec.id}» no permitido por la política activa`;
+      unavailableCause = `Motor «${spec.id}» no permitido por la política activa`;
     }
     return {
       id: spec.id,
@@ -376,7 +376,7 @@ function defaultEngineEntries(
       states,
       evidence,
       usable: CATALOG_STATES.every((key) => states[key]) && !isStale,
-      causaNoDisponible,
+      causaNoDisponible: unavailableCause,
     };
   });
 }
@@ -567,19 +567,19 @@ function defaultConnectorEntries(
             : "Sin configuración o sin verificación de salud",
     });
     const isStale = states.probada && evidence.fresh === false;
-    let causaNoDisponible = null;
+    let unavailableCause = null;
     if (!states.instalada) {
-      causaNoDisponible = `Conector «${d.id}» no instalado`;
+      unavailableCause = `Conector «${d.id}» no instalado`;
     } else if (!states.configurada) {
-      causaNoDisponible = d.missingConfigReason;
+      unavailableCause = d.missingConfigReason;
     } else if (!states.conectada) {
-      causaNoDisponible = d.missingConnectReason;
+      unavailableCause = d.missingConnectReason;
     } else if (!states.probada) {
-      causaNoDisponible = `Conector «${d.id}» sin verificación funcional observada (probada=false)`;
+      unavailableCause = `Conector «${d.id}» sin verificación funcional observada (probada=false)`;
     } else if (isStale) {
-      causaNoDisponible = `Evidencia de salud vencida para «${d.id}»`;
+      unavailableCause = `Evidencia de salud vencida para «${d.id}»`;
     } else if (!states.permitida) {
-      causaNoDisponible =
+      unavailableCause =
         d.id === "external_dispatch"
           ? "El perfil activo no permite preparar efectos externos"
           : `No permitido en el perfil «${profile.id}»`;
@@ -603,7 +603,7 @@ function defaultConnectorEntries(
       states,
       evidence,
       usable: CATALOG_STATES.every((k) => states[k]) && !isStale,
-      causaNoDisponible,
+      causaNoDisponible: unavailableCause,
     };
   });
 }
@@ -921,17 +921,17 @@ export async function createToolCatalogStore({
               headers: { authorization: `Bearer ${token}` },
               signal: AbortSignal.timeout(probeTimeoutMs),
             });
-            const conectada = Boolean(healthRes.ok);
-            const probada = Boolean(healthRes.ok && filesRes.ok);
+            const connected = Boolean(healthRes.ok);
+            const tested = Boolean(healthRes.ok && filesRes.ok);
             const entry = {
               instalada: true,
               configurada: true,
-              conectada,
-              probada,
+              conectada: connected,
+              probada: tested,
               verifiedAt: nowIso,
               latencyMs: Date.now() - started,
               evidenceSource: "opt_in_healthcheck",
-              detail: probada
+              detail: tested
                 ? "Health check GET /health y GET /vault/files autenticados OK"
                 : `HTTP health=${healthRes.status} files=${filesRes.status}`,
             };
@@ -1015,7 +1015,7 @@ export async function createToolCatalogStore({
 
     /** @param {EvaluateCatalogOptions} [options] */
     evaluateCatalog({
-      motor = "codex",
+      motor: engine = "codex",
       profileId = "ejecucion",
       parentProfileId = null,
       memberId = null,
@@ -1041,7 +1041,7 @@ export async function createToolCatalogStore({
       const nowIso = clock();
       const nowMs = Date.parse(nowIso) || Date.now();
       const identity = {
-        motor,
+        motor: engine,
         profileId: profile.id,
         memberId,
         sessionId,
@@ -1091,7 +1091,7 @@ export async function createToolCatalogStore({
 
     /** @param {ResolveSkillsOptions} [options] */
     async resolveSkillsForTask({
-      motor = "codex",
+      motor: engine = "codex",
       profileId = "ejecucion",
       parentProfileId = null,
       taskType = "",
@@ -1101,7 +1101,7 @@ export async function createToolCatalogStore({
       verifiedOperatorBillingGrant = false,
     } = {}) {
       const evaluation = this.evaluateCatalog({
-        motor,
+        motor: engine,
         profileId,
         parentProfileId,
         cwd,
@@ -1179,7 +1179,7 @@ export async function createToolCatalogStore({
             inspected.valid &&
             missingMcps.length === 0 &&
             missingOps.length === 0;
-          const estado =
+          const state =
             spec.implemented === false
               ? "pendiente_fase"
               : usable
@@ -1197,7 +1197,7 @@ export async function createToolCatalogStore({
             requiredOperations: spec.requiredOperations,
             phaseDependency: spec.phaseDependency || null,
             usable,
-            estado,
+            estado: state,
             causaNoDisponible: usable ? null : reasons.join("; "),
             missingMcps,
             missingOperations: missingOps,
@@ -1221,7 +1221,7 @@ export async function createToolCatalogStore({
 
     /** @param {SkillMaterializationOptions} [options] @returns {Promise<SkillMaterialization>} */
     async materializeSkillsForSession({
-      motor = "agy",
+      motor: engine = "agy",
       profileId = "ejecucion",
       parentProfileId = null,
       skillIds = [],
@@ -1241,7 +1241,7 @@ export async function createToolCatalogStore({
         };
       }
       const resolution = await this.resolveSkillsForTask({
-        motor,
+        motor: engine,
         profileId,
         parentProfileId,
         skillIds,
@@ -1256,7 +1256,7 @@ export async function createToolCatalogStore({
       for (const skill of resolution.skills) {
         if (!skill.usable || !skill.file || !skill.sha256) {
           throw new Error(
-            `Skill "${skill.id}" no utilizable para sesión ${motor}: ${skill.causaNoDisponible || skill.estado}`,
+            `Skill "${skill.id}" no utilizable para sesión ${engine}: ${skill.causaNoDisponible || skill.estado}`,
           );
         }
         const sourcePath = path.join(skillsDir, skill.file);
@@ -1268,7 +1268,7 @@ export async function createToolCatalogStore({
           );
         }
         let targetSkillDir;
-        if (motor === "agy") {
+        if (engine === "agy") {
           const base = geminiDir || (cwd ? path.join(cwd, ".agents") : null);
           if (!base) {
             throw new Error(
@@ -1276,7 +1276,7 @@ export async function createToolCatalogStore({
             );
           }
           targetSkillDir = path.join(base, "skills", skill.id);
-        } else if (motor === "codex") {
+        } else if (engine === "codex") {
           const base = cwd ? path.join(cwd, ".agents") : codexHome;
           if (!base) {
             throw new Error(

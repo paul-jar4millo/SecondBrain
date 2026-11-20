@@ -41,13 +41,13 @@ export function ProjectRepository({
           value={links?.vinculos[projectId] || ""}
           disabled={!links || busy}
           onChange={async (event) => {
-            const repositorio = event.target.value || null;
+            const repository = event.target.value || null;
             setBusy(true);
             setError("");
             try {
               const next = (await teamApi("/agentes/espacios", {
                 id: projectId,
-                repositorio,
+                repositorio: repository,
                 revision: links!.revision,
               })) as ProjectLinks;
               setLinks(next);

@@ -1,7 +1,7 @@
 // Downloads of the refuge, in parallel, with one shared progress bar.
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { MODEL_NAMES, cargarTodos } from "./room-characters";
+import { MODEL_NAMES, loadAll } from "./room-characters";
 import { createLoadProgress } from "./room-quality";
 
 export function createRefugeLoad(onProgress: (percent: number) => void) {
@@ -47,8 +47,8 @@ export function createRefugeLoad(onProgress: (percent: number) => void) {
           })
           .then(step("plano")),
         loadRoomData().then(step("datos")),
-        cargarTodos((nombre: string, done: number, total: number) => {
-          progress.update(nombre, done, total);
+        loadAll((name: string, done: number, total: number) => {
+          progress.update(name, done, total);
           report();
         }).then((models) => {
           MODEL_NAMES.forEach((n) => progress.done(n));

@@ -26,95 +26,95 @@ const BASE_IDS = ["ambar", "menta", "lira", "marina"];
 export async function createRoom(dataDirectory, Failure) {
   // Optional reference bank (links only, no image copies). Without one the
   // board starts empty; see docs/modules/service.md for its format.
-  const bancoFile = process.env.SB_REFERENCE_BANK;
+  const bankFile = process.env.SB_REFERENCE_BANK;
   /** @type {ReferenceBank} */
-  const banco = bancoFile
-    ? JSON.parse(await readFile(bancoFile, "utf8"))
+  const banco = bankFile
+    ? JSON.parse(await readFile(bankFile, "utf8"))
     : { consultas: [], pines: [] };
-  const estadoFile = path.join(dataDirectory, "sala.json");
-  const leido = await readFile(estadoFile, "utf8").catch(
+  const stateFile = path.join(dataDirectory, "sala.json");
+  const read = await readFile(stateFile, "utf8").catch(
     /** @returns {null} */ () => null,
   );
   /** @type {SalaState} */
-  const previo = leido ? JSON.parse(leido) : {};
+  const previous = read ? JSON.parse(read) : {};
   // Map, no objeto: el id del espacio viene del cliente.
-  const espacios = new Map(Object.entries(previo.espacios || {}));
+  const spaces = new Map(Object.entries(previous.espacios || {}));
   // Formato anterior: un solo tablero, que pasa a la sala general.
-  if (previo.tablero && !espacios.has(GENERAL))
-    espacios.set(GENERAL, { tablero: previo.tablero });
+  if (previous.tablero && !spaces.has(GENERAL))
+    spaces.set(GENERAL, { tablero: previous.tablero });
   // Keep legacy custom figures on disk, but the world only has four base agents.
-  let agentes = previo.agentes || [];
-  const encargos = new Map(Object.entries(previo.encargos || {}));
+  let agentes = previous.agentes || [];
+  const tasks = new Map(Object.entries(previous.encargos || {}));
   /** @type {Map<string, Buffer>} */
-  const imagenes = new Map();
+  const images = new Map();
   /** @param {string | null} id */
   const pin = (id) => banco.pines.find((p) => p.id === id);
   /** @param {unknown} [id] */
-  const idEspacio = (id = GENERAL) => {
+  const spaceId = (id = GENERAL) => {
     if (typeof id !== "string" || !/^[\w-]{1,80}$/.test(id))
       throw new Failure("Espacio no válido.", 400);
     return id;
   };
-  /** @param {string} espacio */
-  const tableroDe = (espacio) => espacios.get(espacio)?.tablero || [];
+  /** @param {string} space */
+  const boardOf = (space) => spaces.get(space)?.tablero || [];
   let writes = Promise.resolve();
-  function guardarEstado() {
+  function saveState() {
     // Snapshot at mutation time; serialize temp writes and renames across requests.
     const content = JSON.stringify(
       {
-        espacios: Object.fromEntries(espacios),
+        espacios: Object.fromEntries(spaces),
         agentes,
-        encargos: Object.fromEntries(encargos),
+        encargos: Object.fromEntries(tasks),
       },
       null,
       2,
     );
     const writing = writes.then(async () => {
       await mkdir(dataDirectory, { recursive: true });
-      await writeFile(estadoFile + ".tmp", content);
-      await rename(estadoFile + ".tmp", estadoFile);
+      await writeFile(stateFile + ".tmp", content);
+      await rename(stateFile + ".tmp", stateFile);
     });
     writes = writing.catch(() => {});
     return writing;
   }
-  function resumen() {
+  function summary() {
     /** @type {Map<string, { agentes: number, tablero: number }>} */
-    const cuenta = new Map();
+    const account = new Map();
     /** @param {string} id */
     const de = (id) => {
-      let entry = cuenta.get(id);
-      if (!entry) cuenta.set(id, (entry = { agentes: 0, tablero: 0 }));
+      let entry = account.get(id);
+      if (!entry) account.set(id, (entry = { agentes: 0, tablero: 0 }));
       return entry;
     };
-    for (const [id, e] of espacios) de(id).tablero = e.tablero.length;
+    for (const [id, e] of spaces) de(id).tablero = e.tablero.length;
 
-    return Object.fromEntries(cuenta);
+    return Object.fromEntries(account);
   }
   return {
-    /** @param {unknown} [espacio] */
-    leer: (espacio) => {
-      const id = idEspacio(espacio ?? GENERAL);
+    /** @param {unknown} [space] */
+    leer: (space) => {
+      const id = spaceId(space ?? GENERAL);
       return {
         ...banco,
-        tablero: tableroDe(id),
+        tablero: boardOf(id),
         agentes: /** @type {never[]} */ ([]),
-        encargos: Object.fromEntries(encargos),
-        resumen: resumen(),
+        encargos: Object.fromEntries(tasks),
+        resumen: summary(),
       };
     },
     /** @param {{ id?: unknown, guardar?: unknown, espacio?: unknown }} input */
-    async guardar({ id, guardar, espacio }) {
-      const donde = idEspacio(espacio);
+    async guardar({ id, guardar: save, espacio: space }) {
+      const where = spaceId(space);
       if (typeof id !== "string" || !pin(id))
         throw new Failure("Referencia no encontrada.", 404);
-      const tablero = tableroDe(donde);
-      if (Boolean(guardar) === tablero.includes(id)) return tablero;
-      const nuevo = guardar
-        ? [id, ...tablero].slice(0, 200)
-        : tablero.filter((x) => x !== id);
-      espacios.set(donde, { tablero: nuevo });
-      await guardarEstado();
-      return nuevo;
+      const board = boardOf(where);
+      if (Boolean(save) === board.includes(id)) return board;
+      const created = save
+        ? [id, ...board].slice(0, 200)
+        : board.filter((x) => x !== id);
+      spaces.set(where, { tablero: created });
+      await saveState();
+      return created;
     },
     async crearAgente() {
       throw new Failure(
@@ -134,10 +134,10 @@ export async function createRoom(dataDirectory, Failure) {
         id,
         mode,
         instruction: text,
-        project: idEspacio(project),
+        project: spaceId(project),
       };
-      encargos.set(id, order);
-      await guardarEstado();
+      tasks.set(id, order);
+      await saveState();
       return order;
     },
     /** @param {{ id: string }} input */
@@ -145,7 +145,7 @@ export async function createRoom(dataDirectory, Failure) {
       if (!agentes.some((a) => a.id === id))
         throw new Failure("Agente no encontrada.", 404);
       agentes = agentes.filter((a) => a.id !== id);
-      await guardarEstado();
+      await saveState();
       return { id };
     },
     /**
@@ -155,29 +155,28 @@ export async function createRoom(dataDirectory, Failure) {
      */
     async imagen(id, response) {
       if (!id) throw new Failure("Referencia no encontrada.", 404);
-      const referencia = pin(id);
-      if (!referencia || !referencia.imagen.startsWith("https://i.pinimg.com/"))
+      const reference = pin(id);
+      if (!reference || !reference.imagen.startsWith("https://i.pinimg.com/"))
         throw new Failure("Referencia no encontrada.", 404);
-      if (!imagenes.has(id)) {
-        const remota = await fetch(referencia.imagen, {
+      if (!images.has(id)) {
+        const remote = await fetch(reference.imagen, {
           signal: AbortSignal.timeout(15000),
         });
-        if (!remota.ok)
+        if (!remote.ok)
           throw new Failure("Pinterest no entregó la imagen.", 502);
         const chunks = [];
         let size = 0;
-        for await (const chunk of remota.body ?? []) {
+        for await (const chunk of remote.body ?? []) {
           size += chunk.length;
           if (size > 5 * 1024 * 1024)
             throw new Failure("La imagen remota supera 5 MB.", 502);
           chunks.push(chunk);
         }
-        const oldest = imagenes.keys().next().value;
-        if (imagenes.size >= 120 && oldest !== undefined)
-          imagenes.delete(oldest);
-        imagenes.set(id, Buffer.concat(chunks));
+        const oldest = images.keys().next().value;
+        if (images.size >= 120 && oldest !== undefined) images.delete(oldest);
+        images.set(id, Buffer.concat(chunks));
       }
-      const imagen = /** @type {Buffer} */ (imagenes.get(id));
+      const imagen = /** @type {Buffer} */ (images.get(id));
       response.writeHead(200, {
         "Content-Type": "image/jpeg",
         "Content-Length": imagen.length,

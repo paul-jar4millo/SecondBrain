@@ -3,7 +3,7 @@ import type { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createThirdPersonCamera, followPlayer } from "./room-camera";
 import {
   AGENT_SPECS,
-  JUGADOR,
+  PLAYER,
   createCharacter,
   type SceneSpec,
 } from "./room-characters";
@@ -11,14 +11,14 @@ import {
   createNavigation,
   activityFor,
   interactionPrompt,
-  puestoPara,
+  spotFor,
   PUESTOS,
   normalizeOrder,
   ZONES,
   tourInstructions,
 } from "./room-life";
 import { dressWorld } from "./room-world";
-import { characterState, etiquetaRoster } from "./team-panel";
+import { characterState, rosterLabel } from "./team-panel";
 import { createOverlayStack } from "./room-overlays";
 import { createWorldBoards } from "./room-boards";
 import {
@@ -113,7 +113,7 @@ function readSavedQuality() {
   }
 }
 
-export function montar(
+export function mount(
   root: HTMLElement,
   {
     api,
@@ -123,7 +123,7 @@ export function montar(
     openTeam: showTeam,
     irAEspacio = () => {},
     datos,
-    aprobaciones: aprobar,
+    aprobaciones: approve,
   }: RoomOptions,
 ) {
   // HTTP input is validated by the server; keep transport decoding at one boundary.
@@ -230,16 +230,16 @@ export function montar(
     stats: RoomStats | null = null;
   let realState: AgentsState | null = null;
   let copiasDeseadas: CopiaObservada[] = [];
-  let crearActor:
+  let createActor:
     ((spec: Spec, x: number, z: number) => Promise<Actor | null>) | null = null;
-  const copiasEnCreacion = new Set<string>();
+  const copiesInProgress = new Set<string>();
   // Teams: seats around a table, light threads, real handoffs and pending OKs.
   let puestosEq = new Map<string, TeamSeat>();
   let esperandoOk = new Set<string>();
-  let aprobacionesVivas: ObservedApproval[] = [];
-  let leyendoAprobaciones = false,
-    ultimaLecturaAprobaciones = 0;
-  const relevosVistos = new Set<string>();
+  let liveApprovals: ObservedApproval[] = [];
+  let readingApprovals = false,
+    lastApprovalsRead = 0;
+  const seenRelays = new Set<string>();
   let relevosIniciados = false;
   let hilos: ReturnType<typeof createThreads> | null = null;
   let hilosDeseados: { de: string; a: string }[] = [];
@@ -275,10 +275,8 @@ export function montar(
     if (esperandoOk.has(id)) return "Esperando tu OK";
     const live = liveAgent(id);
     return (
-      etiquetaRoster(
-        live ? sceneState(live) : null,
-        activities.get(id) || "",
-      ) || "En descanso"
+      rosterLabel(live ? sceneState(live) : null, activities.get(id) || "") ||
+      "En descanso"
     );
   };
   const paintStatus = (id: string) => {
@@ -480,12 +478,12 @@ export function montar(
         cycles.get(id),
       );
     if (cue) {
-      const puesto = puestoPara(id, {
+      const puesto = spotFor(id, {
         fase: cue.fase || live?.ultimo?.fase,
         zona: cue.zona,
       });
-      const copia = Number(id.split("#")[1] || 0);
-      if (copia) puesto.x += copia * 0.65;
+      const copy = Number(id.split("#")[1] || 0);
+      if (copy) puesto.x += copy * 0.65;
       activity = { ...activity, ...puesto, label: cue.etiqueta };
       // A team sits together around one table, facing it.
       const seat = puestosEq.get(id);
@@ -806,32 +804,32 @@ export function montar(
     releaseActor(actor);
     actors = actors.filter((a) => a !== actor);
   }
-  function conciliarActores() {
-    if (!loaded || !crearActor) return;
+  function reconcileActors() {
+    if (!loaded || !createActor) return;
     const actuales = actors
       .filter((a) => a.spec.id.includes("#"))
       .map((a) => a.spec.id);
-    const { crear, retirar } = conciliarCopias(
-      [...actuales, ...copiasEnCreacion],
+    const { crear: create, retirar } = conciliarCopias(
+      [...actuales, ...copiesInProgress],
       copiasDeseadas.map((c) => c.id),
     );
     for (const id of retirar) {
       const actor = actors.find((a) => a.spec.id === id);
       if (actor) retirarActor(actor);
     }
-    for (const id of crear) {
-      const copia = copiasDeseadas.find((c) => c.id === id)!;
-      const original = AGENT_SPECS.find((a) => a.id === copia.baseId);
+    for (const id of create) {
+      const copy = copiasDeseadas.find((c) => c.id === id)!;
+      const original = AGENT_SPECS.find((a) => a.id === copy.baseId);
       if (!original) continue;
       const variar = (color: string) =>
         "#" +
         new THREE.Color(color)
-          .offsetHSL((copia.copia * 0.19) % 1, 0, 0)
+          .offsetHSL((copy.copia * 0.19) % 1, 0, 0)
           .getHexString();
       const spec = {
         ...original,
         id,
-        nombre: `${original.nombre} · ${copia.copia + 1}`,
+        nombre: `${original.nombre} · ${copy.copia + 1}`,
         color: variar(original.color),
         colores: Object.fromEntries(
           Object.entries(original.colores as Record<string, string>).map(
@@ -839,12 +837,12 @@ export function montar(
           ),
         ),
       };
-      const origen = activityFor(original.id);
-      copiasEnCreacion.add(id);
-      const fabrica = crearActor;
-      void fabrica(spec, origen.x + copia.copia * 0.7, origen.z)
+      const origin = activityFor(original.id);
+      copiesInProgress.add(id);
+      const fabrica = createActor;
+      void fabrica(spec, origin.x + copy.copia * 0.7, origin.z)
         .then((actor) => {
-          if (crearActor === fabrica) copiasEnCreacion.delete(id);
+          if (createActor === fabrica) copiesInProgress.delete(id);
           if (!actor) return;
           if (!alive || !loaded || !copiasDeseadas.some((c) => c.id === id)) {
             scene.remove(actor.raiz);
@@ -863,14 +861,14 @@ export function montar(
           if (realState) syncAgents(realState);
         })
         .catch(() => {
-          if (crearActor === fabrica) copiasEnCreacion.delete(id);
+          if (createActor === fabrica) copiesInProgress.delete(id);
         });
     }
   }
   function teardownWorld() {
     loaded = false;
-    crearActor = null;
-    copiasEnCreacion.clear();
+    createActor = null;
+    copiesInProgress.clear();
     cancelAnimationFrame(frame);
     clearTimeout(pausedLoop);
     observer?.disconnect();
@@ -992,8 +990,8 @@ export function montar(
           remaining: 1,
         };
       };
-      crearActor = make;
-      player = await make(JUGADOR, 1, 3);
+      createActor = make;
+      player = await make(PLAYER, 1, 3);
       if (!player) return;
       const previousPlayerPosition = player.raiz.position.clone();
       for (const spec of AGENT_SPECS) {
@@ -1010,7 +1008,7 @@ export function montar(
       if (!alive || attempt !== startAttempt) return;
       loaded = true;
       if (realState) syncAgents(realState);
-      conciliarActores();
+      reconcileActors();
       hideStatus();
       paintTour();
       if (
@@ -1222,7 +1220,7 @@ export function montar(
         hilos: hilos?.claves() || [],
         hilosVisibles: hilos?.visibles() || 0,
         esperandoOk: actors.filter((a) => a.okTag).map((a) => a.spec.id),
-        relevos: [...relevosVistos],
+        relevos: [...seenRelays],
       }),
     };
   const syncTeam = () => {
@@ -1230,28 +1228,28 @@ export function montar(
     const observadas =
       snapshot.sessions === null ? null : sceneSessions(snapshot.sessions);
     copiasDeseadas = observadas?.copias || [];
-    const equipos = sceneTeams(snapshot.sessions || []);
-    puestosEq = teamSeats(equipos.grupos);
-    hilosDeseados = equipos.hilos;
+    const teams = sceneTeams(snapshot.sessions || []);
+    puestosEq = teamSeats(teams.grupos);
+    hilosDeseados = teams.hilos;
     hilos?.sincronizar(hilosDeseados);
     // Handoffs come from what the launcher recorded; nothing is invented or fetched.
-    const reales = newHandoffs(snapshot.sessions || [], relevosVistos);
-    for (const id of reales.ids) relevosVistos.add(id);
-    const ultimo = reales.nuevos.at(-1);
-    if (ultimo && relevosIniciados)
+    const reales = newHandoffs(snapshot.sessions || [], seenRelays);
+    for (const id of reales.ids) seenRelays.add(id);
+    const last = reales.nuevos.at(-1);
+    if (last && relevosIniciados)
       playRelay({
-        ...ultimo,
+        ...last,
         tipo: "relevo",
         texto:
-          ultimo.tipo === "entregable"
+          last.tipo === "entregable"
             ? "entregable del equipo"
             : "mensaje del equipo",
       });
     relevosIniciados = snapshot.sessions !== null;
-    leerAprobaciones();
+    readApprovals();
     const shown = sceneFromSnapshot(snapshot, observadas);
     syncAgents(shown.agents, shown.team);
-    conciliarActores();
+    reconcileActors();
     let read: string[] = [];
     try {
       read = JSON.parse(localStorage.getItem("sb-sala-leidos-v1") || "[]");
@@ -1264,37 +1262,32 @@ export function montar(
       : "4";
   };
   // The service already lists approvals for the panel; the scene only reads them.
-  function leerAprobaciones() {
+  function readApprovals() {
     const now = Date.now();
-    if (
-      !aprobar ||
-      leyendoAprobaciones ||
-      now - ultimaLecturaAprobaciones < 2000
-    )
-      return;
-    leyendoAprobaciones = true;
-    ultimaLecturaAprobaciones = now;
-    void aprobar()
-      .then((lista) => {
-        if (alive && Array.isArray(lista))
-          aprobacionesVivas = lista as ObservedApproval[];
+    if (!approve || readingApprovals || now - lastApprovalsRead < 2000) return;
+    readingApprovals = true;
+    lastApprovalsRead = now;
+    void approve()
+      .then((list) => {
+        if (alive && Array.isArray(list))
+          liveApprovals = list as ObservedApproval[];
       })
       .catch(() => {
         /* Keeps the last list; the panel reports the failure. */
       })
       .finally(() => {
-        leyendoAprobaciones = false;
+        readingApprovals = false;
         if (alive) refrescarOk();
       });
   }
   function refrescarOk() {
-    const siguiente = figurasEsperandoOk(aprobacionesVivas, Date.now());
+    const next = figurasEsperandoOk(liveApprovals, Date.now());
     if (
-      siguiente.size === esperandoOk.size &&
-      [...siguiente].every((id) => esperandoOk.has(id))
+      next.size === esperandoOk.size &&
+      [...next].every((id) => esperandoOk.has(id))
     )
       return;
-    esperandoOk = siguiente;
+    esperandoOk = next;
     syncOk();
   }
   // Expiry is local: the bubble leaves when the deadline passes, without a request.

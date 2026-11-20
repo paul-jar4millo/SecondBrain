@@ -33,60 +33,60 @@ export interface ObservedApproval {
   vence: number;
 }
 
-const ACTIVA = new Set(["pendiente", "trabajando"]);
+const ACTIVE = new Set(["pendiente", "trabajando"]);
 // Worktables used by teams, in order; far from the spawn point and the Terrace.
 const MESAS = ["revisar", "investigar", "programar", "planificar"];
 const RADIO = 2;
 
-const activas = (sesiones: ObservedSession[]) =>
-  sesiones.filter((s) => ACTIVA.has(s.estado) && sessionFigure(s));
+const active = (sessions: ObservedSession[]) =>
+  sessions.filter((s) => ACTIVE.has(s.estado) && sessionFigure(s));
 
 /** Teams with at least two live figures, and one thread per live child. */
-export function sceneTeams(sesiones: ObservedSession[]): {
+export function sceneTeams(sessions: ObservedSession[]): {
   grupos: TeamGroup[];
   hilos: Thread[];
 } {
-  const vivas = activas(sesiones).filter((s) => s.equipoId);
-  const porEquipo = new Map<string, ObservedSession[]>();
+  const vivas = active(sessions).filter((s) => s.equipoId);
+  const byTeam = new Map<string, ObservedSession[]>();
   for (const s of vivas) {
-    const lista = porEquipo.get(s.equipoId!) || [];
-    lista.push(s);
-    porEquipo.set(s.equipoId!, lista);
+    const list = byTeam.get(s.equipoId!) || [];
+    list.push(s);
+    byTeam.set(s.equipoId!, list);
   }
-  const grupos: TeamGroup[] = [];
+  const groups: TeamGroup[] = [];
   const hilos: Thread[] = [];
-  for (const [equipoId, miembros] of porEquipo) {
-    if (miembros.length < 2) continue;
+  for (const [teamId, members] of byTeam) {
+    if (members.length < 2) continue;
     const orden = [
-      ...miembros.filter((s) => !s.padreId),
-      ...miembros.filter((s) => s.padreId),
+      ...members.filter((s) => !s.padreId),
+      ...members.filter((s) => s.padreId),
     ];
-    grupos.push({
-      equipoId,
+    groups.push({
+      equipoId: teamId,
       miembros: orden.map((s) => sessionFigure(s)!),
     });
-    for (const hija of miembros) {
-      const padre = miembros.find((s) => s.id === hija.padreId);
-      if (padre)
+    for (const hija of members) {
+      const parent = members.find((s) => s.id === hija.padreId);
+      if (parent)
         hilos.push({
-          equipoId,
-          de: sessionFigure(padre)!,
+          equipoId: teamId,
+          de: sessionFigure(parent)!,
           a: sessionFigure(hija)!,
           hijaSesionId: hija.id,
         });
     }
   }
-  return { grupos, hilos };
+  return { grupos: groups, hilos };
 }
 
 const redondear = (n: number) => Math.round(n * 1000) / 1000;
 
 /** Seats every member of each team around one worktable, facing it. */
-export function teamSeats(grupos: TeamGroup[]) {
+export function teamSeats(groups: TeamGroup[]) {
   const puestos = new Map<string, TeamSeat>();
-  grupos.forEach((grupo, i) => {
-    const mesa = MESAS[i % MESAS.length];
-    const centro = PUESTOS[mesa];
+  groups.forEach((grupo, i) => {
+    const table = MESAS[i % MESAS.length];
+    const centro = PUESTOS[table];
     const n = grupo.miembros.length;
     grupo.miembros.forEach((figura, k) => {
       const t = Math.PI / 2 + (k * 2 * Math.PI) / n;
@@ -96,7 +96,7 @@ export function teamSeats(grupos: TeamGroup[]) {
         x: redondear(x),
         z: redondear(z),
         angle: redondear(Math.atan2(centro.x - x, centro.z - z)),
-        mesa,
+        mesa: table,
       });
     });
   });
@@ -108,13 +108,13 @@ export function teamSeats(grupos: TeamGroup[]) {
  * ends must be live figures; every id seen is returned so it is never replayed.
  */
 export function newHandoffs(
-  sesiones: ObservedSession[],
+  sessions: ObservedSession[],
   vistos: ReadonlySet<string>,
 ): { nuevos: RelevoReal[]; ids: string[] } {
-  const vivas = activas(sesiones);
+  const vivas = active(sessions);
   const ids: string[] = [];
-  const nuevos: RelevoReal[] = [];
-  for (const s of sesiones) {
+  const created: RelevoReal[] = [];
+  for (const s of sessions) {
     const r = s.relevo;
     if (!r?.id) continue;
     ids.push(r.id);
@@ -122,25 +122,22 @@ export function newHandoffs(
     const de = vivas.find((x) => x.id === s.id);
     const para = vivas.find((x) => x.id === r.para);
     if (de && para && de !== para)
-      nuevos.push({
+      created.push({
         id: r.id,
         tipo: r.tipo,
         de: sessionFigure(de)!,
         para: sessionFigure(para)!,
       });
   }
-  return { nuevos, ids };
+  return { nuevos: created, ids };
 }
 
 /** Base figures whose agent has an approval still pending (not expired). */
-export function figurasEsperandoOk(
-  aprobaciones: ObservedApproval[],
-  ahora: number,
-) {
+export function figurasEsperandoOk(approvals: ObservedApproval[], now: number) {
   const ids = new Set<string>();
-  for (const a of aprobaciones) {
+  for (const a of approvals) {
     const m = /^agente:(ambar|menta|lira|marina)$/.exec(a.actor || "");
-    if (m && a.estado === "pendiente" && a.vence > ahora) ids.add(m[1]);
+    if (m && a.estado === "pendiente" && a.vence > now) ids.add(m[1]);
   }
   return ids;
 }
