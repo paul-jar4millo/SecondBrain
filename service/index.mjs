@@ -1,4 +1,3 @@
-import { once } from "node:events";
 import { randomUUID } from "node:crypto";
 import { routePolicy } from "./routes.mjs";
 import http from "node:http";
@@ -11,11 +10,7 @@ import { acquireInstance } from "./instance.mjs";
 import { hash } from "./vault.mjs";
 import { actorContext, Failure, stableId } from "./vault.mjs";
 
-import {
-  MOTOR_ACTOR,
-  intersectList,
-  intersectProfileBounds,
-} from "./agent-profiles.mjs";
+import { MOTOR_ACTOR, intersectProfileBounds } from "./agent-profiles.mjs";
 
 import { sendItems } from "./http-items.mjs";
 
@@ -23,6 +18,7 @@ import { operationalStatus } from "./operational-status.mjs";
 
 import { body, send, validateNotePath } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
+import { agentSessionRoutes } from "./http/routes/agents-sessions.mjs";
 import { agentToolRoutes } from "./http/routes/agents-tools.mjs";
 import { agentConversationRoutes } from "./http/routes/agents-conversation.mjs";
 import { workOrderRoutes } from "./http/routes/work-orders.mjs";
@@ -67,7 +63,6 @@ export async function createApplication(options = {}) {
     sesionesLanzador,
     runStoreOp,
     resolveServerProfile,
-    hasVerifiedBillingGrant,
     assertAgentCapabilityForRoute,
     bridges,
     actorOf,
@@ -376,6 +371,7 @@ export async function createApplication(options = {}) {
         const req = { request, response, consulta, required, callerCap };
         /** @type {Partial<Record<string, () => Promise<unknown>>>} */
         const routes = {
+          ...agentSessionRoutes(context, req),
           ...agentToolRoutes(context, req),
           ...agentConversationRoutes(context, req),
           ...workOrderRoutes(context, req),
@@ -402,257 +398,6 @@ export async function createApplication(options = {}) {
                 runtimeLauncherFile: "/run/secondbrain-launcher-release",
               }),
             });
-          },
-          "GET /agentes/sesiones": async () => {
-            const sesiones = await lanzador.leer();
-            // Long transcripts are only read when a conversation is open; the
-            // scene and the lists ask for this light version every few seconds.
-            return send(
-              response,
-              200,
-              consulta.has("resumen") && Array.isArray(sesiones)
-                ? sesiones.map(({ mensajes: _m, resultado: _r, ...s }) => s)
-                : sesiones,
-            );
-          },
-          "GET /agentes/espacios": async () =>
-            send(response, 200, await lanzador.espacios()),
-          "POST /agentes/espacios": async () =>
-            send(response, 200, await lanzador.espacios(await body(request))),
-          "GET /agentes/conversacion/stream": async () =>
-            routes["GET /agentes/terminal/stream"]?.(),
-          "GET /agentes/terminal/stream": async () => {
-            // The launcher's SSE goes through untouched: no buffering, and
-            // either side closing ends the other. The browser retries.
-            const origen = new AbortController();
-            const cortar = () => origen.abort();
-            response.on("close", cortar);
-            const upstream = await lanzador.flujo(
-              consulta.get("id"),
-              origen.signal,
-              route === "/agentes/conversacion/stream",
-            );
-            response.writeHead(200, {
-              "Content-Type": "text/event-stream; charset=utf-8",
-              "Cache-Control": "no-cache, no-transform",
-              Connection: "keep-alive",
-              "X-Accel-Buffering": "no",
-            });
-            response.flushHeaders?.();
-            // A session that ends (logout, expiry) must not keep a stream open.
-            const vigilar = setInterval(() => {
-              if (!auth.authenticated(request)) origen.abort();
-            }, 20000);
-            vigilar.unref();
-            try {
-              for await (const chunk of upstream.body ?? []) {
-                if (response.destroyed) break;
-                if (!response.write(chunk)) await once(response, "drain");
-              }
-            } catch {
-              /* either side closed */
-            } finally {
-              clearInterval(vigilar);
-              response.off("close", cortar);
-              origen.abort();
-              response.end();
-            }
-          },
-          "POST /agentes/terminal/entrada": async () =>
-            send(response, 200, await lanzador.entrada(await body(request))),
-          "GET /agentes/sesiones/diff": async () =>
-            send(
-              response,
-              200,
-              await lanzador.diff({
-                id: required("id"),
-                desde: consulta.get("desde") ?? undefined,
-                hasta: consulta.get("hasta") ?? undefined,
-              }),
-            ),
-          "GET /agentes/sesiones/pr/propuesta": async () =>
-            send(response, 200, await lanzador.propuestaPr(consulta.get("id"))),
-          "POST /agentes/sesiones/revertir": async () =>
-            send(response, 200, await lanzador.revertir(await body(request))),
-          "POST /agentes/sesiones/pr": async () =>
-            send(response, 200, await lanzador.pr(await body(request))),
-          "POST /agentes/sesiones/pr/redactar": async () =>
-            send(
-              response,
-              200,
-              await lanzador.redactarPr((await body(request)).id),
-            ),
-          "GET /agentes/proyectos-lanzador": async () => {
-            return send(response, 200, await lanzador.proyectos());
-          },
-          "GET /agentes/modelos-lanzador": async () => {
-            return send(response, 200, await lanzador.modelos());
-          },
-          "GET /agentes/uso": async () =>
-            send(response, 200, await lanzador.uso()),
-          "POST /agentes/sesiones": async () => {
-            const payload = await body(request);
-            if (payload.continuar) {
-              const { billingAuthorized: _ignored, ...safeCont } = payload;
-              const session = await lanzador.encargar(safeCont);
-              return send(response, 202, session);
-            }
-            const billingGrantVerified = hasVerifiedBillingGrant({
-              billingApprovalId: payload.billingApprovalId,
-              fromAgent: false,
-            });
-            if (
-              payload.motor === "deepseek" &&
-              !billingGrantVerified &&
-              process.env.SB_ALLOW_BILLED_DEEPSEEK !== "1"
-            ) {
-              throw new Failure(
-                "DeepSeek bloqueado por la política de gasto sin autorización verificada de gasto.",
-                403,
-              );
-            }
-            let parentCoordProfile = null;
-            let memberAssignedProfileId = payload.toolProfileId || "ejecucion";
-            let manifestFields = {};
-            if (payload.workOrderId) {
-              const wo = workOrders.get(payload.workOrderId);
-              if (!wo) throw new Failure("Encargo no encontrado.", 404);
-              // A started work order fixes model, effort and role from its
-              // frozen manifest; a draft keeps the single-agent F2 path, and
-              // its sessions cannot delegate until the order is started.
-              if (wo.manifest)
-                manifestFields = {
-                  manifest: wo.manifest,
-                  manifestSha256: wo.manifest.sha256,
-                };
-              {
-                const coord = wo.team?.find((m) => m.coordinator);
-                if (coord?.toolProfileId) {
-                  parentCoordProfile = await resolveServerProfile(
-                    coord.toolProfileId,
-                  );
-                }
-                const targetMember = payload.memberId
-                  ? wo.team?.find(
-                      (m) =>
-                        m.id === payload.memberId ||
-                        m.characterId === payload.memberId,
-                    )
-                  : null;
-                if (targetMember?.toolProfileId) {
-                  memberAssignedProfileId = payload.toolProfileId
-                    ? (
-                        await resolveServerProfile(
-                          payload.toolProfileId,
-                          await resolveServerProfile(
-                            targetMember.toolProfileId,
-                          ),
-                        )
-                      ).id
-                    : targetMember.toolProfileId;
-                }
-              }
-            }
-            const requestedProfile = await resolveServerProfile(
-              memberAssignedProfileId,
-              parentCoordProfile,
-            );
-            if (options.operatorToolPolicy?.allowedOperations) {
-              requestedProfile.allowedOperations = intersectList(
-                requestedProfile.allowedOperations,
-                options.operatorToolPolicy.allowedOperations,
-              );
-            }
-            if (options.operatorToolPolicy?.allowedMcps) {
-              requestedProfile.allowedMcps = intersectList(
-                requestedProfile.allowedMcps,
-                options.operatorToolPolicy.allowedMcps,
-              );
-            }
-            const preassignedSessionId = randomUUID();
-            const sessionActor = MOTOR_ACTOR[payload.motor] || null;
-            const minted = await auth.issueCapability({
-              sessionId: preassignedSessionId,
-              workOrderId: payload.workOrderId ?? null,
-              memberId:
-                payload.memberId || sessionActor || preassignedSessionId,
-              actor: sessionActor,
-              profileId: requestedProfile.id,
-              allowedMcps: requestedProfile.allowedMcps,
-              allowedOperations: requestedProfile.allowedOperations,
-              allowedEffectCategories: requestedProfile.allowedEffectCategories,
-              allowBilledApi: Boolean(billingGrantVerified),
-              canDelegateBeyondSelf: false,
-              depth: 1,
-              maxDepth: 2,
-            });
-            let session;
-            try {
-              const { billingAuthorized: _ignoredBilling, ...restPayload } =
-                payload;
-              session = await lanzador.encargar({
-                ...restPayload,
-                ...manifestFields,
-                id: preassignedSessionId,
-                toolProfileId: requestedProfile.id,
-                effectiveProfile: requestedProfile,
-                capabilityToken: minted.token,
-                billingGrantVerified,
-                billingAuthorized: Boolean(billingGrantVerified),
-              });
-              if (session?.id && session.id !== preassignedSessionId) {
-                await auth.bindCapabilitySession(minted.record.id, session.id, {
-                  rebind: true,
-                });
-              }
-            } catch (err) {
-              await auth.revokeCapability({ tokenId: minted.record.id });
-              throw err;
-            }
-            const targetWo = payload.workOrderId || session?.workOrderId;
-            if (session?.structured && targetWo && session?.id) {
-              bridges.bridge(
-                session.id,
-                targetWo,
-                session.memberId || payload.memberId || session.motor,
-              );
-            }
-            if (targetWo && session?.id) {
-              await runStoreOp(() =>
-                workOrders.appendEvent(targetWo, {
-                  sourceId:
-                    session.memberId || payload.memberId || actorOf(request),
-                  sessionId: session.id,
-                  idempotencyKey: `wo-session:${session.id}`,
-                  type: "member.status",
-                  provenance: "observed",
-                  payload: {
-                    memberId: session.memberId || null,
-                    motor: session.motor,
-                    modelo: session.modelo || null,
-                    esfuerzo: session.esfuerzo || null,
-                    role: session.role || null,
-                    status: session.estado,
-                    workspaceKind: session.workspaceKind || null,
-                    enColaRecursos: Boolean(session.enColaRecursos),
-                  },
-                }),
-              ).catch(() => {});
-            }
-            return send(response, 202, session);
-          },
-          "POST /agentes/sesiones/cancelar": async () => {
-            return send(
-              response,
-              202,
-              await lanzador.cancelar((await body(request)).id),
-            );
-          },
-          "POST /agentes/sesiones/eliminar": async () => {
-            const targetId = (await body(request)).id;
-            const out = await lanzador.eliminar(targetId);
-            await auth.revokeCapability({ sessionId: targetId });
-            return send(response, 200, out);
           },
           "GET /vault/files": async () => {
             return send(response, 200, await vault.files());
