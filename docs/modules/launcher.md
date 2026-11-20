@@ -73,3 +73,17 @@ Closing (`engine/closing.ts`, `POST /threads/:id/close` with `mode`
 
 The daily summary (`ops/launcher/resumen-matutino.sh`) opens a scratch
 thread for Marina with `POST /threads`.
+
+## End-to-end check
+
+`ops/verify-runtime.mjs --live --repo <project> [--engine codex]` drives a
+running launcher with a real agent: a repo thread, a turn that writes a
+file, a steer while the next turn runs, the diff, a local merge into the
+base branch, archive, and no worktree or branch left behind. It spends the
+agent's quota and merges into the project, so `<project>` must be a
+throwaway repository. On the LXC it runs as root, which can read the
+control token:
+
+```sh
+node verify-runtime.mjs --live --repo <project> --engine codex
+```

@@ -979,6 +979,8 @@ export function createThreadEngine(deps: EngineDeps) {
         else if (mode === "merge" && repo && closing)
           await closing.mergeLocal(repo, message);
         if (mode !== "pr") {
+          // The agent runs inside the worktree: stop it before removing it.
+          await stopController(threadId);
           if (repo)
             await workspaces.removeRepo({
               path: repo.path,
@@ -988,8 +990,7 @@ export function createThreadEngine(deps: EngineDeps) {
             });
           else if (thread.workspace)
             await workspaces.removeScratch(thread.workspace);
-        }
-        await stopController(threadId);
+        } else await stopController(threadId);
         if (mode !== "pr") await context.dropToken?.(threadId);
         appendItem(threadId, null, {
           kind: "notice",
@@ -1030,6 +1031,7 @@ export function createThreadEngine(deps: EngineDeps) {
           "Detén el turno en curso antes de archivar el thread.",
         );
       live(threadId).queue.length = 0;
+      await stopController(threadId);
       if (thread.repo)
         await workspaces
           .removeRepo({
@@ -1039,7 +1041,6 @@ export function createThreadEngine(deps: EngineDeps) {
             keepBranch: Boolean(thread.prUrl),
           })
           .catch(() => undefined);
-      await stopController(threadId);
       await context.dropToken?.(threadId);
       update(threadId, { status: "archived" });
       return requireThread(threadId);
