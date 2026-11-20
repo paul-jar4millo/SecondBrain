@@ -2,6 +2,7 @@
 // thread (running turn, queued messages, provider controller, open provider
 // requests) and writes every change to the event store.
 import {
+  AgentQuestion,
   AnswerRequest,
   CloseThread,
   CreateThread,
@@ -12,6 +13,7 @@ import {
   type Attachment,
   type DeliveryMode,
   type FileDiff,
+  type RequestAnswer,
   type Item,
   type NewThreadEvent,
   type StreamMessage,
@@ -56,6 +58,27 @@ export interface AgentContextFactory {
     onOutput: (chunk: string) => void;
   }): Promise<number | null>;
   stopScope?(threadId: string): Promise<void>;
+  /** Stores the thread's sbcap_ credential for its MCP servers. */
+  saveToken?(threadId: string, token: string): Promise<void>;
+  dropToken?(threadId: string): Promise<void>;
+}
+
+/** What the agent reads when the owner answers after its turn ended. */
+export function answerText(request: UserRequest, answer: RequestAnswer) {
+  const parts: string[] = [];
+  if (answer.optionId)
+    parts.push(
+      request.options?.find((o) => o.id === answer.optionId)?.label ??
+        answer.optionId,
+    );
+  if (answer.text) parts.push(answer.text);
+  for (const [key, value] of Object.entries(answer.values ?? {}))
+    parts.push(
+      `${request.fields?.find((f) => f.id === key)?.label ?? key}: ${String(value)}`,
+    );
+  if (answer.approved !== undefined)
+    parts.push(answer.approved ? "Aprobado" : "Rechazado");
+  return `Respuesta a «${request.title}» (${request.id}):\n${parts.join("\n")}`;
 }
 
 export interface EngineDeps {
@@ -360,6 +383,12 @@ export function createThreadEngine(deps: EngineDeps) {
     });
   };
 
+  const hasOpenRequests = (threadId: string) =>
+    store.requests(threadId).some((r) => r.status === "open");
+
+  const agentRequestIds = (threadId: string) =>
+    new Set(store.meta(threadId).agentRequests ?? []);
+
   const finishStatus = (threadId: string) => {
     const thread = requireThread(threadId);
     if (BUSY_STATUSES.has(thread.status)) return;
@@ -367,7 +396,9 @@ export function createThreadEngine(deps: EngineDeps) {
       threadId,
       thread.counters.turns >= thread.limits.maxTurns
         ? "needs-decision"
-        : "idle",
+        : hasOpenRequests(threadId)
+          ? "waiting-user"
+          : "idle",
     );
   };
 
@@ -626,8 +657,12 @@ export function createThreadEngine(deps: EngineDeps) {
 
   const engine = {
     async create(input: unknown): Promise<Thread> {
+      const { capabilityToken, threadId, ...fields } = (input ?? {}) as Record<
+        string,
+        unknown
+      >;
       const parsed = CreateThread.safeParse({
-        ...(input as object),
+        ...fields,
         type: "CreateThread",
       });
       if (!parsed.success)
@@ -636,7 +671,19 @@ export function createThreadEngine(deps: EngineDeps) {
           parsed.error.issues[0]?.message ?? "Datos inválidos.",
         );
       const command = parsed.data;
-      const id = newId("thread");
+      // The service may choose the id, so the thread's credential is bound
+      // to it before the first turn starts.
+      let id = newId("thread");
+      if (threadId !== undefined) {
+        if (
+          typeof threadId !== "string" ||
+          !/^thr_[0-9A-Za-z_-]{6,64}$/.test(threadId)
+        )
+          throw new EngineError("invalid", "Identificador de thread inválido.");
+        if (store.getThread(threadId))
+          throw new EngineError("conflict", "El thread ya existe.");
+        id = threadId;
+      }
       const title = (
         command.title ??
         command.prompt.split("\n").find((l) => l.trim()) ??
@@ -665,6 +712,11 @@ export function createThreadEngine(deps: EngineDeps) {
         };
         store.setMeta(id, { baseCommit: info.baseCommit });
       } else workspace = await workspaces.prepareScratch(id);
+      if (
+        typeof capabilityToken === "string" &&
+        /^sbcap_[a-f0-9]{16,128}$/.test(capabilityToken)
+      )
+        await context.saveToken?.(id, capabilityToken);
       const at = now();
       const thread: Thread = {
         id,
@@ -807,6 +859,32 @@ export function createThreadEngine(deps: EngineDeps) {
         throw new EngineError("conflict", "La solicitud ya fue respondida.");
       const state = live(threadId);
       const pending = state.pending.get(requestId);
+      if (!pending && agentRequestIds(threadId).has(requestId)) {
+        append(threadId, [
+          {
+            type: "request.resolved",
+            threadId,
+            at: now(),
+            requestId,
+            status: "answered",
+            answer: parsed.data.answer,
+            origin: parsed.data.origin,
+          },
+        ]);
+        // A running turn polls for the answer; otherwise it starts a turn.
+        if (!state.turn) {
+          const text = answerText(request, parsed.data.answer);
+          appendItem(threadId, null, {
+            kind: "user_message",
+            text,
+            delivery: "send",
+            attachments: [],
+          });
+          state.queue.push({ text, attachments: [] });
+          void kick(threadId);
+        }
+        return store.getRequest(requestId) as UserRequest;
+      }
       if (!pending) {
         append(threadId, [
           {
@@ -912,6 +990,7 @@ export function createThreadEngine(deps: EngineDeps) {
             await workspaces.removeScratch(thread.workspace);
         }
         await stopController(threadId);
+        if (mode !== "pr") await context.dropToken?.(threadId);
         appendItem(threadId, null, {
           kind: "notice",
           level: "info",
@@ -961,8 +1040,57 @@ export function createThreadEngine(deps: EngineDeps) {
           })
           .catch(() => undefined);
       await stopController(threadId);
+      await context.dropToken?.(threadId);
       update(threadId, { status: "archived" });
       return requireThread(threadId);
+    },
+
+    /** A question from the agent (MCP); it survives the end of the turn. */
+    askUser(threadId: string, input: unknown): UserRequest {
+      const parsed = AgentQuestion.safeParse(input);
+      if (!parsed.success)
+        throw new EngineError(
+          "invalid",
+          parsed.error.issues[0]?.message ?? "Datos inválidos.",
+        );
+      const thread = requireThread(threadId);
+      if (BUSY_STATUSES.has(thread.status))
+        throw new EngineError("invalid-state", "El thread ya está cerrado.");
+      const { title, body, options, fields } = parsed.data;
+      const state = live(threadId);
+      const request: UserRequest = {
+        id: newId("request"),
+        threadId,
+        turnId: state.turn?.id ?? null,
+        kind: fields ? "form" : "question",
+        title,
+        body,
+        ...(options
+          ? { options: options.map((label, i) => ({ id: `o${i + 1}`, label })) }
+          : {}),
+        ...(fields ? { fields } : {}),
+        status: "open",
+        answer: null,
+        origin: null,
+        createdAt: now(),
+        answeredAt: null,
+      };
+      store.setMeta(threadId, {
+        agentRequests: [...agentRequestIds(threadId), request.id],
+      });
+      append(threadId, [
+        { type: "request.opened", threadId, at: now(), request },
+      ]);
+      state.turn?.mapper?.requestItem(request.id);
+      if (!state.turn) setStatus(threadId, "waiting-user");
+      return store.getRequest(request.id) as UserRequest;
+    },
+
+    request(threadId: string, requestId: string): UserRequest {
+      const request = store.getRequest(requestId);
+      if (!request || request.threadId !== threadId)
+        throw new EngineError("not-found", "Solicitud no encontrada.");
+      return request;
     },
 
     snapshot(threadId: string): ThreadSnapshot | null {
@@ -1011,8 +1139,9 @@ export function createThreadEngine(deps: EngineDeps) {
         includeArchived: false,
         limit: 1000,
       })) {
+        const agentAsks = agentRequestIds(thread.id);
         for (const request of store.requests(thread.id))
-          if (request.status === "open")
+          if (request.status === "open" && !agentAsks.has(request.id))
             append(thread.id, [
               {
                 type: "request.resolved",
@@ -1047,7 +1176,9 @@ export function createThreadEngine(deps: EngineDeps) {
             code: "restarted",
             text: "El lanzador se reinició; el turno se interrumpió.",
           });
-          update(thread.id, { status: "idle" });
+          update(thread.id, {
+            status: hasOpenRequests(thread.id) ? "waiting-user" : "idle",
+          });
         }
       }
     },

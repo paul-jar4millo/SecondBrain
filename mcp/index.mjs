@@ -29,6 +29,12 @@ export function ownerLabel(env = process.env) {
   return name || "tu usuario";
 }
 
+/** Persistent requests (uuid) and thread requests (req_…). */
+const requestIdSchema = z.union([
+  z.string().uuid(),
+  z.string().regex(/^req_[0-9A-Za-z_-]{6,64}$/),
+]);
+
 /**
  * @param {string} name
  * @param {ReadonlySet<string> | null} opsSet
@@ -72,6 +78,7 @@ export function isToolAllowedForOperations(name, opsSet) {
       "usuario_preguntar",
       "usuario_consultar_respuesta",
       "usuario_esperar_respuesta",
+      "thread_ask_user",
     ].includes(name)
   ) {
     return opsSet.has("user.ask");
@@ -689,17 +696,49 @@ export function createBrainMcp({
   tool(
     "usuario_consultar_respuesta",
     "Consulta sin bloquear el estado y la respuesta recibida de una solicitud persistente por su identificador.",
-    { id: z.string().uuid() },
+    { id: requestIdSchema },
     ({ id }) => api(`/solicitudes/detalle?id=${encodeURIComponent(id)}`),
   );
   tool(
     "usuario_esperar_respuesta",
     "Espera por tramos seguros hasta recibir respuesta o cierre en una solicitud persistente del usuario.",
     {
-      id: z.string().uuid(),
+      id: requestIdSchema,
       timeout: z.number().int().positive().max(1_800_000).default(300_000),
     },
     waitRequestBySegments,
+  );
+  tool(
+    "thread_ask_user",
+    `Pregunta a ${owner} dentro de tu thread. Devuelve el id de la solicitud sin bloquear; si tu turno termina antes de la respuesta, la respuesta te llega como un mensaje nuevo. Usa «options» para respuestas cerradas o «fields» para un formulario.`,
+    {
+      title: z.string().min(1).max(300),
+      body: z.string().max(20_000).optional(),
+      options: z.array(z.string().min(1).max(200)).max(20).optional(),
+      fields: z
+        .array(
+          z.object({
+            id: z.string().regex(/^[A-Za-z][\w-]{0,63}$/),
+            label: z.string().min(1).max(200),
+            type: z.enum(["text", "textarea", "select", "boolean"]),
+            required: z.boolean().default(false),
+            options: z
+              .array(
+                z.object({
+                  id: z.string().min(1).max(64),
+                  label: z.string().min(1).max(200),
+                }),
+              )
+              .max(20)
+              .optional(),
+          }),
+        )
+        .min(1)
+        .max(20)
+        .optional(),
+    },
+    (args) => api("/threads/agente/preguntar", args),
+    false,
   );
   return server;
 }

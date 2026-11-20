@@ -11,6 +11,7 @@ import { financeRoutes } from "./finance.mjs";
 import { requestRoutes } from "./requests.mjs";
 import { roomRoutes } from "./room.mjs";
 import { systemRoutes } from "./system.mjs";
+import { threadRoutes } from "./threads.mjs";
 import { vaultRoutes } from "./vault.mjs";
 import { workOrderRoutes } from "./work-orders.mjs";
 import { worldRoutes } from "./world.mjs";
@@ -33,6 +34,7 @@ export const ROUTE_MODULES = [
   requestRoutes,
   effectRoutes,
   approvalRoutes,
+  threadRoutes,
 ];
 
 /** @type {RouteModule} */

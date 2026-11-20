@@ -45,6 +45,8 @@ export interface ThreadMeta {
   baseCommit?: string;
   /** Provider session ids by engine, to resume conversations. */
   nativeIds?: Record<string, string>;
+  /** Requests opened by the agent through MCP, answered without a provider. */
+  agentRequests?: string[];
 }
 
 export interface Checkpoint {

@@ -1002,7 +1002,11 @@ ROUTES.set("GET /solicitudes/detalle", {
   public: false,
   room: true,
   body: object,
-  query: z.object({ id: z.uuid() }).strict(),
+  query: z
+    .object({
+      id: z.union([z.uuid(), z.string().regex(/^req_[0-9A-Za-z_-]{6,64}$/)]),
+    })
+    .strict(),
 });
 ROUTES.set("POST /solicitudes/preguntar", {
   public: false,
@@ -1035,7 +1039,7 @@ ROUTES.set("POST /solicitudes/esperar", {
   room: true,
   body: z
     .object({
-      id: z.uuid(),
+      id: z.union([z.uuid(), z.string().regex(/^req_[0-9A-Za-z_-]{6,64}$/)]),
       timeout: z.number().int().min(0).max(240000).optional(),
     })
     .strict(),
@@ -1279,6 +1283,170 @@ ROUTES.set("POST /efectos/conciliar", {
     .strict(),
   query: anyQuery,
 });
+
+// Threads (ADR 0010). The launcher validates commands with the shared
+// contracts; these schemas only bound sizes and identifiers.
+const threadAgent = z
+  .object({
+    engine: z.enum(["claude", "codex", "agy", "deepseek"]),
+    model: z
+      .string()
+      .regex(/^[A-Za-z0-9][\w.:[\]-]{0,79}$/)
+      .optional(),
+    effort: z
+      .string()
+      .regex(/^[a-z]{1,10}$/)
+      .optional(),
+  })
+  .strict();
+const threadAttachments = z
+  .array(z.object({}).passthrough())
+  .max(10)
+  .optional();
+const threadIdQuery = z
+  .object({ id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/) })
+  .strict();
+const afterQuery = {
+  after: z
+    .string()
+    .regex(/^\d{1,15}$/)
+    .optional(),
+};
+for (const [
+  key,
+  room,
+  body,
+  query,
+] of /** @type {Array<[string, boolean, z.ZodType, z.ZodType]>} */ ([
+  [
+    "GET /threads",
+    false,
+    object,
+    z
+      .object({
+        status: z.string().max(200).optional(),
+        parent: z.string().max(80).optional(),
+        archived: z.enum(["0", "1"]).optional(),
+      })
+      .strict(),
+  ],
+  [
+    "POST /threads",
+    false,
+    z
+      .object({
+        prompt: z.string().min(1).max(100_000),
+        kind: z.enum(["repo", "scratch"]),
+        title: z.string().min(1).max(200).optional(),
+        repoPath: z.string().min(1).max(200).optional(),
+        baseBranch: z.string().min(1).max(200).optional(),
+        agent: threadAgent,
+        autonomy: z.enum(["auto-worktree", "ask", "read-only"]).optional(),
+        attachments: threadAttachments,
+      })
+      .strict(),
+    anyQuery,
+  ],
+  ["GET /threads/detalle", false, object, threadIdQuery],
+  [
+    "GET /threads/flujo",
+    false,
+    object,
+    z
+      .object({
+        id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/),
+        ...afterQuery,
+      })
+      .strict(),
+  ],
+  ["GET /threads/feed", false, object, z.object(afterQuery).strict()],
+  [
+    "POST /threads/mensajes",
+    false,
+    z
+      .object({
+        id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/),
+        text: z.string().min(1).max(100_000),
+        mode: z.enum(["send", "steer", "queue"]),
+        attachments: threadAttachments,
+        agent: threadAgent.optional(),
+      })
+      .strict(),
+    anyQuery,
+  ],
+  [
+    "POST /threads/interrumpir",
+    false,
+    z.object({ id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/) }).strict(),
+    anyQuery,
+  ],
+  [
+    "POST /threads/responder",
+    false,
+    z
+      .object({
+        id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/),
+        requestId: z.string().regex(/^req_[0-9A-Za-z_-]{6,64}$/),
+        answer: z.object({}).passthrough(),
+      })
+      .strict(),
+    anyQuery,
+  ],
+  [
+    "POST /threads/cerrar",
+    false,
+    z
+      .object({
+        id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/),
+        mode: z.enum(["pr", "merge", "discard"]),
+        title: z.string().min(1).max(200).optional(),
+        body: z.string().max(50_000).optional(),
+      })
+      .strict(),
+    anyQuery,
+  ],
+  [
+    "POST /threads/archivar",
+    false,
+    z.object({ id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/) }).strict(),
+    anyQuery,
+  ],
+  [
+    "GET /threads/diff",
+    false,
+    object,
+    z
+      .object({
+        id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/),
+        turnId: z
+          .string()
+          .regex(/^trn_[0-9A-Za-z_-]{6,64}$/)
+          .optional(),
+      })
+      .strict(),
+  ],
+  ["GET /bandeja", false, object, z.object({}).strict()],
+  [
+    "POST /threads/agente/preguntar",
+    true,
+    z
+      .object({
+        title: z.string().min(1).max(300),
+        body: z.string().max(20_000).optional(),
+        options: z.array(z.string().min(1).max(200)).max(20).optional(),
+        fields: z.array(z.object({}).passthrough()).min(1).max(20).optional(),
+      })
+      .strict(),
+    anyQuery,
+  ],
+  [
+    "GET /threads/agente/solicitud",
+    true,
+    object,
+    z.object({ id: z.string().regex(/^req_[0-9A-Za-z_-]{6,64}$/) }).strict(),
+  ],
+]))
+  ROUTES.set(key, { public: false, room, body, query });
 
 /**
  * @param {string | undefined} method
