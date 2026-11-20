@@ -154,7 +154,7 @@ export async function createUserRequestStore(
     clock = Date.now,
     approvalTimeoutMs = 1800000,
     onChange = /** @type {() => void} */ (() => {}),
-    onEvent = /** @type {(workOrderId: string, payload: object) => Promise<void>} */ (
+    onEvent = /** @type {(workOrderId: string, payload: object) => Promise<unknown>} */ (
       async () => {}
     ),
   } = {},

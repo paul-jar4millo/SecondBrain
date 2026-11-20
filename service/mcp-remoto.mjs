@@ -5,12 +5,22 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { atenderMcp } from "../mcp/http.mjs";
 
+/** @import { OutgoingHttpHeaders, ServerResponse } from "node:http" */
+/** @import { HttpRequest } from "./types.d.ts" */
+
+/** @typedef {{ nombre: string, redirect_uris: string[], creado: string }} OAuthClient */
+/** @typedef {{ clienteId: string, tipo: "access" | "refresh", expira: number }} OAuthToken */
+/** @typedef {{ clienteId: string, redirect_uri: string, challenge: string, expira: number }} OAuthCode */
+
+/** @param {string} v */
 const digest = (v) => createHash("sha256").update(v).digest("hex");
 const ACCESS_MS = 3600_000;
 const REFRESH_MS = 60 * 86400_000;
 const CODE_MS = 600_000;
+/** @param {unknown} v */
 const esc = (v) =>
   String(v).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+/** @param {string} u */
 const redirectSeguro = (u) => {
   try {
     const url = new URL(u);
@@ -25,6 +35,16 @@ const redirectSeguro = (u) => {
   }
 };
 
+/**
+ * @param {{
+ *   directory: string,
+ *   auth: import("./auth.mjs").Auth,
+ *   Failure: typeof import("./vault.mjs").Failure,
+ *   baseUrl: () => string,
+ *   now?: () => number,
+ *   onChange?: () => void,
+ * }} options
+ */
 export async function crearMcpRemoto({
   directory,
   auth,
@@ -35,13 +55,16 @@ export async function crearMcpRemoto({
 }) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const file = path.join(directory, "oauth.json");
+  /** @type {{ clients: Record<string, OAuthClient>, tokens: Record<string, OAuthToken> }} */
   let state = { clients: {}, tokens: {} };
   try {
     state = JSON.parse(await readFile(file, "utf8"));
   } catch (e) {
     if (e.code !== "ENOENT") throw e;
   }
+  /** @type {Map<string, OAuthCode>} */
   const codes = new Map();
+  /** @type {Map<string, number[]>} */
   const rates = new Map();
   let serial = Promise.resolve();
   const persist = () => {
@@ -51,6 +74,10 @@ export async function crearMcpRemoto({
     });
     return serial;
   };
+  /**
+   * @param {string} clave
+   * @param {number} max
+   */
   function limite(clave, max, ventana = 60_000) {
     const t = now();
     const lista = (rates.get(clave) || []).filter((x) => x > t - ventana);
@@ -59,8 +86,15 @@ export async function crearMcpRemoto({
     lista.push(t);
     rates.set(clave, lista);
   }
+  /** @param {HttpRequest} request */
   const issuer = (request) =>
     `${auth.secure(request) ? "https" : "http"}://${request.headers.host}`;
+  /**
+   * @param {ServerResponse} response
+   * @param {number} status
+   * @param {unknown} value
+   * @param {OutgoingHttpHeaders} [headers]
+   */
   function json(response, status, value, headers = {}) {
     response.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
@@ -70,7 +104,9 @@ export async function crearMcpRemoto({
     response.end(JSON.stringify(value));
     return true;
   }
+  /** @param {HttpRequest} request */
   async function leer(request, limiteBytes = 65536) {
+    /** @type {Buffer[]} */
     const partes = [];
     let total = 0;
     for await (const parte of request) {
@@ -81,8 +117,10 @@ export async function crearMcpRemoto({
     }
     return Buffer.concat(partes).toString("utf8");
   }
+  /** @param {HttpRequest} request */
   const formulario = async (request) =>
     Object.fromEntries(new URLSearchParams(await leer(request)));
+  /** @param {string} clienteId */
   function emitir(clienteId) {
     const acceso = randomBytes(32).toString("hex");
     const refresco = randomBytes(32).toString("hex");
@@ -106,6 +144,7 @@ export async function crearMcpRemoto({
       refresh_token: refresco,
     };
   }
+  /** @param {HttpRequest} request */
   function cliente(request) {
     const cabecera = request.headers.authorization || "";
     if (!cabecera.startsWith("Bearer ")) return null;
@@ -114,6 +153,7 @@ export async function crearMcpRemoto({
     const c = state.clients[token.clienteId];
     return c ? { id: token.clienteId, ...c } : null;
   }
+  /** @param {Record<string, string>} p */
   function paginaLogin(p, error = "", pedirCodigo = false) {
     const ocultos = ["client_id", "redirect_uri", "state", "code_challenge"]
       .map(
@@ -127,6 +167,11 @@ export async function crearMcpRemoto({
 <input name="password" type="password" autocomplete="current-password" placeholder="Contraseña" required>${pedirCodigo ? '<input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Código de verificación" required>' : ""}
 <button>Permitir acceso</button></form></html>`;
   }
+  /**
+   * @param {ServerResponse} response
+   * @param {number} status
+   * @param {string} contenido
+   */
   function html(response, status, contenido) {
     response.writeHead(status, {
       "Content-Type": "text/html; charset=utf-8",
@@ -137,6 +182,7 @@ export async function crearMcpRemoto({
     response.end(contenido);
     return true;
   }
+  /** @param {Record<string, string>} p */
   function validarAutorizacion(p) {
     const c = state.clients[p.client_id];
     if (!c) throw new Failure("Cliente desconocido.", 400);
@@ -148,6 +194,11 @@ export async function crearMcpRemoto({
       throw new Failure("Se requiere PKCE con S256.", 400);
     return c;
   }
+  /**
+   * @param {ServerResponse} response
+   * @param {string} uri
+   * @param {Record<string, string>} params
+   */
   function redirigir(response, uri, params) {
     const url = new URL(uri);
     for (const [k, v] of Object.entries(params))
@@ -161,7 +212,12 @@ export async function crearMcpRemoto({
   }
 
   return {
-    /** Returns true when the request belonged to OAuth / MCP and was answered. */
+    /**
+     * Returns true when the request belonged to OAuth / MCP and was answered.
+     * @param {HttpRequest} request
+     * @param {ServerResponse} response
+     * @param {string} pathname
+     */
     async manejar(request, response, pathname) {
       const metodo = request.method;
       const base = issuer(request);
@@ -370,6 +426,7 @@ export async function crearMcpRemoto({
         creado: c.creado,
       }));
     },
+    /** @param {string} id */
     async revocar(id) {
       if (!state.clients[id]) throw new Failure("Cliente no encontrado.", 404);
       delete state.clients[id];

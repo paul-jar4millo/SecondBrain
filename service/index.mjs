@@ -33,11 +33,16 @@ import { operationalStatus } from "./operational-status.mjs";
 import { createWorkOrderStore } from "./work-orders.mjs";
 import { createUserRequestStore } from "./user-requests.mjs";
 import { createEffectsExecutor } from "./effects-executor.mjs";
+
+/** @import { ApplicationOptions, HttpLogRecord, HttpRequest, ScopedRecord, ToolProfile } from "./types.d.ts" */
+/** @import { ServerResponse } from "node:http" */
+
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
 // Reported by /health; the release package always ships service/package.json.
 const APP_VERSION = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ).version;
+/** @param {ApplicationOptions} [options] */
 export async function createApplication(options = {}) {
   const root = await discoverVault(
     options.vaultRoot || process.env.VAULT_ROOT || "/srv/secondbrain/vault",
@@ -93,8 +98,11 @@ export async function createApplication(options = {}) {
     options.mundoPaquete ?? process.env.MUNDO_PAQUETE,
   );
   const lanzador = createLanzador(Failure, options.lanzador);
+  /** @type {Set<ServerResponse>} */
   const clients = new Set();
+  /** @type {import("node:fs").FSWatcher[]} */
   const watchers = [];
+  /** @type {NodeJS.Timeout | null | undefined} */
   let changeTimer;
   const change = () => {
     if (changeTimer) return;
@@ -105,12 +113,18 @@ export async function createApplication(options = {}) {
     changeTimer.unref();
   };
   const stopLanzadorEvents = lanzador.subscribe(change);
+  /** @type {http.Server} */
   let servidorHttp;
   const mcpRemoto = await crearMcpRemoto({
     directory: path.join(dataDirectory, "oauth"),
     auth,
     Failure,
-    baseUrl: () => `http://127.0.0.1:${servidorHttp.address().port}/api/v1`,
+    baseUrl: () => {
+      const address = /** @type {import("node:net").AddressInfo} */ (
+        servidorHttp.address()
+      );
+      return `http://127.0.0.1:${address.port}/api/v1`;
+    },
     now: options.mcpRemoto?.now,
     onChange: change,
   });
@@ -145,6 +159,10 @@ export async function createApplication(options = {}) {
     if (Array.isArray(estado)) return estado;
     return Array.isArray(estado?.sesiones) ? estado.sesiones : [];
   };
+  /**
+   * @template T
+   * @param {() => T | Promise<T>} fn
+   */
   const runStoreOp = async (fn) => {
     try {
       return await fn();
@@ -160,6 +178,7 @@ export async function createApplication(options = {}) {
       throw error;
     }
   };
+  /** @type {{ ejecucion: ToolProfile } & Partial<Record<string, ToolProfile>>} */
   const SERVICE_TOOL_PROFILES = {
     investigacion: {
       id: "investigacion",
@@ -243,16 +262,26 @@ export async function createApplication(options = {}) {
       canDelegateBeyondSelf: false,
     },
   };
+  /** @type {Partial<Record<string, string>>} */
   const MOTOR_ACTOR = {
     claude: "ambar",
     codex: "menta",
     agy: "lira",
     deepseek: "marina",
   };
+  /**
+   * @param {string[]} [a]
+   * @param {string[]} [b]
+   */
   const intersectList = (a = [], b = []) => {
     const allowed = new Set(b);
     return a.filter((item) => allowed.has(item));
   };
+  /**
+   * @param {ToolProfile | null} parent
+   * @param {ToolProfile} child
+   * @returns {ToolProfile}
+   */
   const intersectProfileBounds = (parent, child) => {
     if (!parent) return structuredClone(child);
     return {
@@ -272,6 +301,7 @@ export async function createApplication(options = {}) {
       canDelegateBeyondSelf: false,
     };
   };
+  /** @param {ToolProfile | null} [parentProfile] */
   const resolveServerProfile = async (
     profileId = "ejecucion",
     parentProfile = null,
@@ -315,6 +345,7 @@ export async function createApplication(options = {}) {
       `${grantReq.action || ""} ${grantReq.scope || ""}`,
     );
   };
+  /** @param {HttpRequest} request */
   const agentHeaders = (request) => {
     const rawAgent =
       typeof request.headers["x-sb-agente"] === "string"
@@ -329,6 +360,10 @@ export async function createApplication(options = {}) {
       sessionUuid: /^[a-f0-9-]{36}$/i.test(rawSession) ? rawSession : null,
     };
   };
+  /**
+   * @param {HttpRequest} request
+   * @param {string} routeKey
+   */
   const assertAgentCapabilityForRoute = (request, routeKey) => {
     if (!auth.isAgent(request)) return null;
     const cap = auth.capabilityOf(request);
@@ -357,6 +392,7 @@ export async function createApplication(options = {}) {
       );
     }
     const ops = new Set(cap.allowedOperations || []);
+    /** @param {...string} required */
     const requireAny = (...required) => {
       if (!required.some((op) => ops.has(op))) {
         throw new Failure(
@@ -437,6 +473,10 @@ export async function createApplication(options = {}) {
         );
     }
   };
+  /**
+   * @param {HttpRequest} request
+   * @param {ScopedRecord} record
+   */
   const canAgentAccessScopedRecord = (request, record) => {
     if (!auth.isAgent(request)) return true;
     const cap = auth.capabilityOf(request);
@@ -481,11 +521,21 @@ export async function createApplication(options = {}) {
     }
     return true;
   };
+  /** @type {Map<string, AbortController>} */
   const activeSessionBridges = new Map();
+  /** @type {Map<string, { workOrderId: string, fallbackMemberId?: string | null }>} */
   const sessionWorkOrderLinks = new Map();
-  /** Sessions that received a message while their bridge was open. */
+  /**
+   * Sessions that received a message while their bridge was open.
+   * @type {Set<string>}
+   */
   const followUpTurns = new Set();
   let closed = false;
+  /**
+   * @param {string} sessionId
+   * @param {string} workOrderId
+   * @param {string | null} [fallbackMemberId]
+   */
   const bridgeSessionToWorkOrder = (
     sessionId,
     workOrderId,
@@ -677,6 +727,7 @@ export async function createApplication(options = {}) {
     watcher.on("error", (e) =>
       console.error("Se dejó de vigilar una carpeta del vault:", e.message),
     );
+  /** @param {HttpRequest} request */
   async function body(request) {
     let size = 0;
     const chunks = [];
@@ -704,16 +755,23 @@ export async function createApplication(options = {}) {
       );
     return parsed.data;
   }
+  /** @param {unknown} relative */
   const validateNotePath = (relative) => {
     if (typeof relative !== "string" || !relative.endsWith(".md"))
       throw new Failure("Solo se admiten notas Markdown.");
   };
+  /**
+   * @param {ServerResponse} response
+   * @param {number} status
+   * @param {unknown} value
+   */
   function send(response, status, value) {
     response.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
     });
     response.end(value === undefined ? "" : JSON.stringify(value));
   }
+  /** @param {HttpRequest} request */
   const actorOf = (request) => {
     if (auth.isRoomAgent(request)) {
       const id = request.headers["x-sb-agente"];
@@ -725,6 +783,7 @@ export async function createApplication(options = {}) {
     }
     return "app";
   };
+  /** @type {(record: HttpLogRecord) => void} */
   const logger =
     options.logger ||
     (process.env.NODE_ENV === "production"
@@ -734,6 +793,10 @@ export async function createApplication(options = {}) {
           if (record.event === "http.error")
             console.error(JSON.stringify(record));
         });
+  /**
+   * @param {HttpRequest} request
+   * @param {ServerResponse} response
+   */
   const handle = async (request, response) => {
     const requestId = randomUUID(),
       started = performance.now();
@@ -860,6 +923,7 @@ export async function createApplication(options = {}) {
           }
           let mintedChild = null;
           if (accion === "encargar" && callerCap) {
+            /** @type {ToolProfile} */
             let parentProfile = callerCap;
             const capWo = callerCap.workOrderId
               ? workOrders.get(callerCap.workOrderId)
@@ -1014,6 +1078,11 @@ export async function createApplication(options = {}) {
           !policy.query.safeParse(Object.fromEntries(consulta)).success
         )
           throw new Failure("Consulta inválida.");
+        /**
+         * @param {ServerResponse} res
+         * @param {Response} upstream
+         * @param {{ fileName?: string, id?: string, version?: number, sha256?: string, authorId?: string, fileRef?: string }} [meta]
+         */
         const relayArtifactDownload = async (res, upstream, meta = {}) => {
           const buf = Buffer.from(await upstream.arrayBuffer());
           const rawName = upstream.headers.get("x-artifact-filename");
@@ -1037,6 +1106,7 @@ export async function createApplication(options = {}) {
           });
           res.end(buf);
         };
+        /** @type {Partial<Record<string, () => Promise<unknown>>>} */
         const routes = {
           "GET /health": async () => {
             const ready = await stat(path.join(root, "Home.md"))
@@ -2362,6 +2432,7 @@ export async function createApplication(options = {}) {
         target = path.join(staticRoot, "index.html");
       }
       const data = await readFile(target);
+      /** @type {Partial<Record<string, string>>} */
       const types = {
         ".html": "text/html",
         ".js": "text/javascript",
@@ -2457,7 +2528,10 @@ export async function createApplication(options = {}) {
     close,
   };
 }
-/** Field paths and zod messages only: never the submitted values. */
+/**
+ * Field paths and zod messages only: never the submitted values.
+ * @param {import("zod").z.ZodIssue[]} issues
+ */
 function summarizeIssues(issues) {
   const shown = issues
     .slice(0, 5)
