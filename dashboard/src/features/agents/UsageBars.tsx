@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { isDemo } from "../../core/store";
-import { teamApi } from "./team-store";
+import { agentApi } from "../agents/agent-api";
 
 interface UsageWindow {
   usado?: number;
@@ -44,7 +44,7 @@ export function UsageBars({
     const read = () => {
       if (document.hidden) return;
       void Promise.resolve()
-        .then(() => teamApi("/agentes/uso"))
+        .then(() => agentApi("/agentes/uso"))
         .then((value) => {
           if (live && value) setUsage(value as Record<string, ProviderUsage>);
         })

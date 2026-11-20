@@ -53,7 +53,7 @@ jobs:
             workflow_dispatch | schedule) browser=true ;;
             pull_request)
               if files=$(git diff --name-only "$BASE" HEAD); then
-                grep -qE '^(dashboard|service)/' <<<"$files" && browser=true || browser=false
+                grep -qE '^(dashboard|service|launcher|contracts)/|^\.github/workflows/ci\.yml$' <<<"$files" && browser=true || browser=false
               else
                 browser=true
               fi ;;
@@ -189,8 +189,8 @@ jobs:
             commands: REFUGIO_PARTES=descarga,layouts node ops/verify-refuge.mjs
           - group: refuge-mobile
             commands: REFUGIO_PARTES=movil,privado,sinwebgl node ops/verify-refuge.mjs
-          - group: team-and-tools
-            commands: node ops/verify-approvals.mjs && node ops/verify-project-dashboards.mjs && node ops/verify-tools.mjs && node ops/verify-conversations.mjs && node ops/verify-threads.mjs
+          - group: threads-and-tools
+            commands: node ops/verify-approvals.mjs && node ops/verify-project-dashboards.mjs && node ops/verify-tools.mjs && node ops/verify-threads.mjs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

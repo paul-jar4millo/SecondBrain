@@ -36,7 +36,7 @@ sequenceDiagram
 If the process stops between steps, the journal is replayed on start-up. A
 failing Git commit is logged and never undoes a saved note.
 
-## Running an agent in an isolated session
+## Running an agent in a thread
 
 ```mermaid
 sequenceDiagram
@@ -48,19 +48,19 @@ sequenceDiagram
   participant CLI as Agent CLI
   participant M as brain CLI (MCP)
 
-  D->>S: POST /agentes/sesiones {agent, project, brief}
-  S->>L: POST /sesiones (loopback, bearer)
+  D->>S: POST /threads {agent, kind, prompt}
+  S->>L: POST /threads (loopback, bearer)
   L->>L: create workspace / worktree, checkpoint (git refs)
   L->>P: start(controller for codex · claude · acp)
   P->>CLI: spawn with allow-listed env and MCP config
   CLI->>M: brain_read / brain_search (scoped token)
   M->>S: HTTP /api/v1 (room credential)
   CLI-->>P: events (messages, tool calls, questions)
-  P-->>L: normalized conversation items
+  P-->>L: normalized thread items
   L-->>S: SSE
-  S-->>D: GET /agentes/conversacion/stream (SSE)
-  D->>S: POST /agentes/conversacion/responder (answer)
-  S->>L: forward answer (idempotent requestId)
+  S-->>D: GET /threads/flujo (SSE)
+  D->>S: POST /threads/responder (answer)
+  S->>L: POST /threads/:id/requests/:requestId
 ```
 
 The HTTP service never runs a model. Each turn ends its process; the next

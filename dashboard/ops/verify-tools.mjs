@@ -67,72 +67,6 @@ const records = [
     timezone: "America/Mexico_City",
   }),
 ];
-const response =
-  "# Hallazgos verificados\n\nUna entrega **sintética** para comprobar lectura, selección y exportación.\n\n- Próximo paso documentado.\n- Material disponible para la siguiente fase.\n\n```js\nconst ejemplo = '<script>no se ejecuta</script>';\n```\n" +
-  "Texto de lectura con suficiente extensión para comprobar desplazamiento. ".repeat(
-    100,
-  );
-const job = {
-  jobId: "j1",
-  estado: "listo",
-  project: "p1",
-  instruction: "Investigar una idea de ejemplo",
-  respuesta: response,
-  inicio: date + "T12:00:00Z",
-  fin: date + "T12:01:00Z",
-  configuracion: { modelo: "modelo-de-prueba" },
-};
-const agentData = {
-  conectado: true,
-  agentes: ["ambar", "menta", "lira", "marina"].map((id) => ({
-    id,
-    ocupada: false,
-    proveedor: {
-      ambar: "claude",
-      menta: "chatgpt",
-      lira: "gemini",
-      marina: "deepseek",
-    }[id],
-    configuracion:
-      id === "menta" ? { modelo: "codex-test", esfuerzo: "high" } : {},
-    historial: id === "ambar" ? [job] : [],
-    ultimo:
-      id === "ambar"
-        ? job
-        : id === "marina"
-          ? { estado: "error", error: "Ejemplo de fallo recuperable" }
-          : null,
-    contextos: {},
-    ventanas: { "5h": { usado: 25 } },
-  })),
-};
-const flow = {
-  id: "f1",
-  project: "p1",
-  instruction: "Preparar una solución para revisar",
-  estado: "esperando",
-  indice: 1,
-  inicio: date + "T12:00:00Z",
-  pasos: ["Investigar", "Planificar", "Programar", "Revisar"].map(
-    (nombre, i) => ({
-      agente: ["ambar", "menta", "marina", "ambar"][i],
-      nombre,
-      zona: "terrace",
-      estado: i === 0 ? "listo" : "pendiente",
-      ...(i === 0 ? { ...job, nombre, agente: "ambar" } : {}),
-    }),
-  ),
-  relevos: [
-    {
-      id: "r1",
-      de: "ambar",
-      para: "menta",
-      texto: "Ámbar entregó el material a Menta",
-      paso: 0,
-      jobId: "j1",
-    },
-  ],
-};
 const finance = {
   configured: true,
   reconciledAt: date,
@@ -214,52 +148,40 @@ async function fixture(route) {
     });
   if (p === "/api/v1/items") return json(records);
   if (p === "/api/v1/agentes/espacios")
-    return json({ revision: 0, repositorios: [], vinculos: {} });
+    return json({
+      revision: 0,
+      repositorios: ["demo"],
+      vinculos: { p1: "demo" },
+    });
+  if (p === "/api/v1/agentes/proyectos-lanzador") return json(["demo"]);
+  if (p === "/api/v1/bandeja") return json({ entries: [] });
+  if (p === "/api/v1/aprobaciones") return json([]);
   if (p === "/api/v1/agentes/modelos-lanzador") return json({});
   if (p === "/api/v1/finance/overview") return json(finance);
-  if (p === "/api/v1/agentes") {
+  if (p === "/api/v1/files/raw" && route.request().method() === "POST")
+    return json({ id: "synthetic-statement", name: "estado.pdf" });
+  if (p === "/api/v1/threads" && route.request().method() === "GET") {
     if (agentReadDelay)
       await new Promise((resolve) => setTimeout(resolve, agentReadDelay));
     return connected
-      ? json(agentData)
+      ? json({
+          threads: [
+            {
+              id: "thr_verify0000000001",
+              title: "Editando archivos",
+              agent: { engine: "codex" },
+              status: "running",
+              createdAt: date,
+            },
+          ],
+        })
       : route.fulfill({
           status: 503,
           contentType: "application/json",
           body: JSON.stringify({ error: "Servicio de ejemplo desconectado" }),
         });
   }
-  if (p === "/api/v1/agentes/sesiones")
-    return connected
-      ? json([
-          {
-            id: "s1",
-            motor: "codex",
-            copia: 0,
-            estado: "trabajando",
-            proyecto: "p1",
-            ultimaAccion: "Editando archivos",
-          },
-        ])
-      : route.fulfill({
-          status: 503,
-          contentType: "application/json",
-          body: JSON.stringify({ error: "Servicio de ejemplo desconectado" }),
-        });
-  if (p === "/api/v1/agentes/equipo")
-    return json({ flujos: [flow], eventos: [] });
-  if (p === "/api/v1/agentes/modelos")
-    return json({
-      configuracion: { modelo: "codex-test", esfuerzo: "high" },
-      modelos: [
-        {
-          model: "codex-test",
-          displayName: "Modelo de prueba",
-          defaultReasoningEffort: "high",
-          supportedReasoningEfforts: [{ reasoningEffort: "high" }],
-        },
-      ],
-    });
-  if (p.startsWith("/api/v1/agentes/") && route.request().method() === "POST") {
+  if (p === "/api/v1/threads" && route.request().method() === "POST") {
     writes.push({ path: p, body: route.request().postDataJSON() });
     return json({});
   }
@@ -360,20 +282,26 @@ try {
       .getByRole("button", { name: "Consultar a Ámbar para este proyecto" })
       .first();
     await head.click();
-    await page
-      .locator(".conversation-heading h2", { hasText: "Ámbar" })
-      .waitFor();
+    const draft = page.getByRole("dialog", { name: "Nuevo thread" });
+    await draft
+      .getByRole("option", { name: "demo" })
+      .waitFor({ state: "attached" });
+    assert.equal(
+      await draft.getByLabel("Agente", { exact: true }).inputValue(),
+      "claude",
+    );
+    assert.equal(
+      await draft.getByLabel("Proyecto", { exact: true }).inputValue(),
+      "demo",
+    );
     await noOverflow(page);
-    await page.screenshot({ path: path.join(output, `profile-${width}.png`) });
-    assert.equal(await page.locator("dialog[open]").count(), 1);
+    await page.screenshot({
+      path: path.join(output, "draft-" + width + ".png"),
+    });
     assert.equal(writes.length, 0);
-    await page
-      .getByRole("button", { name: "Abrir conversación", exact: true })
-      .waitFor();
-    assert.equal(new URL(page.url()).searchParams.get("project"), "p1");
-    assert.equal(writes.length, 0);
+    await draft.getByRole("button", { name: "Cancelar" }).click();
     for (const [label, heading] of [
-      ["Equipo", "Equipo"],
+      ["Threads", "Threads"],
       ["Tareas", "Tareas"],
       ["Finanzas", "Finanzas"],
       ["Ajustes", "Ajustes"],
@@ -391,18 +319,6 @@ try {
       await page.screenshot({
         path: path.join(output, `${label.toLowerCase()}-${width}.png`),
       });
-      if (label === "Equipo") {
-        await page.locator(".team-character-card").first().waitFor();
-        assert.equal(await page.locator(".team-character-card").count(), 4);
-        assert.equal(
-          await page.getByRole("button", { name: "Nuevo flujo" }).count(),
-          0,
-        );
-        await noOverflow(page);
-        await page.screenshot({
-          path: path.join(output, `team-${width}.png`),
-        });
-      }
       if (label === "Finanzas") {
         await page.getByRole("button", { name: "Ocultar importes" }).click();
         assert.equal(
@@ -414,6 +330,38 @@ try {
         );
         assert.equal(await page.locator(".tool-content [role=img]").count(), 0);
         await page.getByRole("button", { name: "Mostrar importes" }).click();
+        if (width === 375) {
+          await page
+            .getByRole("button", { name: "Actualizar con agente" })
+            .click();
+          const update = page.getByRole("dialog", {
+            name: "Actualizar con una agente",
+          });
+          await update.getByLabel("Elegir capturas del banco").setInputFiles({
+            name: "estado.pdf",
+            mimeType: "application/pdf",
+            buffer: Buffer.from("%PDF-1.4"),
+          });
+          await update.getByText("Menta", { exact: true }).click();
+          await update
+            .getByRole("button", { name: "Subir y pasar con Menta" })
+            .click();
+          await draft.getByRole("textbox", { name: "Tarea" }).waitFor();
+          assert.match(
+            await draft.getByRole("textbox", { name: "Tarea" }).inputValue(),
+            /estado\.pdf \(id: synthetic-statement\)/,
+          );
+          assert.equal(
+            await draft.getByLabel("Agente", { exact: true }).inputValue(),
+            "codex",
+          );
+          assert.equal(
+            await draft.getByLabel("Proyecto", { exact: true }).inputValue(),
+            "",
+          );
+          await draft.getByRole("button", { name: "Cancelar" }).click();
+          assert.equal(writes.length, 0);
+        }
       }
       if (label === "Hoy") {
         const targets = await page
@@ -440,15 +388,22 @@ try {
         await page
           .getByRole("button", { name: "Consultar a Lira para esta tarea" })
           .click();
+        await draft
+          .getByRole("option", { name: "demo" })
+          .waitFor({ state: "attached" });
         assert.equal(
-          await page
-            .locator(".conversation-context > label select")
-            .inputValue(),
-          "p1",
+          await draft.getByLabel("Proyecto", { exact: true }).inputValue(),
+          "demo",
         );
-        await page
-          .getByRole("button", { name: "Abrir conversación", exact: true })
-          .waitFor();
+        assert.equal(
+          await draft.getByLabel("Agente", { exact: true }).inputValue(),
+          "agy",
+        );
+        assert.match(
+          await draft.getByRole("textbox", { name: "Tarea" }).inputValue(),
+          /Darle forma/,
+        );
+        await draft.getByRole("button", { name: "Cancelar" }).click();
         assert.equal(writes.length, 0);
       }
     }
@@ -503,23 +458,19 @@ try {
   await page.screenshot({ path: path.join(output, "zoom-200.png") });
   await page
     .locator(".tool-tabs")
-    .getByRole("link", { name: "Equipo", exact: true })
+    .getByRole("link", { name: "Threads", exact: true })
     .click();
-  // An observed live session must survive a failed read of the launcher.
-  await page
-    .locator(".team-character-card small", { hasText: "Editando archivos" })
-    .waitFor();
+  await page.getByRole("link", { name: /Editando archivos/ }).waitFor();
   agentReadDelay = 0;
   connected = false;
-  await page.getByRole("button", { name: "Actualizar", exact: true }).click();
-  await page.getByText(/Servicio de ejemplo desconectado/).waitFor();
+  await page
+    .getByText(/Servicio de ejemplo desconectado/)
+    .waitFor({ timeout: 30_000 });
   assert.equal(
-    await page
-      .locator(".team-character-card small", { hasText: "Editando archivos" })
-      .count(),
+    await page.getByRole("link", { name: /Editando archivos/ }).count(),
     1,
   );
-  report.disconnectionPreservesSessions = true;
+  report.disconnectionPreservesThreads = true;
   const noGl = await browser.newContext();
   await noGl.route("**/api/v1/**", fixture);
   await noGl.addInitScript(() => {
@@ -536,9 +487,7 @@ try {
     .getByRole("button", { name: "Consultar a Ámbar para este proyecto" })
     .first()
     .click();
-  await fallback
-    .locator(".conversation-heading h2", { hasText: "Ámbar" })
-    .waitFor();
+  await fallback.getByRole("dialog", { name: "Nuevo thread" }).waitFor();
   report.withoutWebGL = true;
   assert.equal(writes.length, 0);
   assert.deepEqual(errors, []);
@@ -561,7 +510,6 @@ try {
       await active.evaluate(() => ({
         path: location.href,
         focus: document.activeElement?.outerHTML.slice(0, 200),
-        inspectors: document.querySelectorAll(".agent-inspector").length,
         dialogs: document.querySelectorAll("dialog[open]").length,
       })),
     );

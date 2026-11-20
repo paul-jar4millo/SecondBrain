@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { subscribeChanges } from "../../core/events";
 import { isDemo } from "../../core/store";
-import { teamApi } from "./team-store";
+import { agentApi } from "../agents/agent-api";
 import { ApprovalQueue, type Approval } from "./ApprovalQueue";
 import {
   describeReceipt,
@@ -22,7 +22,7 @@ export function ApprovalPanel({ hideEmpty = false }: { hideEmpty?: boolean }) {
     try {
       const list = isDemo
         ? []
-        : ((await teamApi("/aprobaciones")) as Approval[]);
+        : ((await agentApi("/aprobaciones")) as Approval[]);
       if (actual === revision.current) {
         setRequests(list);
         setRecent(
@@ -56,7 +56,7 @@ export function ApprovalPanel({ hideEmpty = false }: { hideEmpty?: boolean }) {
     try {
       // One id per click; a lost answer is retried with the same one.
       const answer = (await sendWithRetry((requestId) =>
-        teamApi("/aprobaciones/decidir", { id, aprobar: approve, requestId }),
+        agentApi("/aprobaciones/decidir", { id, aprobar: approve, requestId }),
       )) as { recibo?: Receipt };
       if (answer?.recibo) setLast(answer.recibo);
     } catch (caught) {

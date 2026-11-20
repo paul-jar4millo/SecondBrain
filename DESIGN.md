@@ -26,7 +26,7 @@ font for forms and figures. Bundled fonts keep their OFL licenses in
 
 One connected map with Workshop, Library, Greenhouse, Café and Terrace. A
 third-person follow camera with zoom, rotation and a Center action. Exactly
-four base agents; extra sessions appear as copies.
+four base agents; concurrent threads can appear as copies.
 
 The HUD shows brand and zone, actions, minimap, team and labeled shortcuts.
 Compact mode folds the map and team. Layers never overlap the dock.

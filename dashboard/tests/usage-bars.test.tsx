@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { UsageBars } from "../src/features/team/UsageBars";
+import { UsageBars } from "../src/features/agents/UsageBars";
 
 const fixture = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock("../src/core/store", () => ({ isDemo: false }));
-vi.mock("../src/features/team/team-store", () => ({ teamApi: fixture.api }));
+vi.mock("../src/features/agents/agent-api", () => ({ agentApi: fixture.api }));
 afterEach(() => {
   cleanup();
   fixture.api.mockReset();

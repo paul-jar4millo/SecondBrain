@@ -1,139 +1,39 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
-  sceneTeams,
   figurasEsperandoOk,
+  sceneTeams,
   teamSeats,
-  newHandoffs,
 } from "../src/features/room/room-teams";
-import { sessionFigure } from "../src/features/room/room-sessions";
-import type { ObservedSession } from "../src/features/room/room-sessions";
+import { sceneSessions } from "../src/features/room/room-sessions";
+import { fixtureThread } from "./thread-fixture";
 
-const session = (
-  id: string,
-  engine: ObservedSession["motor"],
-  extra: Partial<ObservedSession> = {},
-): ObservedSession => ({
-  id,
-  motor: engine,
-  copia: 0,
-  estado: "trabajando",
-  ...extra,
-});
-const team = [
-  session("lider", "claude", { equipoId: "e1" }),
-  session("h1", "codex", { equipoId: "e1", padreId: "lider" }),
-  session("h2", "agy", { equipoId: "e1", padreId: "lider" }),
-];
-
-describe("figuras de sesión", () => {
-  it("usa el personaje base y marca las copias", () => {
-    expect(sessionFigure({ motor: "codex", copia: 0 })).toBe("menta");
-    expect(sessionFigure({ motor: "codex", copia: 2 })).toBe("menta#2");
-  });
-});
-
-describe("agrupación por equipo", () => {
-  it("agrupa a la líder primero y une cada hija con un hilo", () => {
-    const { grupos: groups, hilos } = sceneTeams([...team].reverse());
-    expect(groups).toEqual([
-      { equipoId: "e1", miembros: ["ambar", "lira", "menta"] },
-    ]);
-    expect(hilos.map((h) => [h.de, h.a]).sort()).toEqual([
-      ["ambar", "lira"],
-      ["ambar", "menta"],
-    ]);
-  });
-
-  it("el hilo desaparece cuando la hija termina", () => {
-    const terminada = team.map((s) =>
-      s.id === "h2" ? { ...s, estado: "terminada" } : s,
-    );
-    const { grupos: groups, hilos } = sceneTeams(terminada);
-    expect(hilos.map((h) => h.hijaSesionId)).toEqual(["h1"]);
-    expect(groups[0].miembros).toEqual(["ambar", "menta"]);
-  });
-
-  it("no agrupa una sesión sola ni sesiones sin equipo", () => {
-    const solas = [
-      session("a", "claude", { equipoId: "e1" }),
-      session("b", "codex"),
-      session("c", "agy", { equipoId: "e2", estado: "error" }),
-    ];
-    expect(sceneTeams(solas)).toEqual({ grupos: [], hilos: [] });
-  });
-
-  it("separa equipos distintos y ubica cada copia con su figura", () => {
-    const dos = [
-      ...team,
-      session("l2", "deepseek", { equipoId: "e2" }),
-      session("c2", "claude", {
-        equipoId: "e2",
-        padreId: "l2",
-        copia: 1,
-      }),
-    ];
-    const { grupos: groups, hilos } = sceneTeams(dos);
-    expect(groups.map((g) => g.equipoId)).toEqual(["e1", "e2"]);
-    expect(hilos.find((h) => h.equipoId === "e2")).toMatchObject({
-      de: "marina",
-      a: "ambar#1",
-    });
-  });
-
-  it("ignora hijas cuya madre ya no está activa", () => {
-    const huerfana = [
-      session("lider", "claude", { equipoId: "e1", estado: "terminada" }),
-      session("h1", "codex", { equipoId: "e1", padreId: "lider" }),
-      session("h2", "agy", { equipoId: "e1", padreId: "lider" }),
-    ];
-    expect(sceneTeams(huerfana).hilos).toEqual([]);
-  });
-});
-
-describe("puestos alrededor de la mesa", () => {
-  it("reparte a cada miembro en un círculo distinto mirando a la mesa", () => {
-    const { grupos: groups } = sceneTeams(team);
-    const puestos = teamSeats(groups);
-    expect([...puestos.keys()].sort()).toEqual(["ambar", "lira", "menta"]);
-    const coords = [...puestos.values()].map((p) => `${p.x},${p.z}`);
-    expect(new Set(coords).size).toBe(3);
-    for (const p of puestos.values()) expect(p.mesa).toBe("revisar");
-    // The leader sits on the south side, facing north (angle π).
-    expect(puestos.get("ambar")!.angle).toBeCloseTo(Math.PI, 2);
-  });
-
-  it("usa mesas distintas para equipos distintos", () => {
-    const puestos = teamSeats([
-      { equipoId: "a", miembros: ["ambar", "menta"] },
-      { equipoId: "b", miembros: ["lira", "marina"] },
-    ]);
-    expect(puestos.get("ambar")!.mesa).not.toBe(puestos.get("lira")!.mesa);
-  });
-});
-
-describe("relevos reales del lanzador", () => {
-  const withRelay = team.map((s) =>
-    s.id === "h1"
-      ? { ...s, relevo: { id: "r1", tipo: "entregable", para: "lider" } }
-      : s,
+it("seats live parent and child threads around one table and draws their links", () => {
+  const threads = [
+    fixtureThread("leaf", "agy", "running", "child"),
+    fixtureThread("child", "codex", "waiting-user", "root"),
+    fixtureThread("root", "claude", "running"),
+    fixtureThread("done", "deepseek", "done", "root"),
+  ];
+  const { grupos, hilos } = sceneTeams(threads, sceneSessions(threads).figures);
+  expect(grupos).toHaveLength(1);
+  expect(hilos).toEqual([
+    { de: "menta", a: "lira" },
+    { de: "ambar", a: "menta" },
+  ]);
+  const seats = teamSeats(grupos);
+  expect([...seats.keys()].sort()).toEqual(["ambar", "lira", "menta"]);
+  expect(new Set([...seats.values()].map(({ x, z }) => x + "," + z)).size).toBe(
+    3,
   );
-  it("devuelve solo relevos nuevos entre figuras activas", () => {
-    const { nuevos: created, ids } = newHandoffs(withRelay, new Set());
-    expect(ids).toEqual(["r1"]);
-    expect(created).toEqual([
-      { id: "r1", tipo: "entregable", de: "menta", para: "ambar" },
-    ]);
-    expect(newHandoffs(withRelay, new Set(["r1"])).nuevos).toEqual([]);
-  });
-  it("no inventa relevos y descarta los de sesiones terminadas", () => {
-    expect(newHandoffs(team, new Set()).nuevos).toEqual([]);
-    const fin = withRelay.map((s) =>
-      s.id === "lider" ? { ...s, estado: "terminada" } : s,
-    );
-    const r = newHandoffs(fin, new Set());
-    expect(r.nuevos).toEqual([]);
-    expect(r.ids).toEqual(["r1"]);
-  });
+  expect(seats.get("ambar")?.angle).toBeCloseTo(Math.PI, 2);
+});
+
+it("keeps independent teams at different tables", () => {
+  const seats = teamSeats([
+    { equipoId: "a", miembros: ["ambar", "menta"] },
+    { equipoId: "b", miembros: ["lira", "marina"] },
+  ]);
+  expect(seats.get("ambar")?.mesa).not.toBe(seats.get("lira")?.mesa);
 });
 
 describe("aprobaciones pendientes", () => {

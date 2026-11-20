@@ -7,25 +7,6 @@ import {
   type Actor,
 } from "../src/features/room/room-actors";
 import { mapPercent, toPlace } from "../src/features/room/room-markup";
-import { sceneSessions } from "../src/features/room/room-sessions";
-import {
-  sceneFromSnapshot,
-  unreadJobs,
-} from "../src/features/room/room-snapshot";
-import type { TeamSnapshot } from "../src/features/team/team-controller";
-
-const snapshot = (over: Partial<TeamSnapshot> = {}): TeamSnapshot => ({
-  agents: [],
-  flows: [],
-  events: [],
-  connected: true,
-  loaded: true,
-  error: "",
-  pending: [],
-  sessions: null,
-  ...over,
-});
-
 const actor = (over: Partial<Actor> = {}) => {
   const animations: string[] = [];
   const root = new THREE.Group();
@@ -46,83 +27,6 @@ const actor = (over: Partial<Actor> = {}) => {
   } as unknown as Actor;
   return { value, animations };
 };
-
-describe("room snapshot", () => {
-  it("shows the agents and relay events of the legacy flows", () => {
-    const { agents, team } = sceneFromSnapshot(
-      snapshot({
-        connected: false,
-        agents: [{ id: "ambar" }],
-        events: [
-          { id: "r1", tipo: "relevo", de: "ambar", para: "menta", texto: "x" },
-          { id: "r2", tipo: "relevo", de: "ambar" },
-        ],
-      }),
-      null,
-    );
-    expect(agents).toEqual({
-      conectado: false,
-      agentes: [{ id: "ambar", ocupada: false }],
-    });
-    expect(team.eventos).toEqual([
-      { id: "r1", tipo: "relevo", de: "ambar", para: "menta", texto: "x" },
-    ]);
-  });
-
-  it("lets observed sessions win and turns each copy into a working figure", () => {
-    const observed = sceneSessions([
-      { id: "uno", motor: "codex", copia: 0, estado: "trabajando" },
-      {
-        id: "dos",
-        motor: "codex",
-        copia: 1,
-        estado: "trabajando",
-        fase: "revisar",
-      },
-    ]);
-    const { agents, team } = sceneFromSnapshot(
-      snapshot({ connected: false, flows: [{} as never] }),
-      observed,
-    );
-    expect(agents.conectado).toBe(true);
-    expect(agents.agentes).toHaveLength(observed.base.length + 1);
-    const copy = agents.agentes.at(-1)!;
-    expect(copy.ocupada).toBe(true);
-    expect(copy.ultimo?.jobId).toBe("dos");
-    expect(team).toEqual({ flujos: [], eventos: [] });
-  });
-
-  it("counts finished jobs the owner has not opened", () => {
-    const unread = unreadJobs(
-      snapshot({
-        agents: [
-          { id: "ambar", historial: [{ jobId: "a", estado: "listo" }] },
-          { id: "menta", ultimo: { jobId: "b", estado: "listo", fin: "t" } },
-          { id: "lira", ultimo: { jobId: "c", estado: "trabajando" } },
-        ],
-        flows: [
-          {
-            id: "f",
-            estado: "x",
-            indice: 0,
-            pasos: [
-              { jobId: "d", estado: "error", agente: "", nombre: "", zona: "" },
-              {
-                jobId: "e",
-                estado: "en_curso",
-                agente: "",
-                nombre: "",
-                zona: "",
-              },
-            ],
-          },
-        ],
-      }),
-      ["b"],
-    );
-    expect([...unread].sort()).toEqual(["a", "d"]);
-  });
-});
 
 describe("room actors", () => {
   it("walks along the route and drops reached points", () => {

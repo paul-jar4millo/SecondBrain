@@ -194,7 +194,7 @@ export function SettingsPage() {
                   <option value="/">Sala 3D</option>
                   <option value="/projects">Proyectos</option>
                   <option value="/tasks">Tareas</option>
-                  <option value="/team">Equipo</option>
+                  <option value="/threads">Threads</option>
                 </select>
               </div>
               <div className="setting-row">

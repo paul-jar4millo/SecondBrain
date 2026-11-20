@@ -3,20 +3,7 @@ import {
   advanceTour,
   thumbAxis,
   observedCompletions,
-  waitingFlow,
 } from "../src/features/room/room-controls";
-it("offers Continue only to the agent whose current phase is waiting", () => {
-  const flow = {
-    id: "f1",
-    estado: "esperando",
-    indice: 1,
-    pasos: [{ agente: "ambar" }, { agente: "marina" }],
-  };
-  expect(waitingFlow([flow], "marina")).toBe(flow);
-  expect(waitingFlow([flow], "ambar")).toBeUndefined();
-  expect(waitingFlow([{ ...flow, estado: "listo" }], "marina")).toBeUndefined();
-});
-
 it("keeps touch drift still and caps diagonal movement at the same speed", () => {
   expect(thumbAxis(2, 2, 40)).toEqual({ x: 0, y: 0 });
   const diagonal = thumbAxis(80, -80, 40);

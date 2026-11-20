@@ -32,7 +32,7 @@ it("uses actionable records and never exposes hidden source notes", () => {
     "Pendiente",
   ]);
   expect(data.terrace.lines).toEqual([
-    "Conversaciones por proyecto",
+    "Threads por proyecto",
     "1 proyecto activo",
   ]);
   expect(JSON.stringify(data)).not.toMatch(

@@ -22,17 +22,6 @@ export interface Flow {
   indice: number;
   pasos: { agente: string; nombre: string; zona: string }[];
 }
-export interface Relay {
-  id: string;
-  tipo: string;
-  de: string;
-  para: string;
-  texto: string;
-}
-export interface TeamState {
-  flujos: Flow[];
-  eventos: Relay[];
-}
 export interface SceneState {
   trabajando: boolean;
   atencion: boolean;
@@ -73,7 +62,6 @@ export interface DebugRoom {
     hilos: string[];
     hilosVisibles: number;
     esperandoOk: string[];
-    relevos: string[];
   };
   lastInput?: { code: string; blocked: boolean; nearby?: string };
 }

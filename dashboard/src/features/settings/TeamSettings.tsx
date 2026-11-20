@@ -1,62 +1,46 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { isDemo } from "../../core/store";
 import { useUI } from "../../components/ui";
-import { engines } from "../team/agent-draft";
-import { characters } from "../team/characters";
-import { AgentPortrait } from "../team/TeamPrimitives";
-import { teamApi, useTeam } from "../team/team-store";
+import { characters } from "../agents/characters";
+import { AgentPortrait } from "../agents/TeamPrimitives";
+import { useThreadProjection } from "../threads/thread-projection";
+import { isWorkingThread } from "../threads/thread-store";
+import { useModels } from "../threads/Composer";
 import {
   loadChoice,
   ModelEffortPicker,
   saveChoice,
-  type Model,
-} from "../team/ModelEffortPicker";
+} from "../agents/ModelEffortPicker";
 import { preference, setPreference } from "./preferences";
 
 /** Who answers by default and which model each one opens with on this device. */
 export function TeamSettings() {
   const { notify } = useUI();
-  const team = useTeam();
+  const team = useThreadProjection();
   const [defaultAgent, setDefaultAgent] = useState(() =>
     preference("defaultAgent"),
   );
   const [financeAgent, setFinanceAgent] = useState(() =>
     preference("financeAgent"),
   );
-  const [catalog, setCatalog] = useState<Record<string, Model[]> | null>(null);
+  const catalog = useModels();
   const [choices, setChoices] = useState(() =>
     Object.fromEntries(
-      Object.values(engines).map((engine) => [engine, loadChoice(engine)]),
+      characters.map(({ engine }) => [engine, loadChoice(engine)]),
     ),
   );
-  useEffect(() => {
-    if (isDemo) return;
-    let live = true;
-    void teamApi("/agentes/modelos-lanzador")
-      .then((c) => {
-        if (live) setCatalog(c as Record<string, Model[]>);
-      })
-      .catch(() => {
-        if (live) setCatalog({});
-      });
-    return () => {
-      live = false;
-    };
-  }, []);
   const agentOptions = characters.map((a) => (
     <option key={a.id} value={a.id}>
       {a.name} · {a.provider}
     </option>
   ));
-  const running = (team.sessions || []).filter((s) =>
-    ["pendiente", "trabajando"].includes(s.estado),
-  ).length;
+  const running = team.threads.filter(isWorkingThread).length;
   return (
     <>
       <div className="setting-row">
         <div>
           <h3>Agente predeterminada</h3>
-          <p>A quién abre Equipo en un proyecto donde aún no has elegido.</p>
+          <p>Agente que se propone al crear un thread.</p>
         </div>
         <select
           aria-label="Agente predeterminada"
@@ -86,14 +70,14 @@ export function TeamSettings() {
         </select>
       </div>
       <h3 className="settings-subtitle">
-        Modelo y razonamiento al abrir una conversación
+        Modelo y razonamiento al crear un thread
       </h3>
       <p className="settings-note">
-        Se puede cambiar en cada conversación nueva. Los modelos más potentes
-        gastan más de tu plan.
+        Se puede cambiar en cada thread nuevo. Los modelos más potentes gastan
+        más de tu plan.
       </p>
       {characters.map((a) => {
-        const engine = engines[a.id];
+        const engine = a.engine;
         const list = catalog?.[engine] || [];
         return (
           <div className="setting-row setting-agent" key={a.id}>
@@ -128,16 +112,16 @@ export function TeamSettings() {
               ? "No se usa en la demostración."
               : !team.loaded
                 ? "Comprobando conexión…"
-                : team.connected
+                : !team.error
                   ? running
-                    ? `Conectado · ${running} ${running === 1 ? "sesión en curso" : "sesiones en curso"}.`
-                    : "Conectado · sin sesiones en curso."
-                  : "Sin conexión. Las conversaciones guardadas se conservan."}
+                    ? `Conectado · ${running} ${running === 1 ? "thread en curso" : "threads en curso"}.`
+                    : "Conectado · sin threads en curso."
+                  : "Sin conexión. Los threads guardados se conservan."}
           </p>
         </div>
         <i
           className={
-            "status-dot " + (team.loaded && !team.connected ? "offline" : "")
+            "status-dot " + (team.loaded && team.error ? "offline" : "")
           }
           aria-hidden="true"
         />

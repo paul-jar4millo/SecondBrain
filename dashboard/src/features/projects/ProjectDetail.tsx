@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Copy, ChevronLeft, Pencil, CalendarDays, Plus } from "lucide-react";
 import { active, dateLabel, newItem, today } from "../../core/model";
@@ -10,12 +11,11 @@ import { TaskRow } from "../tasks/TaskRow";
 import { projectPrompt } from "../../core/agent-prompt";
 import { save } from "../../core/store";
 import { dashboardForProject } from "./dashboards";
-import { characters } from "../team/characters";
-import { AgentPortrait, agentStatus } from "../team/TeamPrimitives";
-import { useTeam } from "../team/team-store";
-import { ProjectWork } from "../team/ProjectWork";
-import { ProjectRepository } from "../team/ProjectRepository";
-import { ReferenceBoard } from "../team/ReferenceBoard";
+import { characters } from "../agents/characters";
+import { AgentPortrait } from "../agents/TeamPrimitives";
+import { ProjectWork } from "./ProjectWork";
+import { ProjectRepository, type ProjectLinks } from "./ProjectRepository";
+import { ReferenceBoard } from "./ReferenceBoard";
 
 const views = [
   ["tareas", "Tareas"],
@@ -37,6 +37,7 @@ export function ProjectDetail() {
   const { id } = useParams();
   const { items, edit, ask, notify } = useUI();
   const [params, setParams] = useSearchParams();
+  const [links, setLinks] = useState<ProjectLinks | null>(null);
   const project = items.find(
     (x) => x.kind === "project" && x.id === id && !x.deleted,
   );
@@ -47,6 +48,10 @@ export function ProjectDetail() {
         action={<Link to="/projects">Volver a proyectos</Link>}
       />
     );
+  const repository = links?.vinculos[project.id] ?? null;
+  const repositoryPath = repository
+    ? links?.repositoryPaths?.[repository]
+    : undefined;
   const view: View =
     views.find(([key]) => key === params.get("vista"))?.[0] || "tareas";
   const day = today();
@@ -226,7 +231,12 @@ export function ProjectDetail() {
                 : "Definir fecha objetivo"}
             </button>
           </section>
-          <ProjectTeam projectId={project.id} />
+          <ProjectTeam
+            projectId={project.id}
+            prompt={projectPrompt(project, items, day)}
+            repository={repository}
+            repositoryPath={repositoryPath}
+          />
           <button
             className="text-link project-side-copy"
             onClick={() => ask(projectPrompt(project, items, day))}
@@ -236,7 +246,7 @@ export function ProjectDetail() {
           </button>
           <details className="project-settings">
             <summary>Repositorio y carpeta de trabajo</summary>
-            <ProjectRepository projectId={project.id} />
+            <ProjectRepository projectId={project.id} onChange={setLinks} />
           </details>
         </aside>
       </div>
@@ -244,9 +254,18 @@ export function ProjectDetail() {
   );
 }
 
-function ProjectTeam({ projectId }: { projectId: string }) {
-  const { openAgent } = useUI();
-  const team = useTeam();
+function ProjectTeam({
+  projectId,
+  prompt,
+  repository,
+  repositoryPath,
+}: {
+  projectId: string;
+  prompt: string;
+  repository: string | null;
+  repositoryPath?: string;
+}) {
+  const { openThread } = useUI();
   return (
     <section>
       <h2>Pedir ayuda</h2>
@@ -255,23 +274,17 @@ function ProjectTeam({ projectId }: { projectId: string }) {
           <button
             key={a.id}
             className="team-character-card"
-            onClick={() => openAgent({ agentId: a.id, projectId })}
+            onClick={() => openThread({ engine: a.engine, projectId, prompt })}
           >
             <AgentPortrait id={a.id} size="small" />
             <span>
               <strong>{a.name}</strong>
-              <small>
-                {a.provider} ·{" "}
-                {agentStatus(
-                  team.agents.find((x) => x.id === a.id),
-                  team.flows,
-                )}
-              </small>
+              <small>{a.provider}</small>
             </span>
           </button>
         ))}
       </div>
-      <ProjectWork projectId={projectId} />
+      <ProjectWork repository={repository} repositoryPath={repositoryPath} />
     </section>
   );
 }

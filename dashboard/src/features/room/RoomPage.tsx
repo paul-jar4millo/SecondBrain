@@ -3,18 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { useUI } from "../../components/ui";
 import { api, isDemo } from "../../core/store";
 import { mount } from "./room";
-import { teamApi, teamController } from "../team/team-store";
+import { agentApi } from "../agents/agent-api";
+import { threadProjection } from "../threads/thread-projection";
 import { today } from "../../core/model";
 import { useFinance } from "../finance/useFinance";
 import { roomSummary } from "./room-summary";
 import "./room.css";
-import "./agents-panel.css";
 
 const apiRoom = (path: string, body?: unknown) =>
   api(path, body ? { method: "POST", body: JSON.stringify(body) } : undefined);
 
 export default function RoomPage() {
-  const { items, notify, openAgent, openTeam } = useUI();
+  const { items, notify, openThread } = useUI();
   const { data: finance, error: financeError } = useFinance();
   const [hidden, setHidden] = useState(
     () => localStorage.getItem("sb-hide-money") === "true",
@@ -31,10 +31,9 @@ export default function RoomPage() {
     notify,
     navigate,
     summary,
-    openAgent,
-    openTeam,
+    openThread,
   });
-  latest.current = { items, notify, navigate, summary, openAgent, openTeam };
+  latest.current = { items, notify, navigate, summary, openThread };
   useEffect(() => {
     const refresh = () => {
       setHidden(localStorage.getItem("sb-hide-money") === "true");
@@ -64,12 +63,11 @@ export default function RoomPage() {
               (await import("./room-demo")).apiDemo(path, body)
           : apiRoom,
         toast: (message) => latest.current.notify(message),
-        team: teamController,
-        openAgent: (target) => latest.current.openAgent(target),
-        openTeam: (target) => latest.current.openTeam(target),
+        threads: threadProjection,
+        openThread: (target) => latest.current.openThread(target),
         datos: () => latest.current.summary,
         irAEspacio: (path) => latest.current.navigate(path),
-        aprobaciones: () => teamApi("/aprobaciones"),
+        aprobaciones: () => agentApi("/aprobaciones"),
       }),
     [],
   );

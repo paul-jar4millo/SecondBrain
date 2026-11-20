@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { ApprovalQueue } from "../src/features/team/ApprovalQueue";
+import { ApprovalQueue } from "../src/features/finance/ApprovalQueue";
 
 afterEach(cleanup);
 it("oculta los detalles hasta revisarlos y solo entonces permite aprobar", async () => {

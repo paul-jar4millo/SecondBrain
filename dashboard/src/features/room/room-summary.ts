@@ -110,7 +110,7 @@ export function roomSummary(
     terrace: {
       headline: "Tu equipo",
       lines: [
-        "Conversaciones por proyecto",
+        "Threads por proyecto",
         count(projects.length, "proyecto activo", "proyectos activos"),
       ],
     },

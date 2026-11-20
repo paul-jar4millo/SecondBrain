@@ -102,16 +102,22 @@ export function useThread(id: string | undefined): ThreadFollow {
  * Calls `onEvent` for every new event of every thread (global feed), from
  * `after` on. Used to keep the list and the inbox fresh.
  */
-export function followFeed(after: number, onEvent: (e: ThreadEvent) => void) {
+export function followFeed(
+  after: number,
+  onEvent: (e: ThreadEvent) => void,
+  onError?: () => void,
+) {
   if (typeof EventSource === "undefined") return () => {};
   const source = new EventSource(`/api/v1/threads/feed?after=${after}`);
   source.onmessage = (event) => {
     try {
       const message = JSON.parse(event.data);
       if (message.type === "event") onEvent(message.event);
+      if (message.type === "snapshot-required") onError?.();
     } catch {
       /* ignore malformed data */
     }
   };
+  if (onError) source.onerror = onError;
   return () => source.close();
 }

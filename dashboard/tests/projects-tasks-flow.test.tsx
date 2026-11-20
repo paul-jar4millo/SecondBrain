@@ -58,8 +58,7 @@ const uiContext = (items: Item[] = []) => ({
   trash: vi.fn(),
   notify: vi.fn(),
   ask: vi.fn(),
-  openAgent: vi.fn(),
-  openTeam: vi.fn(),
+  openThread: vi.fn(),
 });
 
 beforeAll(() => {
