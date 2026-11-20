@@ -1,6 +1,6 @@
 {
   "name": "second-brain-monorepo",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "SecondBrain: a self-hosted second brain (tasks, calendar, projects, finance) over a Git-backed Markdown vault, with a 3D refuge UI and isolated AI agents via MCP.",
   "workspaces": [
