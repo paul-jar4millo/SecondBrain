@@ -265,6 +265,10 @@ export function buildCodexArgs(ctx, mcpServers, discoveredEntries = new Map()) {
   ]);
   for (const key of builtinNames) {
     if (Object.hasOwn(mcpServers, key) || entries.has(key)) continue;
+    // Codex splits a -c path on every dot, quoted or not: "claude.ai" would
+    // become a broken "claude" server and abort startup. Such names are
+    // Claude connectors, not Codex servers, so they are left out.
+    if (key.includes(".")) continue;
     args.push("-c", `mcp_servers.${key}={command="disabled",enabled=false}`);
   }
   for (const [key, srv] of Object.entries(mcpServers)) {
@@ -306,20 +310,25 @@ export function buildCodexThreadMcpConfig(
       ? discoveredEntries
       : new Map([...discoveredEntries].map((k) => [k, { enabled: true }]));
   if (disableInheritedMcp !== false) {
-    for (const [key, meta] of mapEntries.entries()) {
-      if (!Object.hasOwn(mcpServers, key) && !key.includes(".")) {
+    // Codex splits config keys on every dot, quoted or not, so a dotted name
+    // cannot be addressed. buildCodexArgs refuses an enabled one at startup.
+    for (const key of mapEntries.keys())
+      if (!Object.hasOwn(mcpServers, key) && !key.includes("."))
         entries[`mcp_servers.${key}`] = { enabled: false };
-      } else if (!Object.hasOwn(mcpServers, key) && meta?.enabled !== false) {
-        entries[`mcp_servers.${JSON.stringify(key)}`] = { enabled: false };
-      }
-    }
     for (const key of [
       ...INHERITED_DESKTOP_CONNECTORS,
       "node_repl",
       "secondbrain",
     ]) {
-      if (!Object.hasOwn(mcpServers, key) && !mapEntries.has(key)) {
-        entries[`mcp_servers.${key}`] = { command: "disabled", enabled: false };
+      if (
+        !Object.hasOwn(mcpServers, key) &&
+        !mapEntries.has(key) &&
+        !key.includes(".")
+      ) {
+        entries[`mcp_servers.${key}`] = {
+          command: "disabled",
+          enabled: false,
+        };
       }
     }
   }
