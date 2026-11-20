@@ -141,6 +141,7 @@ export async function arrancar(env = process.env) {
       dataDir,
       projects,
       git: gitExecutor.git,
+      gh: gitExecutor.gh,
       maxActive: limits.maxActivos,
       toolCatalog,
     });
