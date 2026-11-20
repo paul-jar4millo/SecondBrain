@@ -3,18 +3,15 @@ import { routePolicy } from "./routes.mjs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFile, stat, realpath } from "node:fs/promises";
-
 import { acquireInstance } from "./instance.mjs";
 import { actorContext, Failure } from "./vault.mjs";
-
-import { send } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
+import { prepareResponse, sendError } from "./http/middleware.mjs";
+import { serveStatic } from "./http/static.mjs";
 import { TEAM_ACTION, handleTeamAction } from "./http/team-actions.mjs";
 import { buildRoutes } from "./http/routes/index.mjs";
 
 /** @import { ApplicationOptions, HttpRequest } from "./types.d.ts" */
-
 /** @import { ServerResponse } from "node:http" */
 
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -48,32 +45,7 @@ export async function createApplication(options = {}) {
   const handle = async (request, response) => {
     const requestId = randomUUID(),
       started = performance.now();
-    response.setHeader("X-Request-Id", requestId);
-    response.once("finish", () => {
-      let route = "unknown";
-      try {
-        const p = new URL(
-          request.url ?? "/",
-          "http://localhost",
-        ).pathname.slice("/api/v1".length);
-        if (routePolicy(request.method, p)) route = p;
-      } catch {}
-      logger({
-        event: "http",
-        requestId,
-        method: request.method,
-        route,
-        status: response.statusCode,
-        durationMs: Math.round(performance.now() - started),
-      });
-    });
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    response.setHeader("Referrer-Policy", "same-origin");
-    response.setHeader("X-Frame-Options", "DENY");
-    response.setHeader(
-      "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:; worker-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
-    );
+    prepareResponse(request, response, requestId, started, logger);
     try {
       // Parsing runs inside the try: an async handler that throws would kill the process.
       let pathname;
@@ -139,84 +111,18 @@ export async function createApplication(options = {}) {
           "Interfaz desactivada; el servicio de conocimiento sigue disponible.",
           404,
         );
-      if (!["GET", "HEAD"].includes(request.method ?? ""))
-        throw new Failure("Método no permitido.", 405);
-      const staticRoot = path.resolve(
-        options.staticRoot ||
-          process.env.WEB_ROOT ||
-          path.join(appRoot, "dashboard", "dist"),
+      await serveStatic(
+        request,
+        response,
+        pathname,
+        path.resolve(
+          options.staticRoot ||
+            process.env.WEB_ROOT ||
+            path.join(appRoot, "dashboard", "dist"),
+        ),
       );
-      let relative;
-      try {
-        relative = decodeURIComponent(pathname);
-      } catch {
-        throw new Failure("Ruta inválida.");
-      }
-      if (
-        relative.includes("\\") ||
-        relative.split("/").some((p) => p === ".." || p.startsWith("."))
-      )
-        throw new Failure("Ruta inválida.", 403);
-      let target = path.join(
-        staticRoot,
-        relative === "/" ? "index.html" : relative,
-      );
-      try {
-        const real = await realpath(target);
-        if (!real.startsWith(staticRoot + path.sep))
-          throw new Failure("Ruta inválida.", 403);
-        if (!(await stat(target)).isFile())
-          throw Object.assign(new Error(), { code: "ENOENT" });
-      } catch (e) {
-        if (e.code !== "ENOENT") throw e;
-        if (path.extname(relative))
-          throw new Failure("Archivo no disponible.", 404);
-        target = path.join(staticRoot, "index.html");
-      }
-      const data = await readFile(target);
-      /** @type {Partial<Record<string, string>>} */
-      const types = {
-        ".html": "text/html",
-        ".js": "text/javascript",
-        ".css": "text/css",
-        ".json": "application/json",
-        ".svg": "image/svg+xml",
-        ".png": "image/png",
-        ".webmanifest": "application/manifest+json",
-      };
-      response.writeHead(200, {
-        "Content-Type":
-          (types[path.extname(target)] || "application/octet-stream") +
-          "; charset=utf-8",
-        "Cache-Control":
-          path.basename(target) === "index.html" ||
-          path.basename(target) === "sw.js"
-            ? "no-cache"
-            : "public, max-age=3600",
-      });
-      response.end(request.method === "HEAD" ? undefined : data);
     } catch (error) {
-      if (!error.status)
-        logger({
-          event: "http.error",
-          requestId,
-          type: error.name || "Error",
-          message: String(error.message ?? error),
-          stack: error.stack,
-        });
-      if (!response.headersSent)
-        send(response, error.status || 500, {
-          error: error.status
-            ? error.message
-            : "No se pudo completar la operación. El archivo original se conserva.",
-          code: error.code,
-          server: error.server,
-          ...(error.recibo ? { recibo: error.recibo } : {}),
-          ...(error.solicitud ? { solicitud: error.solicitud } : {}),
-          ...(error.snapshot ? { snapshot: error.snapshot } : {}),
-          ...(error.operacion ? { operacion: error.operacion } : {}),
-        });
-      else response.end();
+      sendError(response, error, requestId, logger);
     }
   };
   const server = http.createServer((request, response) =>
