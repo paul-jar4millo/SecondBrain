@@ -1,6 +1,13 @@
 import { StringDecoder } from "node:string_decoder";
 
-/** @typedef {number | string} RpcId */
+/** @typedef {number | string | null} RpcId */
+/**
+ * @typedef {import("node:child_process").ChildProcessByStdio<
+ *   import("node:stream").Writable,
+ *   import("node:stream").Readable,
+ *   import("node:stream").Readable | null
+ * >} ProviderChild
+ */
 /** @typedef {{ written: boolean, rpcId: RpcId }} RpcWriteAcknowledgment */
 /** @typedef {{ writeAck: Promise<RpcWriteAcknowledgment>, isWritable: () => boolean }} RpcRequestMetadata */
 /**
@@ -22,12 +29,12 @@ import { StringDecoder } from "node:string_decoder";
  * @typedef {object} PendingCall
  * @property {(result: unknown) => void} resolve
  * @property {(error: Error) => void} reject
- * @property {NodeJS.Timeout | null} timer
+ * @property {NodeJS.Timeout | undefined} timer
  */
 
 /**
  * Newline-delimited JSON-RPC; no PTY, ANSI parsing or transcript polling.
- * @param {import("node:child_process").ChildProcess} child
+ * @param {ProviderChild} child
  * @param {RpcOptions} [options]
  */
 export function providerRpc(
@@ -146,34 +153,32 @@ export function providerRpc(
         child.kill();
         return;
       }
-      if (message.method && message.id !== undefined) {
-        /** @type {(ack: RpcWriteAcknowledgment) => void} */
-        let resolveWriteAck;
-        /** @type {(reason: unknown) => void} */
-        let rejectWriteAck;
-        /** @type {Promise<RpcWriteAcknowledgment>} */
-        const writeAck = new Promise((resolve, reject) => {
-          resolveWriteAck = resolve;
-          rejectWriteAck = reject;
-        });
+      const { method, id } = message;
+      if (method && id !== undefined) {
+        /** @type {PromiseWithResolvers<RpcWriteAcknowledgment>} */
+        const {
+          promise: writeAck,
+          resolve: resolveWriteAck,
+          reject: rejectWriteAck,
+        } = Promise.withResolvers();
         writeAck.catch(() => {});
         Promise.resolve()
           .then(() =>
-            request(message.method, message.params, message.id, {
+            request(method, message.params, id, {
               writeAck,
               isWritable,
             }),
           )
           .then(async (result) => {
-            await writeAsync({ jsonrpc: "2.0", id: message.id, result });
-            resolveWriteAck({ written: true, rpcId: message.id });
+            await writeAsync({ jsonrpc: "2.0", id, result });
+            resolveWriteAck({ written: true, rpcId: id });
           })
           .catch(async (err) => {
             rejectWriteAck(err);
             if (isWritable()) {
               await writeAsync({
                 jsonrpc: "2.0",
-                id: message.id,
+                id,
                 error: {
                   code: err?.rpcCode || -32601,
                   message: err?.message || "Solicitud no disponible",
@@ -181,14 +186,15 @@ export function providerRpc(
               }).catch(() => {});
             }
           });
-      } else if (message.method) {
-        Promise.resolve(notify(message.method, message.params)).catch(() =>
+      } else if (method) {
+        Promise.resolve(notify(method, message.params)).catch(() =>
           close("Fallo procesando notificación"),
         );
-      } else if (pending.has(message.id)) {
-        const p = pending.get(message.id);
+      } else if (id !== undefined) {
+        const p = pending.get(id);
+        if (!p) continue;
         clearTimeout(p.timer);
-        pending.delete(message.id);
+        pending.delete(id);
         if (message.error)
           p.reject(
             Object.assign(new Error("El proveedor rechazó la operación"), {
@@ -224,7 +230,7 @@ export function providerRpc(
               pending.delete(id);
               reject(new Error("El proveedor no confirmó la operación"));
             }, ms)
-          : null;
+          : undefined;
         pending.set(id, { resolve, reject, timer });
         try {
           write({ jsonrpc: "2.0", id, method, params });

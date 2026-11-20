@@ -1136,7 +1136,7 @@ export async function createToolCatalogStore({
             "",
         ).replace(/\/$/, "");
         const tokenCheck = inspectFileNonEmptySync(tokenFile);
-        if (!tokenCheck.nonEmpty || !brainUrl) {
+        if (!tokenFile || !tokenCheck.nonEmpty || !brainUrl) {
           const entry = {
             instalada: true,
             configurada: false,

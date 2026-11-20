@@ -31,10 +31,10 @@ import { ocultarDiagnostico } from "./diagnostico.mjs";
 import { sessionCommand, stopSessionScope } from "./limits.mjs";
 import { ErrorLanzador } from "./errores.mjs";
 
-/** @import { ChildProcess } from "node:child_process" */
+/** @import { ChildProcess, ChildProcessWithoutNullStreams } from "node:child_process" */
 /** @import { LauncherSession } from "./session-types.d.ts" */
 /** @import { ToolProfile } from "./tool-catalog-types.d.ts" */
-/** @import { ActiveJob, ExecutionRequest, ExecutorOptions, LiveTerminal, QueuedJob, ResourceQueueEntry, TerminalEvent, TerminalInput, TurnOptions } from "./types.d.ts" */
+/** @import { ActiveJob, ExecutionRequest, ExecutorOptions, LiveTerminal, MonitoredChild, QueuedJob, ResourceQueueEntry, TerminalEvent, TerminalInput, TurnOptions } from "./types.d.ts" */
 
 // Bound the terminal replay kept in each session's detail file.
 const PERSISTIDO = 500;
@@ -69,7 +69,7 @@ export function crearEjecutor({
   seguimiento = null,
   conversations = null,
   toolCatalog = null,
-  consultarSaldo = () => saldoDeepSeek(env.DEEPSEEK_API_KEY),
+  consultarSaldo = () => saldoDeepSeek(env.DEEPSEEK_API_KEY ?? null),
   // A silent CLI must not hold a slot forever, including interactive harnesses.
   limiteMs = minutosConfigurados(env.SB_SESION_MAX_MIN, SESION_MAX_MIN),
   inactividadMs = minutosConfigurados(env.SB_SESION_INACTIVIDAD_MIN, 15),
@@ -84,7 +84,7 @@ export function crearEjecutor({
   const activos = new Map();
   /** @type {Map<string, LiveTerminal>} */
   const terminales = new Map();
-  /** @type {Map<string, ChildProcess>} */
+  /** @type {Map<string, ChildProcessWithoutNullStreams>} */
   const liveProcesses = new Map();
   /**
    * Processes that already emitted "exit" (exitCode alone misses signals).
@@ -362,10 +362,14 @@ export function crearEjecutor({
       }).catch(() => {});
     }
   }
-  /** @param {LauncherSession} sesion */
+  /** @param {LauncherSession | undefined} sesion */
   async function limpiarWorkspaceMiembro(sesion) {
     const ws = sesion?.workspacePath;
-    if (!ws || !["git-worktree", "directory"].includes(sesion.workspaceKind)) {
+    if (
+      !sesion ||
+      !ws ||
+      !["git-worktree", "directory"].includes(sesion.workspaceKind ?? "")
+    ) {
       return;
     }
     const resolvedWs = path.resolve(ws);
@@ -415,6 +419,7 @@ export function crearEjecutor({
         if (!evicted) break;
       }
       const siguiente = resourceQueue.shift();
+      if (!siguiente) break;
       const s = registro.leer().find((x) => x.id === siguiente.sesionId);
       const pq = queuedPromises.get(siguiente.sesionId);
       if (!s || s.eliminada || s.estado !== "pendiente") {
@@ -559,7 +564,7 @@ export function crearEjecutor({
   function lanzarTrabajo(sesion, brief, cwd, turnOptions = {}) {
     limpiarEviccionOciosa(sesion.id);
     /** @type {ActiveJob} */
-    const job = { hijo: null, cancelada: false, promesa: null };
+    const job = { hijo: null, cancelada: false, promesa: null, pendientes: 0 };
     activos.set(sesion.id, job);
     job.promesa = Promise.resolve()
       .then(() => marcar(sesion.id, brief))
@@ -618,12 +623,19 @@ export function crearEjecutor({
         if (sesion.structured && !job.cancelada) await drenarCola(sesion.id);
       });
   }
+  /** @param {string} id */
+  function activeJob(id) {
+    const job = activos.get(id);
+    if (!job) throw new Error("Sesión no activa");
+    return job;
+  }
+
   /**
    * @param {LauncherSession} sesion
-   * @param {ChildProcess} hijo
+   * @param {MonitoredChild} hijo
    */
   function vigilar(sesion, hijo) {
-    const job = activos.get(sesion.id);
+    const job = activeJob(sesion.id);
     /** @type {NodeJS.Timeout | undefined} */
     let escalada;
     /** @type {NodeJS.Timeout | undefined} */
@@ -728,7 +740,7 @@ export function crearEjecutor({
       if (geminiDir) {
         await mkdir(geminiDir, { recursive: true, mode: 0o700 });
       }
-      const job = activos.get(sesion.id);
+      const job = activeJob(sesion.id);
       const existingChild = liveProcesses.get(sesion.id);
       if (
         existingChild &&
@@ -1032,7 +1044,7 @@ export function crearEjecutor({
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
-    const job = activos.get(sesion.id);
+    const job = activeJob(sesion.id);
     job.hijo = hijo;
     if (job.cancelada) senalar(hijo, "SIGTERM");
     const detenerVigilante = vigilar(sesion, hijo);
@@ -1173,7 +1185,7 @@ export function crearEjecutor({
       ],
       { cwd, env: childEnv, detached: true, stdio: ["pipe", "pipe", "pipe"] },
     );
-    const job = activos.get(sesion.id);
+    const job = activeJob(sesion.id);
     job.hijo = hijo;
     job.nativo = true;
     if (job.cancelada) senalar(hijo, "SIGTERM");
@@ -1324,10 +1336,12 @@ export function crearEjecutor({
         403,
       );
     }
+    /** @type {import("./types.d.ts").ExecutionContext | null} */
     let context =
       contextoHeredado ||
       (espacioId && espacios ? await espacios.resolver(espacioId) : null);
-    if (!context && !Object.hasOwn(proyectos, proyecto))
+    const projectKey = String(proyecto);
+    if (!context && !Object.hasOwn(proyectos, projectKey))
       throw new Error("Proyecto desconocido");
     if (typeof brief !== "string" || !brief.trim())
       throw new Error("Encargo vacío");
@@ -1370,7 +1384,7 @@ export function crearEjecutor({
           409,
         );
       }
-      resolvedMemberId = resolvedMemberId || card.id;
+      resolvedMemberId = resolvedMemberId || card.id || null;
       resolvedRole = resolvedRole || card.role || null;
       resolvedResponsibility =
         resolvedResponsibility || card.responsibility || null;
@@ -1388,7 +1402,7 @@ export function crearEjecutor({
       queueSlot = true;
     }
 
-    const targetCwd = context?.cwd || proyectos[proyecto];
+    const targetCwd = context?.cwd || proyectos[projectKey];
     const validatedAttachments = structured
       ? validarAdjuntosMotor(motor, attachments, targetCwd)
       : [];
@@ -1479,7 +1493,7 @@ export function crearEjecutor({
       origen,
       equipoId,
       padreId,
-      proyecto: context ? context.repositorio : proyecto,
+      proyecto: (context ? context.repositorio : proyecto) ?? undefined,
       encargo: brief,
       modelo: resolvedModelo,
       esfuerzo: resolvedEsfuerzo,
@@ -1509,6 +1523,7 @@ export function crearEjecutor({
     }
     if (padreId) {
       try {
+        if (!equipos || !equipoId) throw new Error("Equipos no disponibles");
         await equipos.agregar(equipoId, padreId, sesion.id, motor, {
           memberId: resolvedMemberId,
           role: resolvedRole,
@@ -1561,10 +1576,10 @@ export function crearEjecutor({
         throw error;
       }
     }
-    const cwdFinal = context?.cwd || proyectos[proyecto];
+    const cwdFinal = context?.cwd || proyectos[projectKey];
     if (queueSlot) {
       /** @type {() => void} */
-      let resolvePromise;
+      let resolvePromise = () => {};
       /** @type {Promise<void>} */
       const promise = new Promise((resolve) => {
         resolvePromise = resolve;
@@ -1670,18 +1685,21 @@ export function crearEjecutor({
       }
       const nativo = activos.get(id);
       if (nativo?.nativo && sesion?.estado === "terminada") {
+        const input = nativo.hijo?.stdin;
+        if (!input) throw new Error("Terminal no disponible");
         if (typeof brief !== "string" || !brief.trim())
           throw new Error("Encargo vacío");
         await registro.actualizar(id, { estado: "trabajando", error: null });
         await marcar(id, brief);
-        nativo.hijo.stdin.write(JSON.stringify({ texto: brief }) + "\n");
+        input.write(JSON.stringify({ texto: brief }) + "\n");
         return registro.leer().find((s) => s.id === id);
       }
       if (
         !sesion?.conversacionId ||
         sesion.origen === "remote" ||
         !["claude", "agy"].includes(sesion.motor) ||
-        (!sesion.directorio && !Object.hasOwn(proyectos, sesion.proyecto))
+        (!sesion.directorio &&
+          !Object.hasOwn(proyectos, String(sesion.proyecto)))
       )
         throw new Error("Conversación no disponible");
       if (activos.has(id)) throw new Error("Límite de sesiones activas");
@@ -1692,7 +1710,7 @@ export function crearEjecutor({
       lanzarTrabajo(
         sesion,
         brief,
-        sesion.directorio || proyectos[sesion.proyecto],
+        sesion.directorio || proyectos[String(sesion.proyecto)],
       );
       return registro.leer().find((s) => s.id === id);
     });
@@ -1745,11 +1763,11 @@ export function crearEjecutor({
     entrada(id, { raw, texto, cols, rows, controlador, interrumpir }) {
       const job = activos.get(id);
       const session = registro.leer().find((s) => s.id === id);
-      if (!job?.nativo || !session?.harness || !job.hijo?.stdin?.writable)
+      const input = job?.hijo?.stdin;
+      if (!job?.nativo || !session?.harness || !input?.writable)
         throw new Error("Terminal no disponible");
       /** @param {unknown} valor */
-      const escribir = (valor) =>
-        job.hijo.stdin.write(JSON.stringify(valor) + "\n");
+      const escribir = (valor) => input.write(JSON.stringify(valor) + "\n");
       const tamano = cols !== undefined || rows !== undefined;
       if (
         [
@@ -1860,7 +1878,7 @@ export function crearEjecutor({
         await limpiarWorkspaceMiembro(previa);
         if (seguimiento && previa)
           await seguimiento
-            .borrar(id, previa.directorio || proyectos[previa.proyecto])
+            .borrar(id, previa.directorio || proyectos[String(previa.proyecto)])
             .catch(() => {});
         return resultado;
       });
@@ -1929,25 +1947,27 @@ export function crearEjecutor({
         online: true,
       });
       if (accepted.repetido) return accepted;
+      const command = accepted.command;
+      if (!command) throw new Error("No se pudo aceptar el mensaje.");
       if (!sesion.conversacionId) {
         await conversations.markCommandDelivery(
           id,
-          accepted.command.id,
+          command.id,
           "entrega_incierta",
           "Falta identificador nativo de sesión para continuar.",
         );
         return {
           ...accepted,
-          command: { ...accepted.command, deliveryStatus: "entrega_incierta" },
+          command: { ...command, deliveryStatus: "entrega_incierta" },
         };
       }
-      await continuar(id, accepted.command.text, {
-        attachments: accepted.command.attachments,
-        commandId: accepted.command.id,
+      await continuar(id, command.text, {
+        attachments: command.attachments,
+        commandId: command.id,
       });
       const updatedCmd = await conversations.markCommandDelivery(
         id,
-        accepted.command.id,
+        command.id,
         "entregado",
       );
       return { ...accepted, command: updatedCmd, started: true };
@@ -2264,7 +2284,7 @@ export function crearEjecutor({
       if (job.hijo) {
         senalar(job.hijo, "SIGTERM");
         const reloj = setTimeout(() => {
-          if (activos.has(id)) senalar(job.hijo, "SIGKILL");
+          if (activos.has(id) && job.hijo) senalar(job.hijo, "SIGKILL");
         }, 5000);
         reloj.unref();
       }
@@ -2293,6 +2313,7 @@ export function crearEjecutor({
         clearTimeout(reloj);
       }
       const actual = registro.leer().find((s) => s.id === hijaId);
+      if (!actual) throw new Error("Sesión hija inexistente");
       return ["pendiente", "trabajando"].includes(actual.estado)
         ? { id: hijaId, estado: "pendiente" }
         : actual;

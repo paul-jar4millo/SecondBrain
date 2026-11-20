@@ -16,7 +16,7 @@ import { parseCodexMcpServerEntries } from "./toml.mjs";
  * @property {string} [codexProfile]
  * @property {boolean} [useCodexMcpList]
  */
-/** @typedef {{ disableInheritedMcp?: boolean, session?: { esfuerzo?: string } }} CodexArgsContext */
+/** @typedef {{ disableInheritedMcp?: boolean, session?: { esfuerzo?: string | null } }} CodexArgsContext */
 /** @typedef {{ enabled: boolean, dottedUnoverridable?: boolean }} CodexMcpEntry */
 /** @typedef {Map<string, CodexMcpEntry> | Set<string>} DiscoveredEntries */
 /** @typedef {import("./shared.mjs").ProviderMcpServer} ProviderMcpServer */
@@ -140,22 +140,16 @@ export async function inspectCodexConfiguredMcps(ctx, bin = "codex") {
     }
   }
 
+  const userHome =
+    ctx.env?.HOME ||
+    ctx.env?.USERPROFILE ||
+    ctx.operatorEnv?.HOME ||
+    ctx.operatorEnv?.USERPROFILE;
   const homeDir =
     ctx.codexHome ||
     ctx.env?.CODEX_HOME ||
     ctx.operatorEnv?.CODEX_HOME ||
-    (ctx.env?.HOME ||
-    ctx.env?.USERPROFILE ||
-    ctx.operatorEnv?.HOME ||
-    ctx.operatorEnv?.USERPROFILE
-      ? path.join(
-          ctx.env?.HOME ||
-            ctx.env?.USERPROFILE ||
-            ctx.operatorEnv?.HOME ||
-            ctx.operatorEnv?.USERPROFILE,
-          ".codex",
-        )
-      : null);
+    (userHome ? path.join(userHome, ".codex") : null);
   if (homeDir) {
     const homeCfgPath = path.join(homeDir, "config.toml");
     mergeEntries(await inspectCodexConfigFile(homeCfgPath, homeDir));
@@ -179,8 +173,7 @@ export async function inspectCodexConfiguredMcps(ctx, bin = "codex") {
     null;
   const realOsHome = os.homedir();
   const homeOverridden =
-    Boolean(effectiveHome) &&
-    path.resolve(effectiveHome) !== path.resolve(realOsHome);
+    !!effectiveHome && path.resolve(effectiveHome) !== path.resolve(realOsHome);
   if (ctx.cwd) {
     const ancestors = ancestorDirectoriesUpToRoot(ctx.cwd);
     for (let i = ancestors.length - 1; i >= 0; i--) {

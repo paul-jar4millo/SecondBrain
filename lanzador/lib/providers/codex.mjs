@@ -35,6 +35,8 @@ import {
  *   }} CodexContext
  */
 /** @typedef {Partial<import("../../provider-rpc.mjs").RpcRequestMetadata>} RpcRequestMetadata */
+/** @typedef {import("../../provider-rpc.mjs").RpcId} RpcId */
+/** @typedef {import("../../provider-rpc.mjs").ProviderChild} ProviderChild */
 /** @typedef {{ id?: string, status?: string }} CodexTurnPayload */
 /** @typedef {{ threadId?: string, thread?: { id?: string }, turnId?: string, turn?: CodexTurnPayload }} CodexTurnEvent */
 /**
@@ -70,7 +72,7 @@ import {
  * @typedef {{ answers: Record<string, { answers: unknown[] }> } |
  *   { action: "accept" | "decline" | "cancel", content: object | null, _meta: null } |
  *   { permissions: unknown, scope: "turn" } |
- *   { decision: string }
+ *   { decision: string | undefined }
  * } CodexResponse
  */
 /** @typedef {{ status: "completed" | "interrupted", turnId: string | null, pid: number | null, persistent: boolean }} CodexTurnResult */
@@ -92,7 +94,7 @@ export function createCodexController() {
   const connectionId = randomUUID();
   /** @type {Set<string>} */
   const retiredTurnIds = new Set();
-  /** @type {import("node:child_process").ChildProcess | null} */
+  /** @type {ProviderChild | null} */
   let child = null;
   /** @type {ReturnType<typeof providerRpc> | null} */
   let rpc = null;
@@ -117,8 +119,9 @@ export function createCodexController() {
     );
 
   /**
-   * @param {CodexTurn} turn
+   * @param {CodexTurn | null} turn
    * @param {CodexTurnEvent} [p]
+   * @returns {turn is CodexTurn}
    */
   const acceptTurnEvent = (turn, p = {}) => {
     if (
@@ -152,7 +155,7 @@ export function createCodexController() {
   const settleActiveTurn = (turn, method, payload) => {
     if (!turn || activeTurn !== turn || turn.settled) return;
     turn.settled = true;
-    clearTimeout(turn.killTimer);
+    clearTimeout(turn.killTimer ?? undefined);
     if (turn.activeTurnId) {
       retiredTurnIds.add(turn.activeTurnId);
     }
@@ -162,7 +165,7 @@ export function createCodexController() {
 
   /**
    * @param {CodexTurn} turn
-   * @param {CodexTurnPayload} turnPayload
+   * @param {CodexTurnPayload | undefined} turnPayload
    */
   const finalizeCompletedTurn = (turn, turnPayload) => {
     const status = turnPayload?.status;
@@ -172,14 +175,14 @@ export function createCodexController() {
         if (status === "completed") {
           settleActiveTurn(turn, "resolve", {
             status: "completed",
-            turnId: turnPayload.id ?? turn.activeTurnId,
+            turnId: turnPayload?.id ?? turn.activeTurnId,
             pid: child?.pid ?? null,
             persistent: isAlive(),
           });
         } else if (status === "interrupted") {
           settleActiveTurn(turn, "resolve", {
             status: "interrupted",
-            turnId: turnPayload.id ?? turn.activeTurnId,
+            turnId: turnPayload?.id ?? turn.activeTurnId,
             pid: child?.pid ?? null,
             persistent: isAlive(),
           });
@@ -374,16 +377,17 @@ export function createCodexController() {
             turn.ctx.expire(String(p.requestId));
           }
           if (method === "turn/completed") {
-            const completedTurnId = p.turn?.id ?? null;
+            const completedTurn = p.turn;
+            const completedTurnId = completedTurn?.id ?? null;
             if (completedTurnId && retiredTurnIds.has(completedTurnId)) {
               return;
             }
             if (!turn.activeTurnId) {
               if (!turn.startResponded) {
-                if (completedTurnId) {
+                if (completedTurn?.id) {
                   turn.earlyCompletion = {
-                    turnId: completedTurnId,
-                    turn: p.turn,
+                    turnId: completedTurn.id,
+                    turn: completedTurn,
                   };
                 }
                 return;
@@ -405,7 +409,7 @@ export function createCodexController() {
         /**
          * @param {string} method
          * @param {CodexRequest} p
-         * @param {string | number} id
+         * @param {RpcId} id
          * @param {RpcRequestMetadata} [rpcMeta]
          * @returns {Promise<CodexResponse>}
          */
@@ -668,7 +672,7 @@ export function createCodexController() {
             );
           const names = (skillsRes?.skills || skillsRes?.data || [])
             .map((s) => s?.name || s?.id)
-            .filter(Boolean);
+            .filter(/** @returns {name is string} */ (name) => Boolean(name));
           await ctx.onSkillsObserved({
             source: "codex_skills_list",
             names,
@@ -698,15 +702,12 @@ export function createCodexController() {
     );
     await ensureConnected(ctx);
 
-    /** @type {CodexTurn["resolve"]} */
-    let resolveTurn;
-    /** @type {CodexTurn["reject"]} */
-    let rejectTurn;
-    /** @type {Promise<CodexTurnResult>} */
-    const completed = new Promise((resolve, reject) => {
-      resolveTurn = resolve;
-      rejectTurn = reject;
-    });
+    /** @type {PromiseWithResolvers<CodexTurnResult>} */
+    const {
+      promise: completed,
+      resolve: resolveTurn,
+      reject: rejectTurn,
+    } = Promise.withResolvers();
     completed.catch(() => {});
 
     /** @type {CodexTurn} */
@@ -769,6 +770,7 @@ export function createCodexController() {
       },
     });
 
+    if (!rpc) throw new Error("Proveedor desconectado");
     const turnStarted = /** @type {{ turn?: CodexTurnPayload }} */ (
       await rpc.call("turn/start", {
         threadId,

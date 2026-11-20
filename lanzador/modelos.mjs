@@ -132,7 +132,7 @@ export function crearCatalogo({
       (await modelos())[/** @type {LauncherEngine} */ (motor)] || [];
     // The program's default model accepts any effort its catalog offers.
     if (!modelo) {
-      if (!lista.some((m) => m.esfuerzos?.includes(esfuerzo)))
+      if (!esfuerzo || !lista.some((m) => m.esfuerzos?.includes(esfuerzo)))
         throw new Error("Modelo no disponible");
       return;
     }

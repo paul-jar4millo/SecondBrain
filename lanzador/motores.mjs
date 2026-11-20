@@ -132,7 +132,8 @@ export function entornoDe(proveedor, env) {
     env.SB_SESSION_SCOPES === "1" ? env.XDG_RUNTIME_DIR : undefined;
   if (
     env.SB_SESSION_SCOPES === "1" &&
-    (!/^\/run\/user\/[1-9][0-9]*$/.test(runtime) ||
+    (!runtime ||
+      !/^\/run\/user\/[1-9][0-9]*$/.test(runtime) ||
       (process.getuid && runtime !== `/run/user/${process.getuid()}`))
   )
     throw new Error("Directorio de ejecución de sesión inválido");
@@ -228,7 +229,7 @@ export function leerClaude(r, e) {
     r.compactado = true;
   if (e.type === "rate_limit_event") {
     const i = e.rate_limit_info || {};
-    const ventanas = i.unifiedWindows || { [i.rateLimitType]: i };
+    const ventanas = i.unifiedWindows || { [String(i.rateLimitType)]: i };
     for (const [tipo, v] of Object.entries(ventanas)) {
       const id = /** @type {Partial<Record<string, UsageWindowId>>} */ ({
         five_hour: "5h",
@@ -268,7 +269,7 @@ export function ventanasCodex(snapshot) {
     const id = /** @type {Partial<Record<number, UsageWindowId>>} */ ({
       300: "5h",
       10080: "semanal",
-    })[v.windowDurationMins ?? v.window_minutes];
+    })[v.windowDurationMins ?? v.window_minutes ?? 0];
     const usado = v.usedPercent ?? v.used_percent;
     if (id && typeof usado === "number")
       ventanas[id] = {
@@ -324,7 +325,7 @@ export function ventanasAgy(cuota, modelo) {
   ])) {
     const v = cuota?.[`${familia}-${sufijo}`];
     if (!v || v.disabled || typeof v.remaining_fraction !== "number") continue;
-    const reinicia = Date.parse(v.reset_time);
+    const reinicia = Date.parse(v.reset_time ?? "");
     ventanas[id] = ventana(
       Math.round((1 - v.remaining_fraction) * 1000) / 10,
       Number.isNaN(reinicia) ? null : new Date(reinicia).toISOString(),
@@ -375,7 +376,8 @@ export function ventanasGemini(grupos = []) {
     })[b.window];
     if (!id || b.id?.startsWith("3p-")) continue;
     const usado = porcentaje(1 - b.remaining_fraction);
-    if (!(ventanas[id]?.usado >= usado))
+    const anterior = ventanas[id]?.usado;
+    if (anterior == null || !(anterior >= usado))
       ventanas[id] = {
         usado,
         reinicia: b.reset_time || null,

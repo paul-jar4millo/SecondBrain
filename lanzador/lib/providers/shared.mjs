@@ -11,7 +11,7 @@ import { sha256Hex } from "../../lib/hash.mjs";
 /** @typedef {{ command?: unknown, args?: unknown, env?: unknown }} ProviderMcpServer */
 /** @typedef {Record<string, ProviderMcpServer>} ProviderMcpServers */
 /** @typedef {{ env?: NodeJS.ProcessEnv, mcpServers?: ProviderMcpServers | null }} McpContext */
-/** @typedef {{ toolProfile?: { allowedOperations?: readonly string[] } }} ProfileContext */
+/** @typedef {{ toolProfile?: { allowedOperations?: readonly string[] } | null }} ProfileContext */
 /** @typedef {Pick<import("node:child_process").ChildProcess, "once" | "exitCode" | "kill">} TrackedChild */
 /** @typedef {{ category?: unknown, id?: unknown, currentValue?: unknown }} AcpConfigOption */
 /**
@@ -48,9 +48,9 @@ import { sha256Hex } from "../../lib/hash.mjs";
 /**
  * @typedef {McpContext & {
  *   operatorEnv?: NodeJS.ProcessEnv,
- *   geminiDir?: string,
+ *   geminiDir?: string | null,
  *   session?: { id?: string },
- *   acpLogFile?: string
+ *   acpLogFile?: string | null
  * }} AcpLaunchContext
  */
 
@@ -87,7 +87,10 @@ export function trackChildExit(child) {
   return child;
 }
 
-/** @param {NodeJS.ProcessEnv} [env] */
+/**
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {ProviderMcpServers}
+ */
 export function brainServer(env = {}) {
   if (!env.SB_BRAIN_TOKEN_FILE) return {};
   return {

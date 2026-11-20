@@ -170,15 +170,17 @@ export function contextoLinea(datos) {
       "cache_creation_input_tokens",
       "output_tokens",
     ].reduce((n, k) => n + (Number(uso[k]) || 0), 0);
+  const size = ventana?.context_window_size;
+  const percent = ventana?.used_percentage;
   if (
     !usados &&
-    Number.isFinite(ventana?.context_window_size) &&
-    Number.isFinite(ventana?.used_percentage)
+    size !== undefined &&
+    percent !== undefined &&
+    Number.isFinite(size) &&
+    Number.isFinite(percent)
   )
-    usados = Math.round(
-      (ventana.context_window_size * ventana.used_percentage) / 100,
-    );
-  return Number.isFinite(usados) && usados > 0
+    usados = Math.round((size * percent) / 100);
+  return usados !== undefined && Number.isFinite(usados) && usados > 0
     ? { usados, limite: 400000 }
     : null;
 }
@@ -192,7 +194,7 @@ export const carpetaAgy = (home) => path.join(home, ".gemini/antigravity-cli");
  * The status line command for an agent; it only runs locally and spends no quota.
  * @param {string} motor
  * @param {string} carpeta
- * @param {string} firma
+ * @param {string} [firma]
  */
 export const lineaUso = (motor, carpeta, firma) => ({
   type: "command",
@@ -234,9 +236,10 @@ export async function leerUsoLinea(archivo) {
         agotada: v.usado >= 100,
       };
   }
+  const usados = datos?.contexto?.usados;
   const contexto =
-    Number.isFinite(datos?.contexto?.usados) && datos.contexto.usados > 0
-      ? { usados: datos.contexto.usados, limite: 400000 }
+    usados !== undefined && Number.isFinite(usados) && usados > 0
+      ? { usados, limite: 400000 }
       : null;
   return Object.keys(ventanas).length || contexto
     ? {

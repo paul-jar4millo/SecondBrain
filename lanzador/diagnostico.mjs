@@ -16,7 +16,8 @@ export function ocultarDiagnostico(
       .map(([, value]) => value),
     ...textos,
   ]
-    .filter((value) => typeof value === "string" && value.length)
+    .filter((value) => typeof value === "string")
+    .filter(Boolean)
     .flatMap((value) => [
       value,
       JSON.stringify(value).slice(1, -1),

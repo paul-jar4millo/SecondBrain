@@ -145,8 +145,9 @@ function conectar(env) {
     url.password
   )
     throw new Error("El lanzador debe estar en loopback.");
-  if (!env.LANZADOR_TOKEN_FILE) throw new Error("Falta LANZADOR_TOKEN_FILE.");
-  return url.origin;
+  const tokenFile = env.LANZADOR_TOKEN_FILE;
+  if (!tokenFile) throw new Error("Falta LANZADOR_TOKEN_FILE.");
+  return { base: url.origin, tokenFile };
 }
 
 /**
@@ -192,8 +193,9 @@ export async function ejecutarCli(
   let base;
   let token;
   try {
-    base = conectar(env);
-    token = (await readFile(env.LANZADOR_TOKEN_FILE, "utf8")).trim();
+    const conexion = conectar(env);
+    base = conexion.base;
+    token = (await readFile(conexion.tokenFile, "utf8")).trim();
   } catch (e) {
     return falla(
       e.code === "ENOENT" ? "No se pudo leer LANZADOR_TOKEN_FILE." : e.message,
@@ -246,7 +248,7 @@ export async function ejecutarCli(
     const mensajes = (sesion.mensajes ?? []).filter(
       (m) => m.rol === "assistant",
     );
-    if (mensajes.length) return mensajes.at(-1).texto;
+    if (mensajes.length) return mensajes[mensajes.length - 1].texto;
     if (!sesion.harness) return "";
     const control = new AbortController();
     const reloj = setTimeout(() => control.abort(), 5000);
@@ -260,7 +262,7 @@ export async function ejecutarCli(
       for await (const trozo of r.body) {
         pendiente += new TextDecoder().decode(trozo, { stream: true });
         const eventos = pendiente.split("\n\n");
-        pendiente = eventos.pop();
+        pendiente = eventos.pop() ?? "";
         for (const evento of eventos) {
           if (!/^event: items/m.test(evento)) continue;
           /** @type {{ items?: { tipo: string, texto?: string }[] }} */
@@ -380,7 +382,7 @@ export async function ejecutarCli(
 
   try {
     if (comando === "iniciar") {
-      const motor = AGENTES[opciones.agente];
+      const motor = opciones.agente ? AGENTES[opciones.agente] : undefined;
       if (!motor) return uso("Elige --agente ambar, menta, lira o marina.");
       if (!opciones.proyecto) return uso("Falta --proyecto.");
       const brief = resto.join(" ").trim();

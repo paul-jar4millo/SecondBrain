@@ -17,7 +17,10 @@ import {
 
 /** @typedef {import("./controller-types.mjs").ProviderTurnContext & import("./shared.mjs").AcpLaunchContext} AcpContext */
 /** @typedef {Partial<import("../../provider-rpc.mjs").RpcRequestMetadata>} RpcRequestMetadata */
+/** @typedef {import("../../provider-rpc.mjs").RpcId} RpcId */
+/** @typedef {import("../../provider-rpc.mjs").ProviderChild} ProviderChild */
 /** @typedef {{ type?: string, text?: string, path?: string }} AcpContentBlock */
+/** @typedef {{ type: "text", text: string } | { type: "image" | "audio" | "resource" | "resource_link" }} AcpMessageContent */
 /** @typedef {{ path?: string }} AcpLocation */
 /**
  * @typedef {object} AcpToolCall
@@ -27,12 +30,12 @@ import {
  * @property {string} [kind]
  * @property {AcpLocation[]} [locations]
  * @property {AcpContentBlock[]} [content]
- * @property {Record<string, unknown>} [rawInput]
+ * @property {Record<string, unknown> | null} [rawInput]
  */
 /**
  * @typedef {AcpToolCall & {
  *   sessionUpdate: "tool_call" | "tool_call_update",
- *   toolCallId?: string,
+ *   toolCallId: string,
  *   status?: string,
  *   rawOutput?: unknown
  * }} AcpToolCallUpdate
@@ -41,7 +44,7 @@ import {
  * @typedef {AcpToolCallUpdate |
  *   { sessionUpdate: "available_commands_update", availableCommands?: { name?: string }[] } |
  *   { sessionUpdate: "config_option_update", configOptions?: unknown[] } |
- *   { sessionUpdate: "agent_message_chunk", content?: AcpContentBlock }
+ *   { sessionUpdate: "agent_message_chunk", content?: AcpMessageContent }
  * } AcpSessionUpdate
  */
 /** @typedef {{ sessionId?: string, update?: AcpSessionUpdate }} AcpNotification */
@@ -120,7 +123,7 @@ function extractAcpArtifactCandidates(rec) {
 
 export function createAcpController() {
   const connectionId = randomUUID();
-  /** @type {import("node:child_process").ChildProcess | null} */
+  /** @type {ProviderChild | null} */
   let child = null;
   /** @type {ReturnType<typeof providerRpc> | null} */
   let rpc = null;
@@ -153,6 +156,11 @@ export function createAcpController() {
       (child.exitCode === null || child.exitCode === undefined),
     );
 
+  const requireRpc = () => {
+    if (!rpc) throw new Error("Antigravity ACP desconectado");
+    return rpc;
+  };
+
   /**
    * @param {AcpContext} ctx
    * @param {unknown} [currentConfigOptions]
@@ -173,7 +181,7 @@ export function createAcpController() {
     if (observedModel === ctx.session.modelo) return;
     try {
       const configRes = /** @type {{ configOptions?: unknown }} */ (
-        await rpc.call("session/set_config_option", {
+        await requireRpc().call("session/set_config_option", {
           sessionId,
           configId: "model",
           value: ctx.session.modelo,
@@ -194,7 +202,7 @@ export function createAcpController() {
         err?.code === -32602 ||
         err?.message === "Método no compatible"
       ) {
-        await rpc.call("session/set_model", {
+        await requireRpc().call("session/set_model", {
           sessionId,
           modelId: ctx.session.modelo,
         });
@@ -246,13 +254,16 @@ export function createAcpController() {
                 p.update?.sessionUpdate === "available_commands_update" &&
                 Array.isArray(p.update.availableCommands)
               ) {
-                latestObservedCommands = p.update.availableCommands
+                const names = p.update.availableCommands
                   .map((c) => c?.name)
-                  .filter(Boolean);
+                  .filter(
+                    /** @returns {name is string} */ (name) => Boolean(name),
+                  );
+                latestObservedCommands = names;
                 const sink = activeTurn?.ctx || connectCtx;
                 void sink?.onSkillsObserved?.({
                   source: "acp_available_commands",
-                  names: latestObservedCommands,
+                  names,
                 });
               }
             }
@@ -373,7 +384,7 @@ export function createAcpController() {
         /**
          * @param {string} method
          * @param {AcpPermissionRequest} p
-         * @param {string | number} id
+         * @param {RpcId} id
          * @param {RpcRequestMetadata} [rpcMeta]
          */
         async request(method, p, id, rpcMeta = {}) {
@@ -581,13 +592,11 @@ export function createAcpController() {
     await ensureModelPinned(ctx);
 
     let aborted = false;
-    let killTimer = null;
-    /** @type {(reason: Error) => void} */
-    let rejectDisconnect;
-    /** @type {Promise<never>} */
-    const disconnectPromise = new Promise((_, reject) => {
-      rejectDisconnect = reject;
-    });
+    /** @type {NodeJS.Timeout | undefined} */
+    let killTimer;
+    /** @type {PromiseWithResolvers<never>} */
+    const { promise: disconnectPromise, reject: rejectDisconnect } =
+      Promise.withResolvers();
     disconnectPromise.catch(() => {});
 
     const generation = ++promptGeneration;
@@ -650,7 +659,7 @@ export function createAcpController() {
     try {
       const completion = /** @type {{ stopReason?: string }} */ (
         await Promise.race([
-          rpc.call(
+          requireRpc().call(
             "session/prompt",
             {
               sessionId,

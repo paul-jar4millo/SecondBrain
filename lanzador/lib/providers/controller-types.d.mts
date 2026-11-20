@@ -1,5 +1,7 @@
-import type { ChildProcess } from "node:child_process";
-import type { RpcWriteAcknowledgment } from "../../provider-rpc.mjs";
+import type {
+  ProviderChild,
+  RpcWriteAcknowledgment,
+} from "../../provider-rpc.mjs";
 import type {
   ProfileContext,
   ProviderAttachment,
@@ -11,7 +13,7 @@ export interface ProviderSession {
   id?: string;
   motor?: string;
   modelo?: string | null;
-  esfuerzo?: string;
+  esfuerzo?: string | null;
   conversacionId?: string | null;
 }
 
@@ -48,7 +50,11 @@ export interface ProviderTurnContext extends ProfileContext, McpContext {
   attachments?: ProviderAttachment[];
   operatorEnv?: NodeJS.ProcessEnv;
   interruptKillGraceMs?: number;
-  spawn(bin: string, args: string[], env: NodeJS.ProcessEnv): ChildProcess;
+  spawn(
+    bin: string,
+    args: string[],
+    env: NodeJS.ProcessEnv | undefined,
+  ): ProviderChild;
   onAbort(handler: () => void): void;
   onControl?(control: ProviderControl): void;
   onSkillsObserved?(observation: { source: string; names: string[] }): unknown;

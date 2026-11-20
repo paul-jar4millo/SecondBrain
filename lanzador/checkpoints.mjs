@@ -179,7 +179,8 @@ export function crearCheckpoints({
     const ultimo = lista.at(-1);
     const n = (ultimo?.n ?? 0) + 1;
     let commit;
-    if (ultimo?.arbol === arbol && ultimo.commit) commit = ultimo.commit;
+    if (ultimo && ultimo.arbol === arbol && ultimo.commit)
+      commit = ultimo.commit;
     else {
       const padre = (await tieneHead(cwd)) ? ["-p", "HEAD"] : [];
       commit = (
@@ -423,6 +424,7 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
             `Antes de revertir al turno ${n}`,
             { tipo: "reversion", de: n },
           );
+          if (!cwd) throw new Error("No hay un directorio de sesión.");
           await checkpoints.restaurar(cwd, destino.commit);
         } catch {
           throw new ErrorLanzador(
@@ -438,7 +440,7 @@ export function crearSeguimiento({ registro, checkpoints, cwdDe }) {
       const sesion = buscar(id);
       const cwd = sesion && cwdDe(sesion);
       const lista = sesion?.checkpoints ?? [];
-      if (!lista.length)
+      if (!cwd || !lista.length)
         throw new ErrorLanzador("Esta sesión no tiene puntos de control.", 404);
       /** @param {number} n */
       const punto = (n) => {

@@ -113,11 +113,16 @@ export const quitarRespuestas = (texto) => texto.replace(RESPUESTAS, "");
 
 /**
  * Applies the size rule shared by every resize request.
- * @param {number} cols
- * @param {number} rows
+ * @param {unknown} cols
+ * @param {unknown} rows
  */
 export function tamanoPermitido(cols, rows) {
-  if (!Number.isInteger(cols) || !Number.isInteger(rows))
+  if (
+    typeof cols !== "number" ||
+    typeof rows !== "number" ||
+    !Number.isInteger(cols) ||
+    !Number.isInteger(rows)
+  )
     throw new Error("Tamaño inválido");
   return {
     cols: Math.min(MAX_COLS, Math.max(MIN_COLS, cols)),

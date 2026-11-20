@@ -1,4 +1,5 @@
 import type { ChildProcess, spawn } from "node:child_process";
+import type { Readable } from "node:stream";
 import type { abrirEquipos } from "./equipos.mjs";
 import type { abrirEspacios } from "./espacios.mjs";
 import type { createToolCatalogStore } from "./catalogo-herramientas.mjs";
@@ -35,7 +36,7 @@ export interface ExecutorOptions {
 
 export interface ExecutionContext {
   cwd: string;
-  repositorio?: string;
+  repositorio?: string | null;
   copiaId?: string | null;
 }
 
@@ -97,10 +98,15 @@ export interface ActiveJob {
   excedida?: boolean;
   inactiva?: boolean;
   nativo?: boolean;
-  pendientes?: number;
+  pendientes: number;
   tecleado?: string;
   ultimoTurno?: number;
 }
+
+export type MonitoredChild = ChildProcess & {
+  stdout: Readable;
+  stderr: Readable;
+};
 
 export type LiveTerminal = ReturnType<typeof crearTerminal> & {
   generacion: string;

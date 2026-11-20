@@ -29,7 +29,7 @@ export function crearAcciones({
   items,
 }) {
   /** @param {LauncherSession} s */
-  const cwdDe = (s) => s.directorio || proyectos[s.proyecto] || null;
+  const cwdDe = (s) => s.directorio || proyectos[String(s.proyecto)] || null;
   /** @param {string} id */
   const sesionDe = (id) => {
     const sesion = registro.leer().find((s) => s.id === id && !s.eliminada);
@@ -147,7 +147,7 @@ export function crearAcciones({
         );
       const base =
         typeof titulo === "string" && typeof descripcion === "string"
-          ? null
+          ? { titulo, descripcion }
           : await propuesta(id);
       return pr.crear({
         sesion,

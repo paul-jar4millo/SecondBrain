@@ -20,8 +20,8 @@ import path from "node:path";
 /** @typedef {{ id: string, estado: SessionState }} TranscriptLink */
 
 const UUID = /^[a-f0-9-]{36}$/i;
-/** @param {NodeJS.ProcessEnv} env */
-const dirInternas = (env) => path.join(env.HOME, "estado/lanzador/internas");
+/** @param {string} home */
+const dirInternas = (home) => path.join(home, "estado/lanzador/internas");
 
 /**
  * Marks a provider conversation as an internal run, never shown as a chat.
@@ -29,9 +29,9 @@ const dirInternas = (env) => path.join(env.HOME, "estado/lanzador/internas");
  * @param {string} [nativo]
  */
 export async function marcarInterna(env, nativo) {
-  if (!env?.HOME || !UUID.test(nativo)) return;
-  await mkdir(dirInternas(env), { recursive: true, mode: 0o700 });
-  await writeFile(path.join(dirInternas(env), nativo + ".json"), "{}", {
+  if (!env?.HOME || !nativo || !UUID.test(nativo)) return;
+  await mkdir(dirInternas(env.HOME), { recursive: true, mode: 0o700 });
+  await writeFile(path.join(dirInternas(env.HOME), nativo + ".json"), "{}", {
     mode: 0o600,
   });
 }
@@ -40,8 +40,8 @@ export async function marcarInterna(env, nativo) {
  * @param {string} [nativo]
  */
 const esInterna = (env, nativo) =>
-  UUID.test(nativo ?? "")
-    ? stat(path.join(dirInternas(env), nativo + ".json")).then(
+  env.HOME !== undefined && UUID.test(nativo ?? "")
+    ? stat(path.join(dirInternas(env.HOME), nativo + ".json")).then(
         () => true,
         () => false,
       )
@@ -95,7 +95,7 @@ export function leerContexto(motor, texto) {
         (u.output_tokens || 0);
     }
   }
-  return Number.isFinite(usados) && usados > 0
+  return usados !== null && Number.isFinite(usados) && usados > 0
     ? { usados, limite: LIMITE_CONTEXTO }
     : null;
 }
@@ -117,7 +117,7 @@ export function leerConversacion(motor, texto) {
     }
     let rol, contenido;
     if (["claude", "deepseek"].includes(motor) && !e.isSidechain) {
-      if (["user", "assistant"].includes(e.type)) {
+      if (["user", "assistant"].includes(e.type ?? "")) {
         rol = e.type;
         const c = e.message?.content;
         contenido =
@@ -134,7 +134,7 @@ export function leerConversacion(motor, texto) {
       motor === "codex" &&
       e.type === "response_item" &&
       e.payload?.type === "message" &&
-      ["user", "assistant"].includes(e.payload.role)
+      ["user", "assistant"].includes(e.payload.role ?? "")
     ) {
       rol = e.payload.role;
       contenido = e.payload.content
@@ -174,13 +174,14 @@ export function observarConversaciones({
   let ocupado = false;
   let detenido = false;
   async function actualizar() {
-    if (ocupado || detenido) return;
+    const home = env.HOME;
+    if (ocupado || detenido || home === undefined) return;
     ocupado = true;
     try {
       /** @type {TranscriptSource[]} */
       const fuentes = [];
       const codex = path.join(
-        env.CODEX_HOME || path.join(env.HOME, ".codex"),
+        env.CODEX_HOME || path.join(home, ".codex"),
         "sessions",
       );
       /** @param {string} dir */
@@ -198,7 +199,7 @@ export function observarConversaciones({
       }
       await scan(codex);
       for (const [motor, configDir] of /** @type {const} */ ([
-        ["claude", env.AGENTES_CLAUDE_DIR || path.join(env.HOME, "claude")],
+        ["claude", env.AGENTES_CLAUDE_DIR || path.join(home, "claude")],
         ["deepseek", env.AGENTES_DEEPSEEK_DIR],
       ])) {
         if (!configDir) continue;
@@ -218,7 +219,7 @@ export function observarConversaciones({
               });
         }
       }
-      const agy = path.join(env.HOME, ".gemini/antigravity-cli/brain");
+      const agy = path.join(home, ".gemini/antigravity-cli/brain");
       for (const dir of await readdir(agy, { withFileTypes: true }).catch(
         /** @returns {Dirent[]} */ () => [],
       ))
@@ -237,7 +238,7 @@ export function observarConversaciones({
           if (await esInterna(env, fuente.id)) continue;
           const s = await stat(fuente.archivo);
           const link = await readFile(
-            path.join(env.HOME, "estado/lanzador/links", fuente.id + ".json"),
+            path.join(home, "estado/lanzador/links", fuente.id + ".json"),
             "utf8",
           )
             .then(/** @returns {TranscriptLink} */ (value) => JSON.parse(value))
@@ -281,7 +282,8 @@ export function observarConversaciones({
             if (
               !session ||
               session.structured ||
-              !UUID.test(meta?.id || "") ||
+              !meta?.id ||
+              !UUID.test(meta.id) ||
               (await esInterna(env, meta.id))
             )
               continue;

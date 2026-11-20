@@ -102,14 +102,19 @@ export async function abrirRegistro(
     if (
       !ACTIVOS.has(sesion.estado) &&
       !sesion.interactiva &&
-      !Number.isFinite(Date.parse(sesion.finalizada))
+      !Number.isFinite(Date.parse(sesion.finalizada ?? ""))
     ) {
-      sesion.finalizada = Number.isFinite(Date.parse(sesion.actualizada))
-        ? sesion.actualizada
-        : new Date().toISOString();
+      sesion.finalizada =
+        sesion.actualizada !== undefined &&
+        Number.isFinite(Date.parse(sesion.actualizada))
+          ? sesion.actualizada
+          : new Date().toISOString();
       migrar = true;
     }
-    if (sesion.eliminada && !Number.isFinite(Date.parse(sesion.eliminadaEn))) {
+    if (
+      sesion.eliminada &&
+      !Number.isFinite(Date.parse(sesion.eliminadaEn ?? ""))
+    ) {
       sesion.eliminadaEn = sesion.finalizada;
       migrar = true;
     }
@@ -208,7 +213,8 @@ export async function abrirRegistro(
     referencias.clear();
     conocidos.clear();
     for (const s of sesiones) {
-      if (siguientes.has(s.id)) referencias.set(s.id, siguientes.get(s.id));
+      const referencia = siguientes.get(s.id);
+      if (referencia !== undefined) referencias.set(s.id, referencia);
       conocidos.set(s.id, { terminal: s.terminal, mensajes: s.mensajes });
     }
     instantanea = undefined;
