@@ -17,7 +17,6 @@ import {
   intersectProfileBounds,
 } from "./agent-profiles.mjs";
 
-import { ConflictoAprobacion } from "./aprobaciones.mjs";
 import { sendItems } from "./http-items.mjs";
 
 import { operationalStatus } from "./operational-status.mjs";
@@ -30,6 +29,7 @@ import {
   validateNotePath,
 } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
+import { approvalRoutes } from "./http/routes/approvals.mjs";
 import { fileRoutes } from "./http/routes/files.mjs";
 import { financeRoutes } from "./http/routes/finance.mjs";
 import { authRoutes } from "./http/routes/auth.mjs";
@@ -378,6 +378,7 @@ export async function createApplication(options = {}) {
         const req = { request, response, consulta, required, callerCap };
         /** @type {Partial<Record<string, () => Promise<unknown>>>} */
         const routes = {
+          ...approvalRoutes(context, req),
           ...fileRoutes(context, req),
           ...financeRoutes(context, req),
           ...authRoutes(context, req),
@@ -876,25 +877,6 @@ export async function createApplication(options = {}) {
             });
             response.end(archive);
             return;
-          },
-          "GET /aprobaciones": async () =>
-            send(response, 200, aprobaciones.listar()),
-          "POST /aprobaciones/decidir": async () => {
-            const { id, aprobar, requestId } = await body(request);
-            let resultado;
-            try {
-              resultado = await aprobaciones.decidir(id, aprobar, {
-                requestId,
-                por: auth.state?.username || actorOf(request),
-              });
-            } catch (error) {
-              if (error instanceof ConflictoAprobacion)
-                throw Object.assign(new Failure(error.message, 409), {
-                  recibo: error.recibo,
-                });
-              throw new Failure("Solicitud no pendiente o expirada.", 409);
-            }
-            return send(response, 200, { ok: true, ...resultado });
           },
           "GET /encargos": async () =>
             send(response, 200, { encargos: workOrders.list() }),
