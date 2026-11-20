@@ -1,5 +1,5 @@
 [Unit]
-Description=SecondBrain morning summary requested from Marina
+Description=SecondBrain morning summary thread written by Marina
 After=secondbrain-lanzador.service
 Requires=secondbrain-lanzador.service
 

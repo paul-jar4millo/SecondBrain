@@ -43,7 +43,6 @@ test("empaqueta recursos de operación sin configuración privada local", async 
     "dashboard/dist/index.html",
     "ops/compat/index.mjs",
     "ops/launcher/install.sh",
-    "launcher/skills/equipo-cuatro-fases.md",
     "launcher/skills/resumen-matutino.md",
     "launcher/skills/personal-context/SKILL.md",
     "launcher/skills/personal-context/notas-locales.txt",
@@ -69,7 +68,7 @@ test("empaqueta recursos de operación sin configuración privada local", async 
   // Product skills ship only their SKILL.md; folders without one are skipped.
   assert.deepEqual(
     (await readdir(path.join(target, "lanzador/skills"))).sort(),
-    ["equipo-cuatro-fases.md", "personal-context", "resumen-matutino.md"],
+    ["personal-context", "resumen-matutino.md"],
   );
   assert.deepEqual(
     await readdir(path.join(target, "lanzador/skills/personal-context")),
@@ -117,7 +116,6 @@ test("ships contracts with vendored Zod so lanzador .ts files resolve it", async
     "dashboard/dist/index.html",
     "ops/compat/index.mjs",
     "ops/launcher/install.sh",
-    "launcher/skills/equipo-cuatro-fases.md",
     "launcher/skills/resumen-matutino.md",
   ])
     await put(file);
@@ -188,7 +186,6 @@ test("contracts may only depend on zod", async (t) => {
     "dashboard/dist/index.html",
     "ops/compat/index.mjs",
     "ops/launcher/install.sh",
-    "launcher/skills/equipo-cuatro-fases.md",
     "launcher/skills/resumen-matutino.md",
   ])
     await put(file, "x");

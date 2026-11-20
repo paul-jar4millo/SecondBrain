@@ -79,47 +79,34 @@ Legend: **public** = no session; **room** = also callable by agents.
 | POST   | `/files/trash`                              | room — move own file to trash                       |
 | POST   | `/files/restore`, `/files/pin`              | Owner only                                          |
 
-### Agent sessions (proxied to the launcher)
+### Agents (proxied to the launcher)
 
-| Method     | Path                                                                |                                                |
-| ---------- | ------------------------------------------------------------------- | ---------------------------------------------- |
-| GET / POST | `/agentes/sesiones`                                                 | List or start sessions                         |
-| POST       | `/agentes/sesiones/cancelar`, `/agentes/sesiones/eliminar`          | Stop or hide a session                         |
-| POST       | `/agentes/conversacion/mensajes`                                    | Send a message (queued while a turn runs)      |
-| GET        | `/agentes/conversacion/stream`                                      | SSE of structured conversation items           |
-| POST       | `/agentes/conversacion/responder`                                   | Answer a question or permission request        |
-| GET        | `/agentes/conversacion/cola`                                        | room — queued messages                         |
-| POST       | `/agentes/conversacion/cola/cancelar`                               | Cancel a queued message                        |
-| GET        | `/agentes/conversacion/artefactos/descargar`                        | Download a produced file                       |
-| POST       | `/agentes/sesiones/revertir`                                        | Restore files to a checkpoint                  |
-| GET        | `/agentes/sesiones/diff`                                            | Diff between checkpoints                       |
-| GET        | `/agentes/sesiones/pr/propuesta`                                    | Deterministic pull-request title and body      |
-| POST       | `/agentes/sesiones/pr`, `/agentes/sesiones/pr/redactar`             | Open a pull request; draft text with the model |
-| GET        | `/agentes/modelos-lanzador`, `/agentes/uso`, `/agentes/capacidades` | Models, usage windows, capabilities            |
-| GET        | `/agentes/mi-capacidad`                                             | room — capabilities of the calling session     |
-| GET / POST | `/agentes/espacios`                                                 | Project ↔ repository links                     |
-| GET        | `/agentes/proyectos-lanzador`                                       | Registered repositories                        |
-| GET        | `/agentes/herramientas/catalogo`                                    | room — tool and skill catalog                  |
-| POST       | `/agentes/herramientas/perfiles`                                    | Tool profiles                                  |
-| POST       | `/agentes/herramientas/skills/resolver`                             | room — resolve skills for a profile            |
-| POST       | `/agentes/capacidades/token`                                        | Issue a scoped capability token                |
-| GET        | `/agentes/terminal/stream`, POST `/agentes/terminal/entrada`        | Legacy terminal sessions (read-only history)   |
+Threads replaced sessions, teams and work orders
+([ADR 0010](adr/0010-threads-replace-sessions.md)); their routes are listed
+in [modules/service.md](modules/service.md#threads-adr-0010).
 
-### Teams, work orders, requests and effects
+| Method     | Path                                                                |                                            |
+| ---------- | ------------------------------------------------------------------- | ------------------------------------------ |
+| GET        | `/agentes/modelos-lanzador`, `/agentes/uso`, `/agentes/capacidades` | Models, usage windows, capabilities        |
+| GET        | `/agentes/mi-capacidad`                                             | room — capabilities of the calling thread  |
+| GET / POST | `/agentes/espacios`                                                 | Project ↔ repository links                 |
+| GET        | `/agentes/proyectos-lanzador`                                       | Registered repositories                    |
+| GET        | `/agentes/sesiones`                                                 | Always empty; kept for the scene until A10 |
+| GET        | `/agentes/herramientas/catalogo`                                    | room — tool and skill catalog              |
+| POST       | `/agentes/herramientas/perfiles`                                    | Tool profiles                              |
+| POST       | `/agentes/herramientas/skills/resolver`                             | room — resolve skills for a profile        |
+| POST       | `/agentes/capacidades/token`                                        | Issue a scoped capability token            |
 
-| Method     | Path                                                                                                       |                                                               |
-| ---------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| POST       | `/equipo/{estado,bandeja,encargar,esperar,mensaje,entregar,integrar}`                                      | room — team tools ([ADR 0005](adr/0005-team-manifests.md))    |
-| GET / POST | `/encargos`                                                                                                | Work orders                                                   |
-| POST       | `/encargos/equipo`, `/encargos/iniciar`, `/encargos/mensajes`, `/encargos/verificar`, `/encargos/integrar` | Manifest approval, start, messages, verification, integration |
-| GET        | `/encargos/detalle`, `/encargos/artefactos/descargar`                                                      | room                                                          |
-| POST       | `/encargos/eventos`, `/encargos/handoffs`                                                                  | room — progress events and hand-offs                          |
-| GET        | `/solicitudes`, `/solicitudes/detalle`                                                                     | room — persistent questions to the owner                      |
-| POST       | `/solicitudes/{preguntar,esperar,aprobacion,cerrar-turno,verificar-ejecucion,entrega}`                     | room                                                          |
-| POST       | `/solicitudes/responder`                                                                                   | Owner answers                                                 |
-| GET        | `/efectos`, `/efectos/detalle`                                                                             | room — effects with external consequences                     |
-| POST       | `/efectos/preparar`, `/efectos/ejecutar`                                                                   | room — prepare; execute only after approval                   |
-| POST       | `/efectos/conciliar`                                                                                       | Reconcile an effect whose outcome is unknown                  |
+### Requests and effects
+
+| Method | Path                                                                                   |                                              |
+| ------ | -------------------------------------------------------------------------------------- | -------------------------------------------- |
+| GET    | `/solicitudes`, `/solicitudes/detalle`                                                 | room — persistent questions to the owner     |
+| POST   | `/solicitudes/{preguntar,esperar,aprobacion,cerrar-turno,verificar-ejecucion,entrega}` | room                                         |
+| POST   | `/solicitudes/responder`                                                               | Owner answers                                |
+| GET    | `/efectos`, `/efectos/detalle`                                                         | room — effects with external consequences    |
+| POST   | `/efectos/preparar`, `/efectos/ejecutar`                                               | room — prepare; execute only after approval  |
+| POST   | `/efectos/conciliar`                                                                   | Reconcile an effect whose outcome is unknown |
 
 ### Refuge and world panel
 

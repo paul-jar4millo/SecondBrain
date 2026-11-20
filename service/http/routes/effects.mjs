@@ -4,14 +4,8 @@ import { Failure } from "../../vault.mjs";
 
 /** @type {RouteModule} */
 export const effectRoutes = (ctx, req) => {
-  const {
-    actorOf,
-    auth,
-    canAgentAccessScopedRecord,
-    effects,
-    runStoreOp,
-    workOrders,
-  } = ctx;
+  const { actorOf, auth, canAgentAccessScopedRecord, effects, runStoreOp } =
+    ctx;
   const { callerCap, consulta: query, request, required, response } = req;
   return {
     "GET /efectos": async () => {
@@ -58,20 +52,10 @@ export const effectRoutes = (ctx, req) => {
       const resolvedMemberId =
         callerCap?.memberId ?? callerCap?.actor ?? data.memberId ?? agentId;
       const resolvedWorkOrderId = callerCap?.workOrderId ?? data.workOrderId;
-      let resolvedProfile = callerCap?.profileId ?? data.toolProfileId;
-      let allowedCategoriesOverride = callerCap
+      const resolvedProfile = callerCap?.profileId ?? data.toolProfileId;
+      const allowedCategoriesOverride = callerCap
         ? callerCap.allowedEffectCategories
         : undefined;
-      if (!callerCap && resolvedWorkOrderId && auth.isRoomAgent(request)) {
-        const wo = workOrders.get(resolvedWorkOrderId);
-        const member = wo?.team?.find(
-          (m) =>
-            m.id === resolvedMemberId || (agentId && m.characterId === agentId),
-        );
-        if (member?.toolProfileId) {
-          resolvedProfile = member.toolProfileId;
-        }
-      }
       const { billingAuthorized: _ignoredClientBilling, ...safeData } = data;
       const result = await runStoreOp(() =>
         effects.prepareEffect({

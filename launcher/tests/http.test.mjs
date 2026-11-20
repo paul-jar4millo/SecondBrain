@@ -1,219 +1,106 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
+import { test } from "node:test";
 import { createLauncherServer } from "../index.mjs";
 
-test("control y hooks usan credenciales distintas y las rutas modifican solo la sesión solicitada", async (t) => {
-  let state = [
-    { id: "a1111111-1111-4111-8111-111111111111", estado: "trabajando" },
-  ];
-  const registry = {
-    leer: () => state,
-    actualizar: async (id, changes) => {
-      state = state.map((s) => (s.id === id ? { ...s, ...changes } : s));
-    },
-    subscribe: () => () => {},
-  };
-  const executor = {
-    encargar: async (x) => ({ id: "s2", ...x }),
-    cancelar: async (id) => {
-      assert.equal(id, "a1111111-1111-4111-8111-111111111111");
-    },
-    eliminar: async (id) => {
-      state = state.map((s) => (s.id === id ? { ...s, eliminada: true } : s));
-      return { id };
-    },
-  };
+const fingerprint = (/** @type {string} */ s) =>
+  createHash("sha256").update(s).digest("hex");
+
+/** @param {import("node:test").TestContext} t */
+async function serve(t, options = {}) {
+  const links = [];
   const server = createLauncherServer({
-    registro: registry,
-    ejecutor: executor,
     controlHash: fingerprint("control"),
-    hookHash: fingerprint("hook"),
+    proyectos: { demo: "/tmp/demo" },
+    espacios: {
+      leer: () => ({ revision: 0, vinculos: {}, repositorios: ["demo"] }),
+      vincular: async (data) => (links.push(data), { revision: 1 }),
+    },
+    registrar: () => {},
+    ...options,
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => server.close());
   const url = `http://127.0.0.1:${server.address().port}`;
-  const req = (path, token, body) =>
+  /**
+   * @param {string} path
+   * @param {{ body?: unknown, token?: string, raw?: string }} [init]
+   */
+  const call = (path, { body, token = "control", raw } = {}) =>
     fetch(url + path, {
-      method: body ? "POST" : "GET",
+      method: body === undefined && raw === undefined ? "GET" : "POST",
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(raw !== undefined
+        ? { body: raw }
+        : body !== undefined
+          ? { body: JSON.stringify(body) }
+          : {}),
     });
-  assert.equal((await req("/estado", "hook")).status, 401);
-  assert.equal(
-    (
-      await req("/eventos", "control", {
-        id: "a1111111-1111-4111-8111-111111111111",
-        herramienta: "Read",
-      })
-    ).status,
-    401,
-  );
-  assert.equal(
-    (
-      await req("/eventos", "hook", {
-        id: "a1111111-1111-4111-8111-111111111111",
-        herramienta: "Read",
-        argumento: "secreto",
-      })
-    ).status,
-    204,
-  );
-  assert.equal(state[0].fase, "investigar");
-  assert.equal(JSON.stringify(state).includes("secreto"), false);
-  assert.equal(
-    (await req("/eventos", "hook", { id: "otra", herramienta: "Read" })).status,
-    404,
-  );
-  assert.equal(
-    (
-      await req(
-        "/sesiones/a1111111-1111-4111-8111-111111111111/cancelar",
-        "control",
-        {},
-      )
-    ).status,
-    202,
-  );
-  assert.equal(
-    (await req("/sesiones", "control", { motor: "claude", brief: "x" })).status,
-    202,
-  );
-  assert.deepEqual(await (await req("/estado", "control")).json(), state);
-  assert.equal(
-    (
-      await req(
-        "/sesiones/a1111111-1111-4111-8111-111111111111/eliminar",
-        "hook",
-        {},
-      )
-    ).status,
-    401,
-  );
-  assert.equal(
-    (
-      await req(
-        "/sesiones/a1111111-1111-4111-8111-111111111111/eliminar",
-        "control",
-        {},
-      )
-    ).status,
-    200,
-  );
-  assert.deepEqual(await (await req("/estado", "control")).json(), []);
-});
-
-import { createHash } from "node:crypto";
-function fingerprint(value) {
-  return createHash("sha256").update(value).digest("hex");
+  return { call, links };
 }
 
-test("las rutas de equipo exigen control y enlazan mensajes al miembro activo", async (t) => {
-  const registry = {
-    leer: () => [{ id: "s1", motor: "codex", estado: "trabajando" }],
-    subscribe: () => () => {},
-  };
-  const teams = {
-    estado: (id) => ({ lider: id }),
-    bandeja: (id) => [{ para: id }],
-    mensaje: async (de, para, text) => ({ de, para, texto: text }),
-    entregar: async (de, title, content) => ({
-      de,
-      titulo: title,
-      contenido: content,
-    }),
-  };
-  const executor = {
-    encargarHija: async (id, data) => {
-      if (data.motor === "deepseek")
-        throw new Error("Saldo DeepSeek insuficiente");
-      return { id: "hija", padreId: id, ...data };
-    },
-    esperarHija: async () => ({ estado: "terminada" }),
-  };
-  const server = createLauncherServer({
-    registro: registry,
-    ejecutor: executor,
-    equipos: teams,
-    controlHash: fingerprint("control"),
-    hookHash: fingerprint("hook"),
+test("only the control credential opens the launcher", async (t) => {
+  const { call } = await serve(t);
+  assert.equal((await call("/proyectos", { token: "otra" })).status, 401);
+  const projects = await call("/proyectos");
+  assert.equal(projects.status, 200);
+  assert.deepEqual(await projects.json(), ["demo"]);
+  assert.deepEqual(await (await call("/estado")).json(), { ok: true });
+});
+
+test("the session-era routes are gone", async (t) => {
+  const { call } = await serve(t);
+  for (const [path, body] of [
+    ["/sesiones", { motor: "codex", brief: "b" }],
+    ["/equipo/estado", {}],
+    ["/eventos", {}],
+  ])
+    assert.equal((await call(path, { body })).status, 404, path);
+  assert.equal(
+    (await call("/sesiones/00000000-0000-4000-8000-000000000000/stream"))
+      .status,
+    404,
+  );
+});
+
+test("workspace links go through and bodies are bounded", async (t) => {
+  const { call, links } = await serve(t);
+  const listed = await (await call("/espacios")).json();
+  assert.deepEqual(listed.repositorios, ["demo"]);
+  const linked = await call("/espacios", {
+    body: { id: "p1", repositorio: "demo", revision: 0 },
   });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  t.after(() => server.close());
-  const url = `http://127.0.0.1:${server.address().port}`;
-  const post = (route, token, body) =>
-    fetch(url + route, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
+  assert.equal(linked.status, 200);
+  assert.deepEqual(links, [{ id: "p1", repositorio: "demo", revision: 0 }]);
+  assert.equal((await call("/espacios", { raw: "{" })).status, 400);
+  assert.equal((await call("/espacios", { raw: "[]" })).status, 400);
+  assert.equal(
+    (await call("/espacios", { body: { x: "a".repeat(600_000) } })).status,
+    413,
+  );
+});
+
+test("an unexpected failure answers 500 without echoing the request", async (t) => {
+  const lines = [];
+  const { call } = await serve(t, {
+    espacios: {
+      leer: () => ({}),
+      vincular: async () => {
+        throw new Error("fallo con secreto-123");
       },
-      body: JSON.stringify(body),
-    });
-  assert.equal(
-    (
-      await post("/equipo/mensaje", "hook", {
-        sesion: "s1",
-        para: "s2",
-        texto: "hola",
-      })
-    ).status,
-    401,
-  );
-  assert.equal(
-    (
-      await post("/equipo/mensaje", "control", {
-        sesion: "ajena",
-        actor: "menta",
-        para: "s2",
-        texto: "hola",
-      })
-    ).status,
-    403,
-  );
-  assert.equal(
-    (
-      await post("/equipo/mensaje", "control", {
-        sesion: "s1",
-        actor: "lira",
-        para: "s2",
-        texto: "hola",
-      })
-    ).status,
-    403,
-  );
-  const response = await post("/equipo/mensaje", "control", {
-    sesion: "s1",
-    actor: "menta",
-    para: "s2",
-    texto: "hola",
+    },
+    registrar: (line) => lines.push(line),
   });
-  assert.deepEqual(await response.json(), {
-    de: "s1",
-    para: "s2",
-    texto: "hola",
+  const response = await call("/espacios", {
+    body: { id: "secreto-123", repositorio: null, revision: 0 },
   });
-  assert.equal(
-    (
-      await post("/equipo/encargar", "control", {
-        sesion: "s1",
-        actor: "menta",
-        motor: "agy",
-        brief: "consulta",
-      })
-    ).status,
-    200,
-  );
-  const balance = await post("/equipo/encargar", "control", {
-    sesion: "s1",
-    actor: "menta",
-    motor: "deepseek",
-    brief: "consulta",
-  });
-  assert.equal((await balance.json()).error, "Saldo DeepSeek insuficiente");
+  assert.equal(response.status, 500);
+  assert.doesNotMatch(await response.text(), /secreto/);
+  assert.equal(lines.length, 1);
+  assert.doesNotMatch(lines[0], /secreto-123/);
 });

@@ -33,12 +33,12 @@ const linePercent = (file) => {
 };
 
 // Minimum line coverage per module. Raise a floor when coverage improves; never
-// lower it. Baseline 2026-11-19 (v0.1.2), raised after the type work.
+// lower it. Since 2026-11-20 each module counts only its own files.
 const floors = {
   contracts: 90,
-  service: 87,
-  mcp: 41,
-  launcher: 68,
+  service: 90,
+  mcp: 90,
+  launcher: 83,
   dashboard: 42,
 };
 /** @type {string[]} */
@@ -68,6 +68,9 @@ for (const module of /** @type {const} */ ([
     "--test",
     "--experimental-test-coverage",
     "--test-coverage-exclude=tests/**",
+    // Only the module's own code: files of other modules that its tests
+    // import are measured by their own suite.
+    "--test-coverage-exclude=../**",
     "--test-reporter=dot",
     "--test-reporter-destination=stdout",
     "--test-reporter=lcov",

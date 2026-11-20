@@ -140,11 +140,11 @@ EOF
   loginctl enable-linger sb-agente
   systemctl start "user@$(id -u sb-agente).service"
 
-  paso "Configuración de los motores (MCP secondbrain y hooks)"
-  local hook='{"hooks":{"PostToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"/opt/node/bin/node /opt/secondbrain/current/server/hook.mjs"}]}]}}'
+  paso "Configuración de los motores (MCP secondbrain)"
+  local settings='{}'
   local mcp='{"type":"stdio","command":"/opt/node/bin/node","args":["/opt/secondbrain/current/server/mcp.mjs"],"env":{"SB_BRAIN_TOKEN_FILE":"${SB_BRAIN_TOKEN_FILE}","SB_BRAIN_URL":"${SB_BRAIN_URL}","SB_AGENTE":"${SB_AGENTE}","SB_SESSION_ID":"${SB_SESSION_ID}"}}'
   for dir in claude deepseek; do
-    printf '%s\n' "$hook" >"$agente/$dir/settings.json"
+    printf '%s\n' "$settings" >"$agente/$dir/settings.json"
     chown sb-agente:sb-agente "$agente/$dir/settings.json"
     como_agente env CLAUDE_CONFIG_DIR="$agente/$dir" claude mcp remove secondbrain -s user >/dev/null 2>&1 || true
     como_agente env CLAUDE_CONFIG_DIR="$agente/$dir" claude mcp add-json secondbrain "$mcp" --scope user >/dev/null

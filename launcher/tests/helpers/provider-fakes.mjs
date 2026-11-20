@@ -1,22 +1,8 @@
-// Fake Codex and ACP processes, a launcher harness around them and wait
-// helpers shared by the provider contract tests.
+// Fake Codex and ACP processes, wait helpers and a fake stdio process shared
+// by the provider controller tests.
 
 import { EventEmitter } from "node:events";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-
 import { PassThrough, Writable } from "node:stream";
-
-import { createToolCatalogStore } from "../../tool-catalog.mjs";
-import { createExecutor } from "../../executor.mjs";
-
-import {
-  createAcpController,
-  createCodexController,
-} from "../../provider-controllers.mjs";
-import { createProviderConversations } from "../../provider-conversations.mjs";
-import { openSessionRegistry } from "../../sessions.mjs";
 
 export const FAKE_CODEX_SCRIPT = `
 import { createInterface } from "node:readline";
@@ -301,125 +287,6 @@ rl.on("line", (line) => {
   }
 });
 `;
-
-export async function createHarness(t, options = {}) {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "sb-contracts-"));
-  const dataDir = path.join(dir, "lanzador");
-  const projectDir = path.join(dir, "proyecto");
-  await writeFile(path.join(dir, "codex-fake.mjs"), FAKE_CODEX_SCRIPT);
-  await writeFile(path.join(dir, "acp-fake.mjs"), FAKE_ACP_SCRIPT);
-
-  const registry = await openSessionRegistry(
-    path.join(dataDir, "sesiones.json"),
-  );
-  const toolCatalog = await createToolCatalogStore({ dataDir });
-  if (options.emptyMcps) {
-    await toolCatalog.updateProfile("ejecucion", { allowedMcps: [] });
-  }
-  const spawnedBinsAndArgs = [];
-
-  function wrapScriptController(factory, scriptFile) {
-    return () => {
-      const ctrl = factory();
-      return {
-        ...ctrl,
-        runTurn: (ctx) =>
-          ctrl.runTurn({
-            ...ctx,
-            spawn: (bin, args, spawnEnv) => {
-              const effectiveEnv = {
-                ...spawnEnv,
-                ...(options.env || {}),
-              };
-              spawnedBinsAndArgs.push({
-                motor: ctx.session.motor,
-                bin,
-                args: [...args],
-                env: effectiveEnv,
-                mcpServers: ctx.mcpServers,
-              });
-              return ctx.spawn(
-                process.execPath,
-                [scriptFile, ...args],
-                effectiveEnv,
-              );
-            },
-          }),
-      };
-    };
-  }
-
-  const adapters = {
-    codex: {
-      createController: wrapScriptController(
-        () => createCodexController(),
-        path.join(dir, "codex-fake.mjs"),
-      ),
-    },
-    agy: {
-      createController: wrapScriptController(
-        () => createAcpController(),
-        path.join(dir, "acp-fake.mjs"),
-      ),
-    },
-    ...(options.claudeControllerFactory
-      ? { claude: { createController: options.claudeControllerFactory } }
-      : {}),
-  };
-
-  const conversations = createProviderConversations({
-    directory: path.join(dataDir, "conversaciones"),
-    registro: registry,
-    adapters,
-    ...(options.rpcOverrides ? { rpc: options.rpcOverrides } : {}),
-  });
-
-  const env = {
-    ...process.env,
-    HOME: dir,
-    USERPROFILE: dir,
-    CODEX_HOME: path.join(dir, ".codex-isolated"),
-    SB_CODEX_BIN: process.execPath,
-    SB_LANZADOR_DATA_DIR: dataDir,
-    ...(options.env || {}),
-  };
-
-  const executor = createExecutor({
-    registro: registry,
-    proyectos: { demo: projectDir },
-    env,
-    maxActivos: options.maxActivos ?? 6,
-    idleControllerMs: options.idleControllerMs ?? 0,
-    conversations,
-    toolCatalog,
-    registrar: () => {},
-  });
-
-  await import("node:fs/promises").then((fs) =>
-    fs.mkdir(projectDir, { recursive: true }),
-  );
-  t.after(async () => {
-    await executor.cerrarTodo("Fin de prueba");
-    await rm(dir, {
-      recursive: true,
-      force: true,
-      maxRetries: 15,
-      retryDelay: 100,
-    });
-  });
-
-  return {
-    dir,
-    dataDir,
-    projectDir,
-    registro: registry,
-    conversations,
-    toolCatalog,
-    ejecutor: executor,
-    env,
-    spawnedBinsAndArgs,
-  };
-}
 
 export function isPidAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;

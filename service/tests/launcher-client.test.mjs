@@ -9,13 +9,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 class Failure extends Error {
+  /**
+   * @param {string} message
+   * @param {number} status
+   */
   constructor(message, status) {
     super(message);
     this.status = status;
   }
 }
 
-test("reenvía consultas y encargos al lanzador autenticado sin exponer el token", async (t) => {
+test("forwards catalog calls to the authenticated launcher without exposing the token", async (t) => {
+  /** @type {{ url?: string, auth?: string, body: string }[]} */
   const requests = [];
   const server = http.createServer(async (req, res) => {
     const chunks = [];
@@ -26,200 +31,66 @@ test("reenvía consultas y encargos al lanzador autenticado sin exponer el token
       body: Buffer.concat(chunks).toString(),
     });
     res.setHeader("content-type", "application/json");
-    res.end(req.url === "/estado" ? '[{"id":"s"}]' : '{"id":"s"}');
+    res.end(req.url === "/proyectos" ? '["demo"]' : "{}");
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => server.close());
   const client = createLauncherClient(Failure, {
-    url: `http://127.0.0.1:${server.address().port}`,
+    url: `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (server.address()).port}`,
     token: "secreto",
   });
-  assert.deepEqual(await client.leer(), [{ id: "s" }]);
-  assert.deepEqual(await client.encargar({ motor: "codex", brief: "x" }), {
-    id: "s",
-  });
-  await client.cancelar("f1111111-1111-4111-8111-111111111111");
-  await client.eliminar("f1111111-1111-4111-8111-111111111111");
+  assert.deepEqual(await client.proyectos(), ["demo"]);
+  await client.modelos();
   await client.espacios();
   await client.espacios({ id: "p1", repositorio: null, revision: 0 });
-  await client.entrada({
-    id: "f1111111-1111-4111-8111-111111111111",
-    raw: "x",
-  });
   assert.deepEqual(
     requests.map((r) => r.url),
-    [
-      "/estado",
-      "/sesiones",
-      "/sesiones/f1111111-1111-4111-8111-111111111111/cancelar",
-      "/sesiones/f1111111-1111-4111-8111-111111111111/eliminar",
-      "/espacios",
-      "/espacios",
-      "/sesiones/f1111111-1111-4111-8111-111111111111/terminal",
-    ],
+    ["/proyectos", "/modelos", "/espacios", "/espacios"],
   );
   assert.ok(requests.every((r) => r.auth === "Bearer secreto"));
   assert.ok(requests.every((r) => !r.body.includes("secreto")));
-  await assert.rejects(client.cancelar("../estado"));
-  await assert.rejects(client.eliminar("../estado"));
-  await assert.rejects(client.flujo("../estado"), { status: 400 });
 });
 
-test("las rutas del lanzador mantienen CSRF y niegan la credencial de sala", async (t) => {
+test("change notifications follow the launcher's thread feed", async (t) => {
+  /** @type {string[]} */
+  const urls = [];
+  const server = http.createServer((req, res) => {
+    urls.push(String(req.url));
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write('id: 1\ndata: {"type":"thread.created"}\n\n');
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const client = createLauncherClient(Failure, {
+    url: `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (server.address()).port}`,
+    token: "secreto",
+  });
+  let calls = 0;
+  const stop = client.subscribe(() => calls++);
+  t.after(stop);
+  const until = Date.now() + 3000;
+  while (calls < 2 && Date.now() < until)
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(calls >= 2, "reconcile on connect, then one per event");
+  assert.deepEqual(urls, ["/threads/stream"]);
+});
+
+test("catalog routes deny the room credential and the session routes are gone", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-gateway-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const runner = http.createServer((req, res) => {
-    if (req.url === "/events") {
+    if (req.url === "/threads/stream") {
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.write(": connected\n\n");
       return;
     }
     res.setHeader("content-type", "application/json");
-    res.end(req.url === "/estado" ? "[]" : '{"id":"ok"}');
-  });
-  runner.listen(0, "127.0.0.1");
-  await once(runner, "listening");
-  t.after(() => runner.close());
-  const vault = path.join(dir, "vault");
-  await mkdir(path.join(vault, "00-Inbox"), { recursive: true });
-  await writeFile(path.join(vault, "Home.md"), "# Test\n");
-  const app = await createApplication({
-    vaultRoot: vault,
-    dataDirectory: path.join(dir, "data"),
-    auth: false,
-    agentes: { brainToken: "room-secret" },
-    lanzador: {
-      url: `http://127.0.0.1:${runner.address().port}`,
-      token: "control",
-    },
-  });
-  app.server.listen(0, "127.0.0.1");
-  await once(app.server, "listening");
-  t.after(() => app.close());
-  const base = `http://127.0.0.1:${app.server.address().port}/api/v1`;
-  assert.equal((await fetch(base + "/agentes/sesiones")).status, 200);
-  for (const route of [
-    "/agentes/espacios",
-    "/agentes/terminal/stream?id=f1111111-1111-4111-8111-111111111111",
-    "/agentes/terminal/entrada",
-  ]) {
-    assert.equal(
-      (
-        await fetch(base + route, {
-          method: route.endsWith("entrada") ? "POST" : "GET",
-          headers: { authorization: "Bearer room-secret" },
-          ...(route.endsWith("entrada") ? { body: "{}" } : {}),
-        })
-      ).status,
-      403,
-    );
-  }
-  assert.equal((await fetch(base + "/agentes/proyectos-lanzador")).status, 200);
-  assert.equal(
-    (
-      await fetch(base + "/agentes/proyectos-lanzador", {
-        headers: { authorization: "Bearer room-secret" },
-      })
-    ).status,
-    403,
-  );
-  assert.equal(
-    (
-      await fetch(base + "/agentes/sesiones", {
-        headers: { authorization: "Bearer room-secret" },
-      })
-    ).status,
-    403,
-  );
-  const payload = JSON.stringify({
-    motor: "codex",
-    origen: "sala",
-    proyecto: "prueba",
-    brief: "hola",
-  });
-  assert.equal(
-    (await fetch(base + "/agentes/sesiones", { method: "POST", body: payload }))
-      .status,
-    400,
-  );
-  assert.equal(
-    (
-      await fetch(base + "/equipo/estado", {
-        method: "POST",
-        headers: {
-          authorization: "Bearer room-secret",
-          "content-type": "application/json",
-          "x-sb-agente": "menta",
-          "x-sb-sesion": "a1111111-1111-4111-8111-111111111111",
-        },
-        body: "{}",
-      })
-    ).status,
-    200,
-  );
-  assert.equal(
-    (
-      await fetch(base + "/equipo/estado", {
-        method: "POST",
-        headers: {
-          authorization: "Bearer room-secret",
-          "content-type": "application/json",
-        },
-        body: "{}",
-      })
-    ).status,
-    403,
-  );
-  const csrf = await fetch(base + "/auth/csrf");
-  const { token } = await csrf.json();
-  const headers = {
-    "content-type": "application/json",
-    "x-csrf-token": token,
-    origin: base.replace("/api/v1", ""),
-    cookie: csrf.headers
-      .getSetCookie()
-      .map((c) => c.split(";")[0])
-      .join("; "),
-  };
-  assert.equal(
-    (
-      await fetch(base + "/agentes/sesiones", {
-        method: "POST",
-        body: payload,
-        headers,
-      })
-    ).status,
-    202,
-  );
-});
-
-test("el stream de la terminal se reenvía sin buffer, exige UUID y se cierra en ambos sentidos", async (t) => {
-  const dir = await mkdtemp(path.join(tmpdir(), "sb-stream-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const abiertas = [];
-  const requests = [];
-  let closeUpstream;
-  const cerrado = new Promise((resolve) => (closeUpstream = resolve));
-  const runner = http.createServer((req, res) => {
-    requests.push({ url: req.url, auth: req.headers.authorization });
-    if (req.url === "/events") {
-      res.writeHead(200, { "content-type": "text/event-stream" });
-      return res.write(": connected\n\n");
-    }
-    if (req.url.startsWith("/sesiones/e1111111")) {
-      res.writeHead(400, { "content-type": "application/json" });
-      return res.end('{"error":"Terminal no disponible"}');
-    }
-    if (req.url.endsWith("/stream")) {
-      res.writeHead(200, { "content-type": "text/event-stream" });
-      res.write('event: snapshot\ndata: {"datos":"hola"}\n\n');
-      abiertas.push(res);
-      res.on("close", closeUpstream);
-      return;
-    }
-    res.setHeader("content-type", "application/json");
-    res.end("[]");
+    res.end(req.url === "/proyectos" ? '["demo"]' : "{}");
   });
   runner.listen(0, "127.0.0.1");
   await once(runner, "listening");
@@ -234,214 +105,38 @@ test("el stream de la terminal se reenvía sin buffer, exige UUID y se cierra en
     vaultRoot: vault,
     dataDirectory: path.join(dir, "data"),
     auth: false,
-    lanzador: {
-      url: `http://127.0.0.1:${runner.address().port}`,
-      token: "control",
-    },
-  });
-  app.server.listen(0, "127.0.0.1");
-  await once(app.server, "listening");
-  t.after(() => {
-    app.server.closeAllConnections();
-    return app.close();
-  });
-  const base = `http://127.0.0.1:${app.server.address().port}/api/v1`;
-  const id = "a1111111-1111-4111-8111-111111111111";
-  for (const query of ["", "?id=no-es-uuid", `?id=${id}&otro=1`])
-    assert.equal(
-      (await fetch(`${base}/agentes/terminal/stream${query}`)).status,
-      400,
-    );
-  assert.equal(
-    (
-      await fetch(
-        `${base}/agentes/terminal/stream?id=e1111111-1111-4111-8111-111111111111`,
-      )
-    ).status,
-    400,
-  );
-  const controller = new AbortController();
-  const response = await fetch(`${base}/agentes/terminal/stream?id=${id}`, {
-    signal: controller.signal,
-  });
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type"), /text\/event-stream/);
-  assert.match(response.headers.get("cache-control"), /no-cache/);
-  const reader = response.body.getReader();
-  // The first event arrives while the upstream connection is still open.
-  const primero = new TextDecoder().decode((await reader.read()).value);
-  assert.match(primero, /event: snapshot/);
-  abiertas[0].write('event: salida\ndata: {"datos":"x","desde":1,"seq":1}\n\n');
-  assert.match(
-    new TextDecoder().decode((await reader.read()).value),
-    /event: salida/,
-  );
-  const stream = requests.find((r) => r.url === `/sesiones/${id}/stream`);
-  assert.equal(stream.auth, "Bearer control");
-  // The browser leaving closes the launcher's stream.
-  controller.abort();
-  await cerrado;
-  // The launcher ending closes the browser's stream.
-  const second = await fetch(`${base}/agentes/terminal/stream?id=${id}`);
-  const secondReader = second.body.getReader();
-  await secondReader.read();
-  abiertas.at(-1).end();
-  for (;;) if ((await secondReader.read()).done) break;
-});
-
-test("diff, revertir, PR y capacidades: validan con zod, exigen CSRF, niegan la sala y reenvían el aviso del lanzador", async (t) => {
-  const dir = await mkdtemp(path.join(tmpdir(), "sb-gateway-git-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const id = "a1111111-1111-4111-8111-111111111111";
-  const recibidas = [];
-  const runner = http.createServer(async (req, res) => {
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    recibidas.push({
-      method: req.method,
-      url: req.url,
-      body: Buffer.concat(chunks).toString(),
-    });
-    res.setHeader("content-type", "application/json");
-    if (req.url.endsWith("/revertir")) {
-      res.statusCode = 409;
-      return res.end(
-        '{"error":"Detén el turno antes de revertir","seguro":true}',
-      );
-    }
-    if (req.url.endsWith("/pr/redactar")) {
-      res.statusCode = 502;
-      return res.end('{"error":"mensaje interno con /ruta/secreta"}');
-    }
-    res.end('{"ok":true}');
-  });
-  runner.listen(0, "127.0.0.1");
-  await once(runner, "listening");
-  t.after(() => runner.close());
-  const vault = path.join(dir, "vault");
-  await mkdir(path.join(vault, "00-Inbox"), { recursive: true });
-  await writeFile(path.join(vault, "Home.md"), "# Test\n");
-  const app = await createApplication({
-    vaultRoot: vault,
-    dataDirectory: path.join(dir, "data"),
-    auth: false,
     agentes: { brainToken: "room-secret" },
     lanzador: {
-      url: `http://127.0.0.1:${runner.address().port}`,
+      url: `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (runner.address()).port}`,
       token: "control",
     },
   });
   app.server.listen(0, "127.0.0.1");
   await once(app.server, "listening");
   t.after(() => app.close());
-  const base = `http://127.0.0.1:${app.server.address().port}/api/v1`;
-  const csrf = await fetch(base + "/auth/csrf");
-  const { token } = await csrf.json();
-  const headers = {
-    "content-type": "application/json",
-    "x-csrf-token": token,
-    origin: base.replace("/api/v1", ""),
-    cookie: csrf.headers
-      .getSetCookie()
-      .map((c) => c.split(";")[0])
-      .join("; "),
-  };
-  const get = (path, extra = {}) => fetch(base + path, extra);
-  const post = (path, cuerpo, h = headers) =>
-    fetch(base + path, {
-      method: "POST",
-      headers: h,
-      body: JSON.stringify(cuerpo),
-    });
-
-  assert.equal(
-    (await get(`/agentes/sesiones/diff?id=${id}&desde=2&hasta=actual`)).status,
-    200,
-  );
-  assert.equal(
-    (await get(`/agentes/sesiones/diff?id=${id}&desde=x`)).status,
-    400,
-  );
-  assert.equal((await get(`/agentes/sesiones/diff?id=no`)).status, 400);
-  assert.equal(
-    (await get(`/agentes/sesiones/diff?id=${id}&otro=1`)).status,
-    400,
-  );
-  assert.equal(
-    (await get(`/agentes/sesiones/pr/propuesta?id=${id}`)).status,
-    200,
-  );
-  assert.equal((await get("/agentes/capacidades")).status, 200);
-  assert.deepEqual(
-    recibidas.map((r) => r.url).filter((u) => u !== "/events"),
-    [
-      `/sesiones/${id}/diff?desde=2&hasta=actual`,
-      `/sesiones/${id}/pr/propuesta`,
-      "/capacidades",
-    ],
-  );
-
-  // Writes need the CSRF token and a user session, never the room credential.
-  const withoutCsrf = { "content-type": "application/json" };
-  assert.equal(
-    (await post("/agentes/sesiones/revertir", { id, n: 1 }, withoutCsrf))
-      .status,
-    400,
-  );
-  for (const ruta of [
-    `/agentes/sesiones/diff?id=${id}`,
-    "/agentes/capacidades",
-    `/agentes/sesiones/pr/propuesta?id=${id}`,
-  ])
-    assert.equal(
-      (await get(ruta, { headers: { authorization: "Bearer room-secret" } }))
-        .status,
-      403,
-    );
-  for (const [ruta, cuerpo] of [
-    ["/agentes/sesiones/revertir", { id, n: 1 }],
-    ["/agentes/sesiones/pr", { id }],
-    ["/agentes/sesiones/pr/redactar", { id }],
+  const base = `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (app.server.address()).port}/api/v1`;
+  const projects = await fetch(base + "/agentes/proyectos-lanzador");
+  assert.equal(projects.status, 200);
+  assert.deepEqual(await projects.json(), ["demo"]);
+  assert.deepEqual(await (await fetch(base + "/agentes/sesiones")).json(), []);
+  for (const route of [
+    "/agentes/espacios",
+    "/agentes/proyectos-lanzador",
+    "/agentes/modelos-lanzador",
   ])
     assert.equal(
       (
-        await post(ruta, cuerpo, {
-          ...headers,
-          authorization: "Bearer room-secret",
+        await fetch(base + route, {
+          headers: { authorization: "Bearer room-secret" },
         })
       ).status,
       403,
+      route,
     );
-
-  assert.equal(
-    (await post("/agentes/sesiones/revertir", { id, n: 0 })).status,
-    400,
-  );
-  assert.equal(
-    (await post("/agentes/sesiones/revertir", { id, n: 1, de_mas: 1 })).status,
-    400,
-  );
-  assert.equal(
-    (await post("/agentes/sesiones/pr", { id, titulo: "" })).status,
-    400,
-  );
-  const revert = await post("/agentes/sesiones/revertir", { id, n: 1 });
-  assert.equal(revert.status, 409);
-  assert.equal((await revert.json()).error, "Detén el turno antes de revertir");
-  // A message the launcher did not mark as safe never reaches the browser.
-  const redact = await post("/agentes/sesiones/pr/redactar", { id });
-  assert.equal(redact.status, 502);
-  assert.doesNotMatch(JSON.stringify(await redact.json()), /secreta/);
-  const pr = await post("/agentes/sesiones/pr", {
-    id,
-    titulo: "feat: x",
-    descripcion: "d",
-    borrador: true,
-  });
-  assert.equal(pr.status, 200);
-  assert.deepEqual(JSON.parse(recibidas.at(-1).body), {
-    titulo: "feat: x",
-    descripcion: "d",
-    borrador: true,
-  });
+  for (const route of [
+    "/agentes/terminal/stream?id=f1111111-1111-4111-8111-111111111111",
+    "/agentes/sesiones/diff?id=f1111111-1111-4111-8111-111111111111",
+    "/encargos",
+  ])
+    assert.equal((await fetch(base + route)).status, 404, route);
 });

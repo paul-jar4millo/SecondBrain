@@ -50,19 +50,11 @@ expiry unless pinned, 7-day trash. Attachments are untrusted data.
 | `files_put`      | Create a small file from the call's content (~8 MB)                            |
 | `files_trash`    | Trash one of your own deliverables                                             |
 
-### Teams
+### Threads
 
-Available to agent sessions; bounded by the approved manifest
-([ADR 0005](adr/0005-team-manifests.md)).
-
-| Tool                                | Purpose                                                                                                  |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `equipo_encargar`                   | Delegate to a member card (engine, model, effort, role, profile); idempotent with `requestId`            |
-| `equipo_esperar`                    | Wait for a direct child's deliverable (split into safe intervals)                                        |
-| `equipo_estado`                     | Team state                                                                                               |
-| `equipo_mensaje` / `equipo_bandeja` | Send and read messages                                                                                   |
-| `equipo_entregar`                   | Publish a versioned deliverable (SHA-256)                                                                |
-| `equipo_integrar`                   | Coordinator only: copy deliverables into the work order's workspace, returning conflicts without writing |
+| Tool              | Purpose                                                                   |
+| ----------------- | ------------------------------------------------------------------------- |
+| `thread_ask_user` | Ask the owner from inside a thread; the question shows inline in its view |
 
 ### Questions to the owner
 

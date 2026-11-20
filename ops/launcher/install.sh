@@ -13,17 +13,12 @@ if [[ ! -s $servicio/lanzador-token ]]; then
   (umask 077; openssl rand -hex 32 | tr -d '\n' >"$servicio/lanzador-token")
   chown secondbrain:secondbrain "$servicio/lanzador-token"
 fi
-if [[ ! -s $agente/hook-token ]]; then
-  (umask 077; openssl rand -hex 32 | tr -d '\n' >"$agente/hook-token")
-  chown sb-agente:sb-agente "$agente/hook-token"
-fi
-for par in "$servicio/lanzador-token:/etc/sb-agente/lanzador-control.sha256" "$agente/hook-token:/etc/sb-agente/hook-token.sha256"; do
-  sha256sum <"${par%%:*}" | cut -d' ' -f1 >"${par##*:}"
-  chown root:sb-agente "${par##*:}"
-  chmod 0440 "${par##*:}"
-done
+hash=/etc/sb-agente/lanzador-control.sha256
+sha256sum <"$servicio/lanzador-token" | cut -d' ' -f1 >"$hash"
+chown root:sb-agente "$hash"
+chmod 0440 "$hash"
 
-# Proyectos disponibles para las sesiones (carpetas de sb-agente, nunca el vault).
+# Proyectos disponibles para los threads (carpetas de sb-agente, nunca el vault).
 install -d -m 750 -o root -g sb-agente /etc/sb-agente
 /opt/node/bin/node -e '
 const fs = require("fs"), path = require("path");
@@ -52,8 +47,8 @@ Environment=LANZADOR_URL=http://127.0.0.1:8092
 Environment=LANZADOR_TOKEN_FILE=/var/lib/secondbrain/lanzador-token
 EOF
 
-# CLI de hilos para operación (no para las sesiones de los agentes).
-install -m 0755 "$src/sb-hilo" /usr/local/bin/sb-hilo
+# Retired with the session-era chat (ADR 0010).
+rm -f /usr/local/bin/sb-hilo "$agente/hook-token" /etc/sb-agente/hook-token.sha256
 
 systemctl daemon-reload
 systemctl enable secondbrain-lanzador.service

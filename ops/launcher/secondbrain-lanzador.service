@@ -1,5 +1,5 @@
 [Unit]
-Description=SecondBrain launcher for harness sessions
+Description=SecondBrain launcher for agent threads
 After=network-online.target secondbrain.service
 OnFailure=secondbrain-aviso@%n.service
 
@@ -12,14 +12,11 @@ Environment=HOME=/var/lib/sb-agente
 Environment=PATH=/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:/var/lib/sb-agente/.local/bin
 Environment=SB_LANZADOR_DATA_DIR=/var/lib/sb-agente/estado/lanzador
 Environment=SB_CONTROL_HASH_FILE=/etc/sb-agente/lanzador-control.sha256
-Environment=SB_HOOK_HASH_FILE=/etc/sb-agente/hook-token.sha256
-Environment=SB_HOOK_TOKEN_FILE=/var/lib/sb-agente/hook-token
 Environment=SB_PROYECTOS_FILE=/etc/sb-agente/proyectos.json
 Environment=AGENTES_BRAIN_TOKEN_FILE=/var/lib/sb-agente/brain-token
 Environment=AGENTES_CLAUDE_DIR=/var/lib/sb-agente/claude
 Environment=AGENTES_DEEPSEEK_DIR=/var/lib/sb-agente/deepseek
 Environment=CODEX_HOME=/var/lib/sb-agente/codex
-Environment=SB_REMOTE_INTERACTIVE=1
 Environment=SB_MAX_ACTIVOS=2
 Environment=SB_RETENCION_DIAS=14
 Environment=SB_SESSION_SCOPES=1
@@ -37,7 +34,7 @@ BindPaths=/run/user/@UID@
 InaccessiblePaths=/srv/secondbrain/vault /var/lib/secondbrain
 ReadWritePaths=/srv/sb-agente /var/lib/sb-agente
 MemoryMax=3G
-# This is an aggregate bound. Individual session containment is verified separately.
+# This is an aggregate bound. Individual thread containment is verified separately.
 OOMPolicy=continue
 TasksMax=256
 CPUQuota=150%

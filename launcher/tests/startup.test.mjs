@@ -10,7 +10,6 @@ test("arranca solo en loopback con configuración y huellas desde archivos", asy
   const dir = await mkdtemp(path.join(tmpdir(), "sb-start-"));
   const hash = (s) => createHash("sha256").update(s).digest("hex");
   await writeFile(path.join(dir, "control"), hash("control"));
-  await writeFile(path.join(dir, "hook"), hash("hook"));
   await writeFile(
     path.join(dir, "proyectos.json"),
     JSON.stringify({ prueba: dir }),
@@ -18,7 +17,6 @@ test("arranca solo en loopback con configuración y huellas desde archivos", asy
   const server = await arrancar({
     SB_LANZADOR_DATA_DIR: dir,
     SB_CONTROL_HASH_FILE: path.join(dir, "control"),
-    SB_HOOK_HASH_FILE: path.join(dir, "hook"),
     SB_PROYECTOS_FILE: path.join(dir, "proyectos.json"),
     SB_LANZADOR_PORT: "0",
   });
@@ -31,7 +29,7 @@ test("arranca solo en loopback con configuración y huellas desde archivos", asy
     { headers: { authorization: "Bearer control" } },
   );
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), []);
+  assert.deepEqual(await response.json(), { ok: true });
   const projects = await fetch(
     `http://127.0.0.1:${server.address().port}/proyectos`,
     { headers: { authorization: "Bearer control" } },
