@@ -157,7 +157,11 @@ export function applyEvent(db: Db, event: ThreadEvent): void {
     case "item.started":
     case "item.updated":
     case "item.completed":
-      writeItem(db, event.item);
+      // Items created in one step take the seq of the event that created them.
+      writeItem(
+        db,
+        event.item.seq ? event.item : { ...event.item, seq: event.seq },
+      );
       break;
     case "request.opened":
       writeRequest(db, event.request);

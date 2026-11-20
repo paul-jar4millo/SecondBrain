@@ -8,7 +8,6 @@ import { arrancar } from "../index.mjs";
 
 test("arranca solo en loopback con configuración y huellas desde archivos", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-start-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
   const hash = (s) => createHash("sha256").update(s).digest("hex");
   await writeFile(path.join(dir, "control"), hash("control"));
   await writeFile(path.join(dir, "hook"), hash("hook"));
@@ -24,6 +23,8 @@ test("arranca solo en loopback con configuración y huellas desde archivos", asy
     SB_LANZADOR_PORT: "0",
   });
   t.after(() => new Promise((resolve) => server.close(resolve)));
+  // After the server: Windows cannot delete the open threads database.
+  t.after(() => rm(dir, { recursive: true, force: true }));
   assert.equal(server.address().address, "127.0.0.1");
   const response = await fetch(
     `http://127.0.0.1:${server.address().port}/estado`,
