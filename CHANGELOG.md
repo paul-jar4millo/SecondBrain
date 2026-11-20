@@ -4,6 +4,19 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-11-19
+
+### Fixed
+
+- `service`: `/api/v1/health` reports the version from `service/package.json`
+  instead of a hard-coded `0.2.0`; all modules are aligned at 0.1.1.
+- `lanzador`: the session-registry marker is again a single export line, so
+  deployment helpers installed on hosts recognize it and restart the runner
+  after a release. The compatibility checker now also accepts leading line
+  comments, and a test guards the marker against both formats.
+- `ops`: the container capture used by off-host backups no longer fails once
+  two local captures exist (`vzdump --remove 1` with `keep-last=2`).
+
 ## [0.1.0] - 2026-11-19
 
 First public release.
@@ -31,4 +44,5 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.1.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.1
 [0.1.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.0

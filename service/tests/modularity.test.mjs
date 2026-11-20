@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn, execFile } from "node:child_process";
@@ -72,7 +72,12 @@ test("el servicio y el MCP funcionan sin servir la interfaz y comparten las revi
       }
     });
   });
-  assert.equal((await fetch(base + "/api/v1/health")).status, 200);
+  const health = await fetch(base + "/api/v1/health");
+  assert.equal(health.status, 200);
+  const { version } = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  assert.equal((await health.json()).version, version);
   assert.equal((await fetch(base + "/")).status, 404);
   const call = async (tool, args) => {
     const { stdout } = await promisify(execFile)(
