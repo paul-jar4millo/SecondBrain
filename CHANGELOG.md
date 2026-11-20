@@ -4,6 +4,38 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-11-20
+
+Internal refactor with no change to HTTP routes, MCP tools, environment
+variables, the vault format or user-facing text.
+
+### Changed
+
+- Backend type checking: every `service`, `mcp` and `launcher` module is
+  checked with `strict` TypeScript through JSDoc.
+- `service`: `createApplication()` is split into `service/http/` (shared
+  context, middleware, static files and one route module per domain); a test
+  fails if a route policy has no handler or the reverse.
+- `launcher`: the executor is split into `launcher/execution/` modules with
+  explicit dependencies; the provider contract and server tests are split by
+  topic.
+- Names are English (ADR 0007): the `lanzador/` folder is now `launcher/`,
+  backend and dashboard modules and exports are renamed (for example
+  `crearEjecutor` → `createExecutor`, `features/sala` → `features/room`),
+  and `ops/tests/naming-convention.test.mjs` blocks new Spanish names. The
+  release package keeps `lanzador/` and `ops/lanzador/`, so hosts need no
+  change.
+- The Claude status line script is `usage-line.mjs`; settings that still use
+  `uso-linea.mjs` are recognised and rewritten.
+- Coverage floors per module in `ops/coverage.mjs`.
+- Dependencies: vitest 5 with its coverage plugin, lucide-react 1.74.
+
+### Fixed
+
+- Release packaging copies the new `http/` and `execution/` subfolders.
+- `dashboard/ops/render-agent-portraits.mjs` imports the character specs
+  under their real name again.
+
 ## [0.1.2] - 2026-11-19
 
 ### Added
@@ -73,6 +105,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.2.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.2.0
 [0.1.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.2
 [0.1.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.1
 [0.1.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.0
