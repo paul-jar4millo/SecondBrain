@@ -16,10 +16,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createBrainMcp } from "../index.mjs";
 import { createApplication } from "../../service/index.mjs";
-import { openSessionRegistry } from "../../lanzador/sessions.mjs";
-import { openTeams } from "../../lanzador/teams.mjs";
-import { createExecutor } from "../../lanzador/executor.mjs";
-import { createLauncherServer } from "../../lanzador/index.mjs";
+import { openSessionRegistry } from "../../launcher/sessions.mjs";
+import { openTeams } from "../../launcher/teams.mjs";
+import { createExecutor } from "../../launcher/executor.mjs";
+import { createLauncherServer } from "../../launcher/index.mjs";
 
 const carta = (id, characterId, engine, model, coordinator = false) => ({
   id,

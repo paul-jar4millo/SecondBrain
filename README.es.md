@@ -1,6 +1,6 @@
 # SecondBrain
 
-[English](README.md)
+[English](README.md) · **Español**
 
 **Un espacio de trabajo personal autohospedado donde tú y un equipo de agentes
 de IA comparten una misma base de conocimiento.** Proyectos, tareas, agenda y

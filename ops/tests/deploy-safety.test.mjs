@@ -85,14 +85,14 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
       "ops/deploy/deploy-release.sh",
       "usr/local/sbin/secondbrain-deploy",
     ],
-    ["ops/lanzador/sb-hilo", "ops/lanzador/sb-hilo", "usr/local/bin/sb-hilo"],
+    ["ops/launcher/sb-hilo", "ops/lanzador/sb-hilo", "usr/local/bin/sb-hilo"],
     ...[
       "secondbrain-lanzador.service",
       "claude-sb-agente.service",
       "resumen-matutino.service",
       "resumen-matutino.timer",
     ].map((unit) => [
-      `ops/lanzador/${unit}`,
+      `ops/launcher/${unit}`,
       `ops/lanzador/${unit}`,
       `etc/systemd/system/${unit}`,
     ]),
@@ -172,7 +172,7 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
     "old installation\n",
   );
   await copyFile(
-    "ops/lanzador/sb-hilo",
+    "ops/launcher/sb-hilo",
     path.join(host, "usr/local/bin/sb-hilo"),
   );
   await writeFile(

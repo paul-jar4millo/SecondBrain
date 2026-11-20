@@ -1,15 +1,15 @@
 import type {
   ConversationReceipt,
   ConversationState,
-} from "../lanzador/provider-conversation-types.mjs";
+} from "../launcher/provider-conversation-types.mjs";
 import type {
   LauncherSession,
   SessionState,
-} from "../lanzador/session-types.d.ts";
+} from "../launcher/session-types.d.ts";
 import type {
   CatalogState,
   SkillProvenanceStage,
-} from "../lanzador/tool-catalog-types.d.ts";
+} from "../launcher/tool-catalog-types.d.ts";
 import type { UserRequest } from "../service/user-request-types.d.ts";
 import type { Artifact, WorkEvent } from "../service/work-order-types.d.ts";
 

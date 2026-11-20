@@ -8,15 +8,15 @@ scene is modeled in Blender and rendered with Three.js.
 
 ## Color and type
 
-| Use | Color |
-| --- | --- |
-| Night and ink | `#0a1238`, `#0f1a55` |
-| Blue and cobalt | `#2340c8`, `#2f66e6` |
-| Sky and ice | `#78bdf8`, `#cfe6ff` |
-| Light text | `#f1f7ff` |
-| Selection and primary action | `#fff2c4` |
-| Occasional alerts | `#ff6f61` |
-| Reading: background and ink | `#eef4ff`, `#12205e` |
+| Use                          | Color                |
+| ---------------------------- | -------------------- |
+| Night and ink                | `#0a1238`, `#0f1a55` |
+| Blue and cobalt              | `#2340c8`, `#2f66e6` |
+| Sky and ice                  | `#78bdf8`, `#cfe6ff` |
+| Light text                   | `#f1f7ff`            |
+| Selection and primary action | `#fff2c4`            |
+| Occasional alerts            | `#ff6f61`            |
+| Reading: background and ink  | `#eef4ff`, `#12205e` |
 
 Dela Gothic One for titles; Fredoka for the HUD and characters; the system
 font for forms and figures. Bundled fonts keep their OFL licenses in

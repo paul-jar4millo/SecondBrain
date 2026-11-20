@@ -21,8 +21,15 @@ async function fixture(t) {
   const release = path.join(dir, "release");
   const root = path.join(dir, "root");
   await mkdir(root);
-  for (const sub of ["lanzador", "backup", "aviso", "deploy", "lxc/plantillas"])
-    await cp("ops/" + sub, path.join(release, "ops", sub), { recursive: true });
+  // The release keeps the repository's ops/launcher as ops/lanzador.
+  for (const [sub, out] of [
+    ["launcher", "lanzador"],
+    ["backup", "backup"],
+    ["aviso", "aviso"],
+    ["deploy", "deploy"],
+    ["lxc/plantillas", "lxc/plantillas"],
+  ])
+    await cp("ops/" + sub, path.join(release, "ops", out), { recursive: true });
   for (const [source, destination] of [
     ["dashboard/ops/deploy-release.sh", "deploy-release.sh"],
     ["ops/secondbrain-vault-push.service", "secondbrain-vault-push.service"],

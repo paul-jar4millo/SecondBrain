@@ -8,7 +8,7 @@ updates:
       actions:
         patterns: ["*"]
   - package-ecosystem: npm
-    directories: ["/", "/dashboard", "/service", "/mcp", "/lanzador"]
+    directories: ["/", "/dashboard", "/service", "/mcp", "/launcher"]
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
