@@ -1,11 +1,10 @@
-import { rm } from "node:fs/promises";
-
 import { validarAdjuntosMotor } from "./motores.mjs";
 
 import { stopSessionScope } from "./limits.mjs";
 import { ErrorLanzador } from "./errores.mjs";
 import { resolveExecutorOptions } from "./execution/options.mjs";
 import { createExecutionState } from "./execution/state.mjs";
+import { createLifecycle } from "./execution/lifecycle.mjs";
 import { createDelegation } from "./execution/delegation.mjs";
 import { createConversationQueue } from "./execution/conversation-queue.mjs";
 import { createTerminalIo } from "./execution/terminal-io.mjs";
@@ -25,12 +24,10 @@ import { createProcessTools } from "./execution/process-tools.mjs";
 /** @param {ExecutorOptions} options */
 export function crearEjecutor(options) {
   const config = resolveExecutorOptions(options);
-  const { registro, proyectos, env, maxActivos, seguimiento, conversations } =
-    config;
+  const { registro, proyectos, env, maxActivos, conversations } = config;
   const state = createExecutionState();
   const {
     activos,
-    terminales,
     liveProcesses,
     resourceQueue,
     queuedPromises,
@@ -357,36 +354,20 @@ export function crearEjecutor(options) {
     state,
     { iniciar, resolveSessionEffectiveProfile },
   );
+  const { cancelar, eliminar, esperar } = createLifecycle(config, state, {
+    liberar,
+    acpGeminiDirFor,
+    cerrarConexion,
+    cleanupSessionRuntimeSecrets,
+    limpiarEviccionOciosa,
+    limpiarWorkspaceMiembro,
+    senalar,
+  });
   return {
     flujo,
     terminal,
     entrada,
-    /** @param {string} id */
-    eliminar(id) {
-      return serial(async () => {
-        if (activos.has(id))
-          throw new Error("Detén la sesión antes de eliminarla");
-        const previa = registro.leer().find((s) => s.id === id);
-        if (previa?.structured) {
-          limpiarEviccionOciosa(id);
-          await conversations?.remove(id);
-          await stopSessionScope(id, env).catch(() => {});
-          liveProcesses.delete(id);
-          await rm(acpGeminiDirFor(id), { recursive: true, force: true }).catch(
-            () => {},
-          );
-        }
-        await cleanupSessionRuntimeSecrets(id);
-        const resultado = await registro.eliminar(id);
-        terminales.delete(id);
-        await limpiarWorkspaceMiembro(previa);
-        if (seguimiento && previa)
-          await seguimiento
-            .borrar(id, previa.directorio || proyectos[String(previa.proyecto)])
-            .catch(() => {});
-        return resultado;
-      });
-    },
+    eliminar,
     continuar,
     activos: () => sesionesOcupandoCupo().size,
     conexionesActivas: () => conversations?.liveSessions?.() ?? [],
@@ -401,66 +382,8 @@ export function crearEjecutor(options) {
     cancelarCola,
     encargar,
     encargarHija,
-    /** @param {string} id */
-    async cancelar(id, { shutdown = false, reason = "Cierre explícito" } = {}) {
-      const queuedIndex = resourceQueue.findIndex(
-        (item) => item.sesionId === id,
-      );
-      if (queuedIndex !== -1) {
-        resourceQueue.splice(queuedIndex, 1);
-        await registro.actualizar(id, {
-          estado: "cancelada",
-          enColaRecursos: false,
-          motivoCola: null,
-        });
-        const pq = queuedPromises.get(id);
-        if (pq) {
-          queuedPromises.delete(id);
-          pq.resolve();
-        }
-        return;
-      }
-      const sesion = registro.leer().find((s) => s.id === id && !s.eliminada);
-      const job = activos.get(id);
-      if (!job) {
-        if (sesion?.structured && conversations?.hasLiveController?.(id)) {
-          return cerrarConexion(id, reason);
-        }
-        throw new Error("Sesión no activa");
-      }
-      job.cancelada = true;
-      if (job.cleanupFailed) {
-        await liberar(id);
-        return;
-      }
-      if (
-        sesion?.structured &&
-        conversations?.hasLiveController?.(id) &&
-        !shutdown
-      ) {
-        conversations.abort(id);
-        return;
-      }
-      conversations?.abort(id);
-      if (sesion?.structured && shutdown) {
-        await conversations?.shutdown?.(id, { reason });
-      }
-      if (job.hijo) {
-        senalar(job.hijo, "SIGTERM");
-        const reloj = setTimeout(() => {
-          if (activos.has(id) && job.hijo) senalar(job.hijo, "SIGKILL");
-        }, 5000);
-        reloj.unref();
-      }
-    },
+    cancelar,
     esperarHija,
-    /** @param {string} id */
-    esperar(id) {
-      return (
-        activos.get(id)?.promesa ||
-        queuedPromises.get(id)?.promise ||
-        Promise.resolve()
-      );
-    },
+    esperar,
   };
 }
