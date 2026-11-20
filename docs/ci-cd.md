@@ -49,12 +49,12 @@ recommended set is `verify` and `commits`.
 in `ops/coverage.mjs`. Floors only go up: when a change raises coverage,
 raise the floor in the same pull request.
 
-| Module    | Baseline (2026-11-19, v0.1.2) | Floor |
-| --------- | ----------------------------- | ----- |
-| service   | 85.5%                         | 85%   |
-| lanzador  | 65.8%                         | 65%   |
-| dashboard | 40.3%                         | 40%   |
-| mcp       | 38.3%                         | 38%   |
+| Module    | Baseline (2026-11-19, v0.1.2) | Current | Floor |
+| --------- | ----------------------------- | ------- | ----- |
+| service   | 85.5%                         | 87.4%   | 87%   |
+| lanzador  | 65.8%                         | 68.2%   | 68%   |
+| dashboard | 40.3%                         | 40.3%   | 40%   |
+| mcp       | 38.3%                         | 41.7%   | 41%   |
 
 The dashboard figure only counts `.ts`/`.tsx` files (see
 `dashboard/vitest.config.ts`); the remaining `.js` files in
