@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { cursorFor, pickTarget } from "../src/features/room/room-pick.js";
+import { cursorFor, pickTarget } from "../src/features/room/room-pick";
 
 function rayThroughOrigin() {
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);

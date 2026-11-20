@@ -1,4 +1,21 @@
-export function fadeWalls(objects, show, dt, immediate = false) {
+import type * as THREE from "three";
+
+interface WallFade {
+  shadow: boolean;
+  opacity: number;
+  transparent: boolean;
+  depthWrite: boolean;
+  factor: number;
+}
+
+export type FadingWall = THREE.Object3D & { material: THREE.Material };
+
+export function fadeWalls(
+  objects: Iterable<FadingWall>,
+  show: boolean,
+  dt: number,
+  immediate = false,
+) {
   let changed = false;
   for (const object of objects) {
     if (!object.userData.wallFade) {
@@ -13,7 +30,7 @@ export function fadeWalls(objects, show, dt, immediate = false) {
       object.material = object.material.clone();
     }
     const material = object.material;
-    const state = object.userData.wallFade;
+    const state = object.userData.wallFade as WallFade;
     const target = show ? 1 : 0;
     const before = state.factor;
     let alpha = immediate

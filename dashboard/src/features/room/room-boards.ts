@@ -1,7 +1,12 @@
 import * as THREE from "three";
 
 // Overlays on existing Blender surfaces (x, height, z), never a second map.
-const SURFACES = {
+type Vec3 = [number, number, number];
+
+const SURFACES: Record<
+  string,
+  { at: Vec3; size: [number, number]; tilt: number }
+> = {
   workshop: { at: [-11.3, 1.55, -11.039], size: [1.39, 0.81], tilt: 0 },
   library: { at: [-0.7, 1.028, -10], size: [2.9, 0.64], tilt: -Math.PI / 2 },
   garden: { at: [10, 0.956, -10.4], size: [3.1, 0.85], tilt: -Math.PI / 2 },
@@ -9,7 +14,18 @@ const SURFACES = {
   terrace: { at: [0, 1.6, 0.094], size: [1.6, 0.96], tilt: 0 },
 };
 
-function fit(ctx, text, x, y, width) {
+export interface BoardSummary {
+  headline: string;
+  lines: string[];
+}
+
+function fit(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+) {
   let value = String(text);
   while (ctx.measureText(value).width > width && value.length > 1)
     value = value.slice(0, -1);
@@ -17,7 +33,7 @@ function fit(ctx, text, x, y, width) {
   ctx.fillText(value, x, y);
 }
 
-export function createWorldBoards(scene) {
+export function createWorldBoards(scene: THREE.Scene) {
   const boards = Object.entries(SURFACES).map(([id, surface]) => {
     const canvas = document.createElement("canvas");
     canvas.width = 1024;
@@ -34,7 +50,7 @@ export function createWorldBoards(scene) {
     return { id, canvas, texture, mesh, key: "" };
   });
   return {
-    update(data = {}) {
+    update(data: Partial<Record<string, BoardSummary>> = {}) {
       for (const b of boards) {
         const summary = data[b.id] || {
           headline: "Cargando datos…",
@@ -44,6 +60,7 @@ export function createWorldBoards(scene) {
         if (key === b.key) continue;
         b.key = key;
         const ctx = b.canvas.getContext("2d");
+        if (!ctx) continue;
         ctx.fillStyle = "#0f1a55";
         ctx.fillRect(0, 0, 1024, 512);
         ctx.fillStyle = "#78bdf8";
