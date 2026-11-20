@@ -4,11 +4,11 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile, stat, realpath } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+
 import { zip, strToU8 } from "fflate";
 import { acquireInstance } from "./instance.mjs";
 import { hash } from "./vault.mjs";
-import { actorContext, Failure, stableId } from "./vault.mjs";
+import { actorContext, Failure } from "./vault.mjs";
 
 import { MOTOR_ACTOR, intersectProfileBounds } from "./agent-profiles.mjs";
 
@@ -18,6 +18,7 @@ import { operationalStatus } from "./operational-status.mjs";
 
 import { body, send, validateNotePath } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
+import { reminders } from "./reminders.mjs";
 import { agentSessionRoutes } from "./http/routes/agents-sessions.mjs";
 import { agentToolRoutes } from "./http/routes/agents-tools.mjs";
 import { agentConversationRoutes } from "./http/routes/agents-conversation.mjs";
@@ -36,14 +37,11 @@ import { worldRoutes } from "./http/routes/world.mjs";
 /** @import { ServerResponse } from "node:http" */
 
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
-// Reported by /health; the release package always ships service/package.json.
-const APP_VERSION = JSON.parse(
-  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
-).version;
 /** @param {ApplicationOptions} [options] */
 export async function createApplication(options = {}) {
   const context = await createContext(options);
   const {
+    appVersion,
     root,
     dataDirectory,
     history,
@@ -389,7 +387,7 @@ export async function createApplication(options = {}) {
               .catch(() => false);
             return send(response, ready ? 200 : 503, {
               status: ready ? "ready" : "unavailable",
-              version: APP_VERSION,
+              version: appVersion,
               storage: "obsidian-markdown",
               maintenance: await operationalStatus({
                 stateFile: "/var/lib/secondbrain-ops/backup-status.json",
@@ -675,45 +673,6 @@ export async function createApplication(options = {}) {
     dataDirectory,
     close,
   };
-}
-/**
- * @param {import("./vault-types.d.ts").VaultItem[]} items
- */
-function reminders(items) {
-  const now = Date.now();
-  return items
-    .filter(
-      (i) =>
-        !i.deleted &&
-        !["done", "cancelled"].includes(i.status ?? "") &&
-        ["task", "event", "obligation", "statement"].includes(i.kind),
-    )
-    .flatMap((i) => {
-      const instant = i.startsAt
-        ? Date.parse(i.startsAt) - 15 * 60000
-        : Date.parse(
-            (i.kind === "statement" ? i.dueDate : i.date) + "T09:00:00-06:00",
-          );
-      if (
-        !Number.isFinite(instant) ||
-        instant > now ||
-        instant < now - 2 * 86400000
-      )
-        return [];
-      return [
-        {
-          id: stableId("notice:" + i.id + ":" + instant),
-          kind: "notification",
-          title: i.title,
-          body: "Este compromiso del vault necesita atención.",
-          source: i.id,
-          status: "unread",
-          version: 0,
-          createdAt: new Date(instant).toISOString(),
-          updatedAt: i.updatedAt,
-        },
-      ];
-    });
 }
 export async function startService() {
   const releaseInstance = await acquireInstance(

@@ -4,7 +4,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
-import { watch } from "node:fs";
+import { readFileSync, watch } from "node:fs";
 import { Vault, discoverVault, Failure } from "../vault.mjs";
 import { History } from "../history.mjs";
 import {
@@ -31,6 +31,11 @@ import { agentHeaders } from "./io.mjs";
 /** @import { ServerResponse } from "node:http" */
 
 const appRoot = fileURLToPath(new URL("../..", import.meta.url));
+// Reported by /health; the release package always ships service/package.json.
+const appVersion = /** @type {string} */ (
+  JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
+    .version
+);
 
 /** @param {ApplicationOptions} options */
 export async function createContext(options) {
@@ -461,6 +466,7 @@ export async function createContext(options) {
   return {
     options,
     appRoot,
+    appVersion,
     root,
     dataDirectory,
     history,
