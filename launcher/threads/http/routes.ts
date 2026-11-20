@@ -75,6 +75,8 @@ export function createThreadsHttp({
               : {}),
             includeArchived: url.searchParams.get("archived") === "1",
           }),
+          // Where a client should start following the global feed.
+          globalSeq: store.lastGlobalSeq(),
         });
       },
     ],

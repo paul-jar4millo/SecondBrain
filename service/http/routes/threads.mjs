@@ -1,6 +1,7 @@
 // Threads (ADR 0010): the owner's API, relayed to the launcher, and the two
 // agent routes behind thread_ask_user. Each thread gets its own sbcap_
 // credential, bound to the thread id and revoked when the thread ends.
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { body, send } from "../io.mjs";
 import { Failure } from "../../vault.mjs";
@@ -115,7 +116,10 @@ export const threadRoutes = (ctx, req) => {
   };
 
   /** Credential for the thread's MCP servers, narrowed by operator policy. */
-  const mintCapability = async (/** @type {string} */ engine) => {
+  const mintCapability = async (
+    /** @type {string} */ engine,
+    /** @type {string} */ threadId,
+  ) => {
     const profile = await resolveServerProfile("ejecucion");
     if (options.operatorToolPolicy?.allowedOperations)
       profile.allowedOperations = intersectList(
@@ -129,6 +133,7 @@ export const threadRoutes = (ctx, req) => {
       );
     const actor = ENGINE_ACTOR[engine] || null;
     return auth.issueCapability({
+      sessionId: threadId,
       memberId: actor || engine,
       actor,
       profileId: profile.id,
@@ -163,15 +168,16 @@ export const threadRoutes = (ctx, req) => {
           "DeepSeek bloqueado por la política de gasto sin autorización explícita de gasto.",
           403,
         );
-      const minted = await mintCapability(data.agent?.engine);
+      // Same shape as the launcher's ids; the credential is bound to it
+      // before the thread exists, so the first turn already sees its thread.
+      const threadId = `thr_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
+      const minted = await mintCapability(data.agent?.engine, threadId);
       let result;
       try {
         result = await threads.create({
           ...data,
+          threadId,
           capabilityToken: minted.token,
-        });
-        await auth.bindCapabilitySession(minted.record.id, result.thread.id, {
-          rebind: true,
         });
       } catch (error) {
         await auth.revokeCapability({ tokenId: minted.record.id });

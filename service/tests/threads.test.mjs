@@ -8,7 +8,7 @@ import path from "node:path";
 import { createApplication } from "../index.mjs";
 import { getCsrfHeaders } from "./helpers/csrf.mjs";
 
-const THREAD = "thr_abc1234567";
+let THREAD = "thr_abc1234567";
 const REQUEST = "req_def1234567";
 
 /** A launcher that answers the thread API from memory. */
@@ -27,8 +27,10 @@ async function fakeLauncher(t) {
       res.end(JSON.stringify(value));
     };
     const url = req.url ?? "";
-    if (url === "/threads" && req.method === "POST")
+    if (url === "/threads" && req.method === "POST") {
+      THREAD = data.threadId;
       return json(201, { thread: { id: THREAD, status: "running" } });
+    }
     if (url.startsWith("/threads?") || url === "/threads")
       return json(200, { threads: [{ id: THREAD }] });
     if (url === `/threads/${THREAD}/ask`) {
@@ -126,6 +128,7 @@ test("threads are relayed to the launcher with a credential per thread", async (
     (s) => s.url === "/threads" && s.method === "POST",
   );
   assert.match(sent.data.capabilityToken, /^sbcap_[a-f0-9]{48}$/);
+  assert.match(sent.data.threadId, /^thr_[0-9a-f]{20}$/);
   assert.equal(sent.headers.authorization, "Bearer ctrl");
   const agent = {
     authorization: `Bearer ${sent.data.capabilityToken}`,

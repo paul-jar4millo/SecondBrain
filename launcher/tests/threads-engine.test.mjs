@@ -532,6 +532,7 @@ test("HTTP routes and the resumable SSE stream", async (t) => {
     list.threads.map((x) => x.id),
     [thread.id],
   );
+  assert.equal(list.globalSeq, env.store.lastGlobalSeq());
   const sent = await fetch(`${base}/threads/${thread.id}/messages`, {
     method: "POST",
     body: JSON.stringify({ text: "más", mode: "send" }),
@@ -634,4 +635,34 @@ test("an agent question during a turn is answered without a new turn", async (t)
   await env.engine.idle(thread.id);
   assert.equal(env.log.turns.length, 1);
   assert.equal(env.store.getThread(thread.id).status, "idle");
+});
+
+test("the service may choose the thread id", async (t) => {
+  const env = await setup(t, async () => {});
+  const thread = await env.engine.create({
+    threadId: "thr_chosen00000001",
+    kind: "scratch",
+    prompt: "a",
+    agent: AGENT,
+  });
+  assert.equal(thread.id, "thr_chosen00000001");
+  await env.engine.idle(thread.id);
+  await assert.rejects(
+    env.engine.create({
+      threadId: thread.id,
+      kind: "scratch",
+      prompt: "a",
+      agent: AGENT,
+    }),
+    /ya existe/,
+  );
+  await assert.rejects(
+    env.engine.create({
+      threadId: "../x",
+      kind: "scratch",
+      prompt: "a",
+      agent: AGENT,
+    }),
+    /inválido/,
+  );
 });

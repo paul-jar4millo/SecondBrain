@@ -657,7 +657,7 @@ export function createThreadEngine(deps: EngineDeps) {
 
   const engine = {
     async create(input: unknown): Promise<Thread> {
-      const { capabilityToken, ...fields } = (input ?? {}) as Record<
+      const { capabilityToken, threadId, ...fields } = (input ?? {}) as Record<
         string,
         unknown
       >;
@@ -671,7 +671,19 @@ export function createThreadEngine(deps: EngineDeps) {
           parsed.error.issues[0]?.message ?? "Datos inválidos.",
         );
       const command = parsed.data;
-      const id = newId("thread");
+      // The service may choose the id, so the thread's credential is bound
+      // to it before the first turn starts.
+      let id = newId("thread");
+      if (threadId !== undefined) {
+        if (
+          typeof threadId !== "string" ||
+          !/^thr_[0-9A-Za-z_-]{6,64}$/.test(threadId)
+        )
+          throw new EngineError("invalid", "Identificador de thread inválido.");
+        if (store.getThread(threadId))
+          throw new EngineError("conflict", "El thread ya existe.");
+        id = threadId;
+      }
       const title = (
         command.title ??
         command.prompt.split("\n").find((l) => l.trim()) ??
