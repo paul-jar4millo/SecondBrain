@@ -22,6 +22,12 @@ import {
   trackChildExit,
   waitChildExit,
 } from "./shared.mjs";
+import {
+  codexRateLimits,
+  diffStats,
+  splitUnifiedDiff,
+  stepStatus,
+} from "./provider-events.mjs";
 
 /**
  * @typedef {import("./controller-types.mjs").ProviderTurnContext &
@@ -117,6 +123,145 @@ export function createCodexController() {
       !rpc.isClosed() &&
       (child.exitCode === null || child.exitCode === undefined),
     );
+
+  /**
+   * Rich events (reasoning, plan, diffs, commands, usage, rate limits,
+   * collaborating agents) for the thread engine.
+   * @param {CodexTurn} turn
+   * @param {string} method
+   * @param {CodexNotification} params
+   */
+  const emitCodexRichEvent = (turn, method, params) => {
+    const emit = turn.ctx.emit;
+    if (!emit) return;
+    const p = /** @type {Record<string, any>} */ (params);
+    if (
+      method === "item/reasoning/summaryTextDelta" ||
+      method === "item/reasoning/textDelta"
+    ) {
+      if (p.itemId && typeof p.delta === "string")
+        emit({ type: "reasoning", id: p.itemId, text: p.delta, delta: true });
+      return;
+    }
+    if (method === "turn/plan/updated" && Array.isArray(p.plan)) {
+      emit({
+        type: "plan",
+        id: `plan:${p.turnId || turn.activeTurnId || turn.ctx.turnId}`,
+        ...(p.explanation ? { explanation: String(p.explanation) } : {}),
+        steps: p.plan.map((/** @type {any} */ step) => ({
+          text: String(step?.step ?? step?.text ?? ""),
+          status: stepStatus(step?.status),
+        })),
+      });
+      return;
+    }
+    if (method === "turn/diff/updated" && typeof p.diff === "string") {
+      emit({ type: "turn_diff", diffs: splitUnifiedDiff(p.diff) });
+      return;
+    }
+    if (method === "item/commandExecution/outputDelta") {
+      if (p.itemId && typeof p.delta === "string")
+        emit({
+          type: "command",
+          id: p.itemId,
+          command: "",
+          outputDelta: p.delta,
+          status: "in-progress",
+        });
+      return;
+    }
+    if (method === "thread/tokenUsage/updated") {
+      const usage = p.tokenUsage?.last ?? p.tokenUsage?.total;
+      if (usage)
+        emit({
+          type: "usage",
+          tokens: {
+            inputTokens: Number(usage.inputTokens) || 0,
+            outputTokens: Number(usage.outputTokens) || 0,
+            ...(typeof usage.cachedInputTokens === "number"
+              ? { cachedInputTokens: usage.cachedInputTokens }
+              : {}),
+            ...(typeof usage.reasoningOutputTokens === "number"
+              ? { reasoningTokens: usage.reasoningOutputTokens }
+              : {}),
+          },
+        });
+      return;
+    }
+    if (method === "account/rateLimits/updated") {
+      const windows = codexRateLimits(p);
+      if (windows.length) emit({ type: "rate_limits", windows });
+      return;
+    }
+    if (method !== "item/started" && method !== "item/completed") return;
+    const item = p.item;
+    if (!item?.id) return;
+    const status =
+      method === "item/started"
+        ? "in-progress"
+        : item.status === "failed" || item.status === "declined"
+          ? "failed"
+          : "completed";
+    if (item.type === "reasoning" && method === "item/completed") {
+      const parts = [
+        ...(Array.isArray(item.summary) ? item.summary : []),
+        ...(Array.isArray(item.content) ? item.content : []),
+      ].map((part) => (typeof part === "string" ? part : part?.text || ""));
+      const textValue = parts.filter(Boolean).join("\n\n");
+      if (textValue) emit({ type: "reasoning", id: item.id, text: textValue });
+    } else if (item.type === "commandExecution") {
+      emit({
+        type: "command",
+        id: item.id,
+        command: Array.isArray(item.command)
+          ? item.command.join(" ")
+          : String(item.command ?? ""),
+        ...(item.cwd ? { cwd: String(item.cwd) } : {}),
+        ...(typeof item.aggregatedOutput === "string"
+          ? { output: item.aggregatedOutput }
+          : {}),
+        ...(item.exitCode !== undefined ? { exitCode: item.exitCode } : {}),
+        ...(typeof item.durationMs === "number"
+          ? { durationMs: item.durationMs }
+          : {}),
+        status,
+      });
+    } else if (item.type === "fileChange" && Array.isArray(item.changes)) {
+      emit({
+        type: "file_change",
+        id: item.id,
+        status,
+        diffs: item.changes
+          .filter((/** @type {any} */ ch) => typeof ch?.path === "string")
+          .map((/** @type {any} */ ch) => {
+            const kind = String(ch.kind?.type ?? ch.kind ?? "update");
+            const patch = typeof ch.diff === "string" ? ch.diff : "";
+            const movedTo = ch.kind?.move_path ?? ch.kind?.movePath;
+            return {
+              path: movedTo ? String(movedTo) : ch.path,
+              ...(movedTo ? { oldPath: ch.path } : {}),
+              change: movedTo
+                ? "rename"
+                : kind === "add"
+                  ? "add"
+                  : kind === "delete"
+                    ? "delete"
+                    : "modify",
+              patch,
+              ...diffStats(patch),
+            };
+          }),
+      });
+    } else if (item.type === "collabAgentToolCall") {
+      emit({
+        type: "subagent",
+        id: item.id,
+        name: String(item.tool || "agent"),
+        ...(item.prompt ? { prompt: String(item.prompt) } : {}),
+        status,
+      });
+    }
+  };
 
   /**
    * @param {CodexTurn | null} turn
@@ -297,6 +442,7 @@ export function createCodexController() {
               return;
             }
           }
+          emitCodexRichEvent(turn, method, p);
           if (method === "item/agentMessage/delta") {
             // Codex always sends itemId and delta with this notification.
             turn.ctx.delta(
