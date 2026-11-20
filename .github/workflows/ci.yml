@@ -82,7 +82,7 @@ jobs:
         run: |
           {
             echo "### Line coverage"
-            for module in service mcp launcher dashboard; do
+            for module in contracts service mcp launcher dashboard; do
               file="coverage/$module/lcov.info"
               [ -f "$file" ] || continue
               awk -F: -v m="$module" '/^LF:/{f+=$2} /^LH:/{h+=$2} END{if(f) printf "- %s: %.1f%%\n", m, 100*h/f}' "$file"
@@ -158,7 +158,7 @@ jobs:
       - name: Production dependencies
         run: |
           failed=""
-          for package in dashboard service mcp launcher; do
+          for package in contracts dashboard service mcp launcher; do
             if ! npm audit --workspace "$package" --omit=dev --audit-level=high; then
               failed="$failed $package"
             fi
