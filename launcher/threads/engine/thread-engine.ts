@@ -3,6 +3,7 @@
 // requests) and writes every change to the event store.
 import {
   AnswerRequest,
+  CloseThread,
   CreateThread,
   SendMessage,
   TERMINAL_STATUSES,
@@ -32,6 +33,7 @@ import {
 } from "./provider-requests.ts";
 import type { Scheduler, Slot } from "./scheduler.ts";
 import type { ThreadWorkspaces } from "./workspace.ts";
+import { CloseError, commitTitle, type Closing } from "./closing.ts";
 
 export interface ProviderController {
   isAlive(): boolean;
@@ -66,6 +68,7 @@ export interface EngineDeps {
   now?: () => string;
   idleControllerMs?: number;
   defaultMaxTurns?: number;
+  closing?: Closing;
 }
 
 export type EngineErrorCode =
@@ -73,9 +76,15 @@ export type EngineErrorCode =
 
 export class EngineError extends Error {
   readonly code: EngineErrorCode;
-  constructor(code: EngineErrorCode, message: string) {
+  readonly details: Record<string, unknown> | undefined;
+  constructor(
+    code: EngineErrorCode,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -128,6 +137,7 @@ export function createThreadEngine(deps: EngineDeps) {
     git,
     context,
     controllers,
+    closing,
     now = () => new Date().toISOString(),
     idleControllerMs = 10 * 60_000,
     defaultMaxTurns = 40,
@@ -274,6 +284,15 @@ export function createThreadEngine(deps: EngineDeps) {
     const instance = factory();
     state.controller = { instance, signature };
     return instance;
+  };
+
+  const stopController = async (threadId: string) => {
+    const state = live(threadId);
+    if (state.idleTimer) clearTimeout(state.idleTimer);
+    state.idleTimer = null;
+    const controller = state.controller?.instance;
+    state.controller = null;
+    await controller?.shutdown("Thread cerrado").catch(() => undefined);
   };
 
   const cancelPending = (
@@ -828,6 +847,122 @@ export function createThreadEngine(deps: EngineDeps) {
       if (state.turn && ![...state.pending.values()].length)
         setStatus(threadId, "running");
       return store.getRequest(requestId) as UserRequest;
+    },
+
+    /**
+     * Closes a thread: `pr` pushes its branch and opens a pull request
+     * (the worktree stays for follow-ups until archived), `merge` merges
+     * it into the base branch locally, `discard` drops its work.
+     */
+    async close(threadId: string, input: unknown): Promise<Thread> {
+      const parsed = CloseThread.safeParse({
+        ...(input as object),
+        type: "CloseThread",
+        threadId,
+      });
+      if (!parsed.success)
+        throw new EngineError(
+          "invalid",
+          parsed.error.issues[0]?.message ?? "Datos inválidos.",
+        );
+      const { mode, title, body } = parsed.data;
+      const thread = requireThread(threadId);
+      const state = live(threadId);
+      if (BUSY_STATUSES.has(thread.status))
+        throw new EngineError("invalid-state", "El thread ya está cerrado.");
+      if (state.turn || thread.status === "setting-up")
+        throw new EngineError(
+          "invalid-state",
+          "Detén el turno en curso antes de cerrar el thread.",
+        );
+      if (mode !== "discard" && !thread.repo)
+        throw new EngineError(
+          "invalid",
+          "Solo un thread de repositorio puede cerrarse con PR o merge.",
+        );
+      if (mode !== "discard" && !closing)
+        throw new EngineError(
+          "invalid",
+          "El cierre con git no está disponible.",
+        );
+      state.queue.length = 0;
+      const previous = thread.status;
+      setStatus(threadId, "closing");
+      const repo = thread.repo;
+      const message = commitTitle(title, thread.title);
+      try {
+        let prUrl: string | null = null;
+        if (mode === "pr" && repo && closing)
+          prUrl = await closing.pullRequest(
+            repo,
+            message,
+            body ?? `Trabajo del thread «${thread.title}».`,
+          );
+        else if (mode === "merge" && repo && closing)
+          await closing.mergeLocal(repo, message);
+        if (mode !== "pr") {
+          if (repo)
+            await workspaces.removeRepo({
+              path: repo.path,
+              worktree: repo.worktree,
+              branch: repo.branch,
+              keepBranch: false,
+            });
+          else if (thread.workspace)
+            await workspaces.removeScratch(thread.workspace);
+        }
+        await stopController(threadId);
+        appendItem(threadId, null, {
+          kind: "notice",
+          level: "info",
+          code: `closed-${mode}`,
+          text:
+            mode === "pr"
+              ? `PR abierto: ${prUrl}`
+              : mode === "merge"
+                ? `Integrado en ${repo?.baseBranch}.`
+                : "Trabajo descartado.",
+        });
+        update(threadId, { status: "done", closeMode: mode, prUrl });
+      } catch (cause) {
+        const conflicts = cause instanceof CloseError ? cause.conflicts : [];
+        const text = (cause as Error).message;
+        appendItem(threadId, null, {
+          kind: "notice",
+          level: "error",
+          code: "close-failed",
+          text: conflicts.length
+            ? `${text} Archivos: ${conflicts.join(", ")}`
+            : text,
+        });
+        setStatus(threadId, previous);
+        throw new EngineError("conflict", text, { conflicts });
+      }
+      return requireThread(threadId);
+    },
+
+    /** Hides a thread; removes its worktree but always keeps its branch. */
+    async archive(threadId: string): Promise<Thread> {
+      const thread = requireThread(threadId);
+      if (thread.status === "archived") return thread;
+      if (live(threadId).turn || thread.status === "closing")
+        throw new EngineError(
+          "invalid-state",
+          "Detén el turno en curso antes de archivar el thread.",
+        );
+      live(threadId).queue.length = 0;
+      if (thread.repo)
+        await workspaces
+          .removeRepo({
+            path: thread.repo.path,
+            worktree: thread.repo.worktree,
+            branch: thread.repo.branch,
+            keepBranch: true,
+          })
+          .catch(() => undefined);
+      await stopController(threadId);
+      update(threadId, { status: "archived" });
+      return requireThread(threadId);
     },
 
     snapshot(threadId: string): ThreadSnapshot | null {

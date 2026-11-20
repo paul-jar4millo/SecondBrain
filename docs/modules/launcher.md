@@ -76,3 +76,15 @@ incorrect usage.
   `GET /threads/stream` (global feed by `globalSeq`), `POST
 /threads/:id/messages|interrupt|requests/:rid`, `GET /threads/:id/diff`,
   `GET /threads/:id/turns/:tid/diff`, `GET /inbox`.
+
+Closing (`engine/closing.ts`, `POST /threads/:id/close` with `mode`
+`pr|merge|discard`, `POST /threads/:id/archive`):
+
+- `pr` commits pending work, pushes `sb/…` and opens the pull request; the
+  worktree stays for follow-ups until the thread is archived.
+- `merge` computes the merge with `git merge-tree` first. A conflict or local
+  edits in the base checkout change nothing and return the conflicting
+  files. Otherwise the base branch fast-forwards to the merge commit (in its
+  checkout when it has one) and the worktree and branch are removed.
+- `discard` removes the worktree and branch, or the scratch folder.
+- Archiving removes the worktree but always keeps the branch.
