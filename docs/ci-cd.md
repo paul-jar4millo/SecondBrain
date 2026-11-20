@@ -10,7 +10,7 @@ flowchart LR
     verify["verify<br/>lint · format · typecheck<br/>ShellCheck · tests + coverage<br/>build · package"]
     commits["commits<br/>Conventional Commits"]
     audit["audit<br/>npm audit (warns, weekly too)"]
-    browser["browser<br/>Playwright, 4 groups<br/>(UI or service changes)"]
+    browser["browser<br/>Playwright, 4 groups<br/>(dashboard, service, launcher, contracts or CI changes)"]
     verify --> browser
   end
 
@@ -38,7 +38,7 @@ flowchart LR
 | `verify`         | `npm run lint`, `format:check`, `typecheck`; ShellCheck on all shell scripts; `npm run coverage` (node test runner + Vitest with V8 coverage) and the operations tests; builds the dashboard and packages a release; writes a coverage summary to the job page              | Yes          |
 | `commits`        | Validates every commit subject with `ops/check-commit.mjs`                                                                                                                                                                                                                  | Yes          |
 | `audit`          | `npm audit --omit=dev` per module, leaving a visible warning on high-severity advisories; dev dependencies are informational; also runs weekly                                                                                                                              | No (warns)   |
-| `browser`        | Playwright suites in four groups (refuge, approvals, project dashboards, tools, conversations, workspaces) with software WebGL, each retried once; runs for pull requests that touch `dashboard/` or `service/`, for manual runs and weekly; uploads screenshots on failure | No (reports) |
+| `browser`        | Playwright suites in four groups (refuge, approvals, project dashboards, tools and Threads) with software WebGL, each retried once; runs for pull requests that touch `dashboard/`, `service/`, `launcher/`, `contracts/` or the CI workflow, for manual runs and weekly; uploads screenshots on failure | No (reports) |
 | `browser-report` | On the weekly run only: when a browser suite fails, opens the issue "Weekly browser suites failing" or comments on the open one                                                                                                                                             | No           |
 
 Which checks gate a merge is decided by the branch protection rules; the
@@ -54,7 +54,7 @@ raise the floor in the same pull request.
 | --------- | ----------------------------- | ------- | ----- |
 | service   | 85.5%                         | 87.8%   | 87%   |
 | launcher  | 65.8%                         | 69.4%   | 68%   |
-| dashboard | 40.3%                         | 42.3%   | 42%   |
+| dashboard | 40.3%                         | 44.2%   | 44%   |
 | mcp       | 38.3%                         | 43.5%   | 41%   |
 
 The dashboard figure only counts `.ts`/`.tsx` files (see
