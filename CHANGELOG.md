@@ -4,6 +4,32 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-20
+
+Internal refactor with no change to HTTP routes, MCP tools, environment
+variables, the vault format, the release layout or user-facing text.
+
+### Changed
+
+- npm workspaces (ADR 0008): `package-lock.json` at the root is the only
+  lockfile and `npm run setup` is a single `npm ci`. The release still ships
+  one lockfile per module, cut from the root lockfile by
+  `ops/release-lock.mjs`, so hosts and the deploy helper need no change.
+- `overrides` (katex, minimatch) moved to the root `package.json`.
+- The dashboard source is fully TypeScript: the refuge scene is split into
+  `room-*.ts` modules, the world panel is `panel.ts`, and `allowJs` is gone.
+- `launcher`: provider conversations are split into `launcher/conversation/`.
+- Internal local variables, parameters and functions are renamed to English;
+  data keys, log fields and cross-module method names keep their names.
+- CI runs the browser suites weekly and opens an issue when they fail.
+- Dependencies: transitive patch and minor updates from the workspace
+  lockfile (hono, jose, @anthropic-ai/sdk, among others).
+
+### Fixed
+
+- `launcher/tool-catalog.mjs` finds the Claude Agent SDK wherever npm
+  installs it.
+
 ## [0.2.0] - 2026-11-20
 
 Internal refactor with no change to HTTP routes, MCP tools, environment
@@ -105,6 +131,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.3.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.3.0
 [0.2.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.2.0
 [0.1.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.2
 [0.1.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.1.1
