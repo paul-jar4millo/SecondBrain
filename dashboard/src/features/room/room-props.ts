@@ -65,7 +65,7 @@ export function disposeObject(object: THREE.Object3D | null) {
 }
 
 /** Cup, book and watering can, hidden until the agent rests in their zone. */
-export function leisureProps(raiz: THREE.Object3D) {
+export function leisureProps(root: THREE.Object3D) {
   const props: Record<string, THREE.Object3D> = {};
   const material = (color: string) =>
     new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
@@ -74,7 +74,7 @@ export function leisureProps(raiz: THREE.Object3D) {
     material("#f1f7ff"),
   );
   cup.position.set(0.24, 1.12, 0.3);
-  raiz.add(cup);
+  root.add(cup);
   props.cafe = cup;
   const book = new THREE.Group();
   book.position.set(0, 1.03, 0.3);
@@ -92,7 +92,7 @@ export function leisureProps(raiz: THREE.Object3D) {
     cover.position.y = y;
     book.add(cover);
   }
-  raiz.add(book);
+  root.add(book);
   props.library = book;
   const can = new THREE.Group();
   can.position.set(0.27, 0.88, 0.34);
@@ -109,7 +109,7 @@ export function leisureProps(raiz: THREE.Object3D) {
   spout.rotation.z = -0.8;
   spout.position.set(0.17, 0.06, 0);
   can.add(spout);
-  raiz.add(can);
+  root.add(can);
   props.garden = can;
   Object.values(props).forEach((prop) => (prop.visible = false));
   return props;

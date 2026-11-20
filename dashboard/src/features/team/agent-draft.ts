@@ -6,8 +6,8 @@ export const engines: Record<string, string> = {
   marina: "deepseek",
 };
 
-export const draftKey = (project: string, motor: string) =>
-  `sb-chat-draft:${project}:${motor}`;
+export const draftKey = (project: string, engine: string) =>
+  `sb-chat-draft:${project}:${engine}`;
 
 /**
  * Leaves a message ready in an agent's composer and returns the route to it.
@@ -18,9 +18,9 @@ export function prepareAgentDraft(
   agentId: string,
   text: string,
 ) {
-  const motor = engines[agentId];
+  const engine = engines[agentId];
   try {
-    const key = draftKey(project, motor);
+    const key = draftKey(project, engine);
     const current = (localStorage.getItem(key) || "").trim();
     const incoming = text.trim();
     const next = !current
@@ -29,7 +29,7 @@ export function prepareAgentDraft(
         ? current
         : `${current}\n\n${incoming}`;
     localStorage.setItem(key, next);
-    localStorage.setItem(`sb-chat-selected:${project}:${motor}`, "new");
+    localStorage.setItem(`sb-chat-selected:${project}:${engine}`, "new");
   } catch {
     // Without storage the route still opens; the message just is not prefilled.
   }

@@ -25,7 +25,7 @@ interface Created {
 export function PullRequestDialog({
   id,
   agentName,
-  capacidades,
+  capacidades: capabilities,
   onClose,
   onCreated,
 }: {
@@ -63,7 +63,7 @@ export function PullRequestDialog({
   }, [id]);
 
   const valid = CONVENTIONAL.test(title.trim()) && title.trim().length <= 200;
-  const redactable = capacidades?.redactarPr !== false;
+  const redactable = capabilities?.redactarPr !== false;
 
   const draftWithAgent = async () => {
     setDrafting(true);

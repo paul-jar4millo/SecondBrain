@@ -23,7 +23,7 @@ export function workspacesOf(
     vaultPath?: string;
   }[],
 ) {
-  const proyectos = items
+  const projects = items
     .filter((x) => x.kind === "project" && !x.deleted)
     .map((x) => ({
       id: x.id,
@@ -36,14 +36,14 @@ export function workspacesOf(
         Number(a.archivado) - Number(b.archivado) ||
         a.titulo.localeCompare(b.titulo, "es"),
     );
-  const hasMundo = items.some(
+  const hasWorld = items.some(
     (x) =>
       x.kind === "project" &&
       !x.deleted &&
       x.vaultPath === "01-Proyectos/Proyecto-Mundo-Hipotetico.md",
   );
   return [
-    ...FIJOS.filter((x) => x.id !== "mundo-hipotetico" || !hasMundo),
-    ...proyectos,
+    ...FIJOS.filter((x) => x.id !== "mundo-hipotetico" || !hasWorld),
+    ...projects,
   ];
 }

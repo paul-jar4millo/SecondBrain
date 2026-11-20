@@ -6,7 +6,7 @@ import {
   normalizeOrder,
   ZONES,
   BASE_IDS,
-  puestoPara,
+  spotFor,
   interactionPrompt,
   zoneGuide,
 } from "../src/features/room/room-life";
@@ -27,21 +27,21 @@ describe("living room navigation", () => {
 });
 describe("four base agents", () => {
   it("elige un puesto por tarea y reserva un lugar distinto para cada personaje", () => {
-    const research = puestoPara("ambar", {
+    const research = spotFor("ambar", {
       fase: "Investigar",
       zona: "library",
     });
     expect(research.nombre).toBe("Mesa de investigación");
     expect(
-      puestoPara("ambar", { fase: "Planificar", zona: "terrace" }).nombre,
+      spotFor("ambar", { fase: "Planificar", zona: "terrace" }).nombre,
     ).toBe("Mesa de planificación");
+    expect(spotFor("ambar", { fase: "Revisar", zona: "workshop" }).nombre).toBe(
+      "Mesa de revisión",
+    );
     expect(
-      puestoPara("ambar", { fase: "Revisar", zona: "workshop" }).nombre,
-    ).toBe("Mesa de revisión");
-    expect(
-      puestoPara("ambar", { fase: "Programar", zona: "library" }).nombre,
+      spotFor("ambar", { fase: "Programar", zona: "library" }).nombre,
     ).toBe("Mesa de investigación");
-    const points = BASE_IDS.map((id) => puestoPara(id, { zona: "workshop" }));
+    const points = BASE_IDS.map((id) => spotFor(id, { zona: "workshop" }));
     expect(new Set(points.map((p) => `${p.x},${p.z}`)).size).toBe(4);
   });
   it("honors an explicit destination before the role and uses the project for work", () => {
@@ -104,9 +104,14 @@ describe("blue refuge map", () => {
     const spawn = { x: 1, z: 3 };
     expect(nav.free(spawn.x, spawn.z)).toBe(true);
     for (const id of BASE_IDS)
-      for (const fase of ["Investigar", "Planificar", "Programar", "Revisar"]) {
-        const spot = puestoPara(id, { fase });
-        expect(nav.free(spot.x, spot.z), `${id}: ${fase}`).toBe(true);
+      for (const phase of [
+        "Investigar",
+        "Planificar",
+        "Programar",
+        "Revisar",
+      ]) {
+        const spot = spotFor(id, { fase: phase });
+        expect(nav.free(spot.x, spot.z), `${id}: ${phase}`).toBe(true);
         const route = nav.route(spawn, spot);
         expect(route.length).toBeGreaterThan(0);
         const end = route.at(-1)!;

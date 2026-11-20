@@ -6,7 +6,7 @@ import {
 
 describe("sesiones observadas", () => {
   it("mantiene cuatro bases y crea una figura por sesión concurrente adicional", () => {
-    const estado = sceneSessions([
+    const state = sceneSessions([
       {
         id: "uno",
         motor: "codex",
@@ -25,14 +25,14 @@ describe("sesiones observadas", () => {
       },
       { id: "tres", motor: "claude", copia: 0, estado: "terminada" },
     ]);
-    expect(estado.base).toHaveLength(4);
-    expect(estado.base.find((s) => s.id === "menta")?.ultimo?.fase).toBe(
+    expect(state.base).toHaveLength(4);
+    expect(state.base.find((s) => s.id === "menta")?.ultimo?.fase).toBe(
       "revisar",
     );
     expect(
-      estado.base.find((s) => s.id === "menta")?.ultimo?.actividad?.zona,
+      state.base.find((s) => s.id === "menta")?.ultimo?.actividad?.zona,
     ).toBe("workshop");
-    expect(estado.copias).toEqual([
+    expect(state.copias).toEqual([
       {
         id: "menta#1",
         baseId: "menta",
@@ -44,7 +44,7 @@ describe("sesiones observadas", () => {
         padreId: undefined,
       },
     ]);
-    expect(estado.base.find((s) => s.id === "ambar")?.ocupada).toBe(false);
+    expect(state.base.find((s) => s.id === "ambar")?.ocupada).toBe(false);
   });
   it("crea y retira solo las copias cuyo estado cambió", () => {
     expect(
@@ -52,10 +52,10 @@ describe("sesiones observadas", () => {
     ).toEqual({ crear: ["ambar#2"], retirar: ["lira#1"] });
   });
   it("no conserva copias de sesiones terminadas ni muestra texto ausente como actividad", () => {
-    const estado = sceneSessions([
+    const state = sceneSessions([
       { id: "x", motor: "agy", copia: 1, estado: "terminada" },
     ]);
-    expect(estado.copias).toEqual([]);
-    expect(estado.base.find((s) => s.id === "lira")?.ocupada).toBe(false);
+    expect(state.copias).toEqual([]);
+    expect(state.base.find((s) => s.id === "lira")?.ocupada).toBe(false);
   });
 });

@@ -38,7 +38,7 @@ export function sessionFigure(
   if (!base) return null;
   return s.copia > 0 ? `${base}#${s.copia}` : base;
 }
-const zona: Record<string, string> = {
+const zone: Record<string, string> = {
   investigar: "library",
   planificar: "terrace",
   programar: "workshop",
@@ -52,15 +52,15 @@ export function conciliarCopias(actuales: string[], deseadas: string[]) {
     retirar: actuales.filter((id) => !deseadasSet.has(id)),
   };
 }
-export function sceneSessions(sesiones: ObservedSession[]): {
+export function sceneSessions(sessions: ObservedSession[]): {
   base: AgentState[];
   copias: CopiaObservada[];
 } {
-  const activas = sesiones.filter(
+  const active = sessions.filter(
     (s) => ["pendiente", "trabajando"].includes(s.estado) && personaje[s.motor],
   );
   const base = Object.values(personaje).map((id): AgentState => {
-    const s = activas.find(
+    const s = active.find(
       (item) => personaje[item.motor] === id && item.copia === 0,
     );
     return {
@@ -73,14 +73,14 @@ export function sceneSessions(sesiones: ObservedSession[]): {
             project: s.espacioId || s.proyecto || undefined,
             fase: s.fase || undefined,
             actividad: {
-              zona: zona[s.fase || ""] || "terrace",
+              zona: zone[s.fase || ""] || "terrace",
               etiqueta: s.ultimaAccion || "Trabajando",
             },
           }
         : null,
     };
   });
-  const copias = activas
+  const copias = active
     .filter((s) => s.copia > 0)
     .map((s) => ({
       id: `${personaje[s.motor]}#${s.copia}`,

@@ -3,16 +3,11 @@
  * shipped with the app, so the public demo hotlinks nothing.
  */
 const base = import.meta.env.BASE_URL;
-const pin = (
-  id: string,
-  titulo: string,
-  file: string,
-  etiquetas: string[],
-) => ({
+const pin = (id: string, title: string, file: string, etiquetas: string[]) => ({
   id,
   url: base + file,
   imagen: base + file,
-  titulo,
+  titulo: title,
   consulta: "refugio",
   etiquetas,
 });

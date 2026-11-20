@@ -20,7 +20,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-function mapa() {
+function map() {
   const root = new THREE.Group();
   const add = (name: string, material = "stone") => {
     const mesh = new THREE.Mesh(
@@ -42,7 +42,7 @@ function mapa() {
 
 it("viste el mapa: tinta por grupo, mar, halos y muros que se ocultan frente a la cámara", () => {
   const scene = new THREE.Scene();
-  const world = dressWorld(scene, mapa(), {
+  const world = dressWorld(scene, map(), {
     halos: [{ color: "#fff", x: 0, y: 1, z: 0, size: 2, wall: "WallN" }],
   });
   const names = scene.children.map((o) => o.name);
@@ -67,7 +67,7 @@ it("viste el mapa: tinta por grupo, mar, halos y muros que se ocultan frente a l
 
 it("anima un relevo entre dos agentes y lo termina solo", () => {
   const scene = new THREE.Scene();
-  const world = dressWorld(scene, mapa(), {});
+  const world = dressWorld(scene, map(), {});
   const from = new THREE.Object3D(),
     to = new THREE.Object3D();
   to.position.set(4, 0, 0);
@@ -90,7 +90,7 @@ it("anima un relevo entre dos agentes y lo termina solo", () => {
 
 it("en modo quieto coloca el relevo al final y no anima", () => {
   const scene = new THREE.Scene();
-  const world = dressWorld(scene, mapa(), {}, { quieto: true });
+  const world = dressWorld(scene, map(), {}, { quieto: true });
   const from = new THREE.Object3D(),
     to = new THREE.Object3D();
   to.position.set(0, 0, 6);

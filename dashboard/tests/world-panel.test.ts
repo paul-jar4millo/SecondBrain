@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { montarPanel } from "../src/features/world/panel";
+import { mountPanel } from "../src/features/world/panel";
 
 let dispose: (() => void) | undefined;
 afterEach(() => {
@@ -20,7 +20,7 @@ async function openSyntheticVideo() {
   dialog.close = () => dialog.removeAttribute("open");
   const confirm = vi.fn(async () => false);
   const stage = '<img src="x" onerror="alert(1)">';
-  dispose = montarPanel(document.body, {
+  dispose = mountPanel(document.body, {
     confirm,
     api: async () => ({
       scannedAt: "2026-11-09T12:00:00Z",
