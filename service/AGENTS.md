@@ -4,7 +4,7 @@
 - Keep hash revisions, the write queue, journal, recovery, history and unknown
   YAML fields.
 - Do not import dashboard or MCP code.
-- The HTTP process never runs agent CLIs; that belongs to the isolated `lanzador`.
+- The HTTP process never runs agent CLIs; that belongs to the isolated `launcher`.
 - With `VAULT_GIT=on`, require an initialized vault repository. Commit
   confirmed transactions with isomorphic-git; a Git failure never reverts a
   saved note. Pushing is done by a systemd timer.

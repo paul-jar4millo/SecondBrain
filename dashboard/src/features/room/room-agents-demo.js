@@ -1,5 +1,5 @@
 /** Synthetic values for `?demo=1`, which has no backend. */
-export const AGENTES_DEMO = {
+export const DEMO_AGENTS = {
   conectado: true,
   agentes: [
     {
@@ -52,13 +52,13 @@ export const AGENTES_DEMO = {
 };
 
 /** Explicitly synthetic showcase; this path never invokes providers. */
-export function apiAgentesDemo(path, body) {
+export function demoAgentsApi(path, body) {
   const stored = JSON.parse(
     localStorage.getItem("sb-demo-agent-config") || "{}",
   );
   if (path === "/agentes") {
-    for (const a of AGENTES_DEMO.agentes) a.configuracion = stored[a.id] || {};
-    return AGENTES_DEMO;
+    for (const a of DEMO_AGENTS.agentes) a.configuracion = stored[a.id] || {};
+    return DEMO_AGENTS;
   }
   if (path === "/agentes/equipo") return { flujos: [], eventos: [] };
   if (path.split("?")[0] === "/agentes/sesiones")
@@ -150,7 +150,7 @@ export function apiAgentesDemo(path, body) {
     return stored[body.id];
   }
   if (path === "/agentes/encargos") {
-    const a = AGENTES_DEMO.agentes.find((a) => a.id === body.id);
+    const a = DEMO_AGENTS.agentes.find((a) => a.id === body.id);
     a.ultimo = {
       ...body,
       jobId: crypto.randomUUID(),

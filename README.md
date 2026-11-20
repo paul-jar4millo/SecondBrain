@@ -51,8 +51,8 @@ flowchart LR
     dashboard["dashboard<br/>React · Three.js PWA"] -- "REST + SSE" --> service
     mcp["mcp<br/>MCP server + CLI"] -- HTTP --> service
     service["service<br/>API · auth · single writer"] --> vault[("Markdown vault<br/>+ Git")]
-    service -- loopback --> lanzador["lanzador<br/>agent runner (sb-agente)"]
-    lanzador --> clis["Codex · Claude · Antigravity · DeepSeek"]
+    service -- loopback --> launcher["launcher<br/>agent runner (sb-agente)"]
+    launcher --> clis["Codex · Claude · Antigravity · DeepSeek"]
     clis -- "scoped MCP" --> mcp
   end
   vault -. "push every 10 min" .-> remote[("Private Git remote")]
@@ -104,7 +104,7 @@ npm run coverage                    # per-module coverage table
 |                                                                     |                                                                                                                                              |
 | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Architecture](docs/architecture/README.md)                         | Context, containers, request flows                                                                                                           |
-| [Modules](docs/modules/)                                            | [service](docs/modules/service.md), [mcp](docs/modules/mcp.md), [lanzador](docs/modules/launcher.md), [dashboard](docs/modules/dashboard.md) |
+| [Modules](docs/modules/)                                            | [service](docs/modules/service.md), [mcp](docs/modules/mcp.md), [launcher](docs/modules/launcher.md), [dashboard](docs/modules/dashboard.md) |
 | [HTTP API](docs/api.md) · [MCP tools](docs/mcp-tools.md)            | Interfaces                                                                                                                                   |
 | [Configuration](docs/configuration.md)                              | Environment variables and host files                                                                                                         |
 | [Deployment](docs/deployment.md) · [Operations](docs/operations.md) | Docker, Proxmox VE, backups, rollback                                                                                                        |

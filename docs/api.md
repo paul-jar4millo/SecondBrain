@@ -79,7 +79,7 @@ Legend: **public** = no session; **room** = also callable by agents.
 | POST   | `/files/trash`                              | room — move own file to trash                       |
 | POST   | `/files/restore`, `/files/pin`              | Owner only                                          |
 
-### Agent sessions (proxied to `lanzador`)
+### Agent sessions (proxied to the launcher)
 
 | Method     | Path                                                                |                                                |
 | ---------- | ------------------------------------------------------------------- | ---------------------------------------------- |

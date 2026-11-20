@@ -2,7 +2,7 @@
 # low-poly de consola portátil: unos 2,000 triángulos, facetas duras y todo el detalle
 # pintado en texturas chicas con filtro de píxel.
 #
-#   blender -b --factory-startup -P dashboard/ops/sala-modelos.py -- [--preview DIR] [--solo NOMBRE]
+#   blender -b --factory-startup -P dashboard/ops/room-models.py -- [--preview DIR] [--solo NOMBRE]
 #
 # Sale un GLB por figura en public/models/sala/, con el mismo esqueleto y acciones.
 # Los materiales pelo/pelo2/ropa/acento/gorra/cuadros/rayas usan texturas en grises para
@@ -1203,7 +1203,7 @@ def construir(nombre, f):
     accion(arm, "teclea", 24, a_teclea)
     accion(arm, "festeja", 24, a_festeja)
     tris = sum(len(c) - 2 for c in m.f)
-    print(f"[sala-modelos] {nombre}: {len(m.v)} vértices, {tris} triángulos")
+    print(f"[room-models] {nombre}: {len(m.v)} vértices, {tris} triángulos")
     return arm, obj
 
 

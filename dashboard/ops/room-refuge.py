@@ -1185,6 +1185,6 @@ camera.rotation_euler = (Vector((0, 0, 0)) - camera.location).to_track_quat('-Z'
 camera.data.type = 'ORTHO'
 camera.data.ortho_scale = 46
 bpy.context.scene.camera = camera
-bpy.ops.wm.save_as_mainfile(filepath=os.path.join(ROOT, 'ops', 'sala-refugio.blend'))
+bpy.ops.wm.save_as_mainfile(filepath=os.path.join(ROOT, 'ops', 'room-refuge.blend'))
 print('REFUGE_EXPORTED', len(obstacles), 'obstacles', len(buckets), 'meshes', count, 'faces',
       os.path.getsize(os.path.join(OUT, 'refugio.glb')), 'bytes')
