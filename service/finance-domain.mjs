@@ -140,11 +140,9 @@ export function normalize(raw) {
     ...f,
     schemaVersion: 1,
     currency: "MXN",
-    validityDays: Number.isFinite(f.validityDays) ? f.validityDays : 7,
-    staleAfterDays: Number.isFinite(f.staleAfterDays) ? f.staleAfterDays : 3,
-    incomeMonthlyMinor: Number.isFinite(f.incomeMonthlyMinor)
-      ? f.incomeMonthlyMinor
-      : 0,
+    validityDays: finiteOr(f.validityDays, 7),
+    staleAfterDays: finiteOr(f.staleAfterDays, 3),
+    incomeMonthlyMinor: finiteOr(f.incomeMonthlyMinor, 0),
     leakCategories: Array.isArray(f.leakCategories)
       ? f.leakCategories
       : [...LEAK_DEFAULT],
@@ -160,6 +158,9 @@ export function normalize(raw) {
 /* ---------- derived overview ---------- */
 /** @template T @param {T[]} xs @param {(item: T) => number} f */
 const sum = (xs, f) => xs.reduce((n, x) => n + f(x), 0);
+/** @param {unknown} value @param {number} fallback */
+const finiteOr = (value, fallback) =>
+  typeof value === "number" && Number.isFinite(value) ? value : fallback;
 /** @param {FinanceTransaction} t */
 const spendsIn = (t) => t.type === "charge" || t.type === "reversal";
 /** @param {FinanceCard} card */
@@ -262,7 +263,7 @@ export function overview(rawData, today) {
     label: c.label,
     amountMinor: c.amountMinor || 0,
     card: c.card,
-    cardName: cardName.get(c.card),
+    cardName: c.card === undefined ? undefined : cardName.get(c.card),
     dayOfMonth: c.dayOfMonth,
     note: c.note,
   }));
@@ -358,7 +359,7 @@ export function overview(rawData, today) {
       style: "currency",
       currency: "MXN",
     }).format(n / 100);
-  /** @param {string} d */
+  /** @param {string | undefined} d */
   const longDay = (d) =>
     new Intl.DateTimeFormat("es-MX", {
       day: "numeric",
@@ -475,7 +476,7 @@ export function overview(rawData, today) {
     installments,
     installmentsRemainingMinor: sum(
       activeInstallments,
-      (i) => i.remainingMinor,
+      (i) => /** @type {number} */ (i.remainingMinor),
     ),
     categories,
     leak: {
@@ -495,7 +496,26 @@ export function overview(rawData, today) {
 }
 
 /* ---------- operations (the only way agents change finance data) ---------- */
-/** @param {FinanceData} data @param {unknown} ref */
+/**
+ * @overload
+ * @param {FinanceData} data
+ * @param {unknown} ref
+ * @returns {FinanceCard}
+ */
+/**
+ * @overload
+ * @param {FinanceData} data
+ * @param {unknown} ref
+ * @param {{ optional: boolean }} options
+ * @returns {FinanceCard | undefined}
+ */
+/**
+ * Throws for a missing, unknown or ambiguous card unless `optional`.
+ * @param {FinanceData} data
+ * @param {unknown} ref
+ * @param {{ optional?: boolean }} [options]
+ * @returns {FinanceCard | undefined}
+ */
 function findCard(data, ref, { optional = false } = {}) {
   const key = norm(ref);
   if (!key) {
@@ -540,8 +560,9 @@ function guessCategory(data, desc) {
 /** @param {FinanceCard} card @param {FinanceTransaction} t */
 function applyBalance(card, t) {
   card.balanceMinor = (card.balanceMinor || 0) + t.amountMinor;
-  if (t.type === "payment" && Number.isFinite(card.payMinor))
-    card.payMinor = Math.max(0, card.payMinor + t.amountMinor);
+  const pay = card.payMinor;
+  if (t.type === "payment" && typeof pay === "number" && Number.isFinite(pay))
+    card.payMinor = Math.max(0, pay + t.amountMinor);
 }
 /** @param {FinanceData} data @param {FinanceOperation} op @param {FinanceTransactionType} type @param {string} today */
 function addTx(data, op, type, today) {
@@ -861,8 +882,10 @@ const handlers = {
 };
 /** @param {FinanceData} data @param {FinanceOperation} op @param {string} today @param {boolean} create */
 function cardSet(data, op, today, create) {
-  let card = create ? undefined : findCard(data, op.card ?? op.name);
-  if (create) {
+  /** @type {FinanceCard} */
+  let card;
+  if (!create) card = findCard(data, op.card ?? op.name);
+  else {
     const name = text(op.name, "el nombre de la tarjeta", 60);
     if (findCard(data, name, { optional: true }))
       throw new Failure(`La tarjeta ${name} ya existe.`, 409);

@@ -263,7 +263,12 @@ export function createBrainMcp({
     const hash = createHash("sha256");
     try {
       await pipeline(
-        Readable.fromWeb(response.body),
+        // DOM and node:stream/web declare ReadableStream separately.
+        Readable.fromWeb(
+          /** @type {import("node:stream/web").ReadableStream} */ (
+            response.body
+          ),
+        ),
         new Transform({
           transform(chunk, _encoding, done) {
             hash.update(chunk);

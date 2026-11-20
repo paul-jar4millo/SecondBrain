@@ -90,48 +90,51 @@ export function createProviderConversations({
   /** @type {Map<string, { controller: ConversationController, configSignature: string }>} */
   const controllers = new Map();
 
-  /** @param {string} id */
+  /**
+   * @param {string} id
+   * @returns {Promise<ConversationStore>}
+   */
   async function load(id) {
     if (!validId(id)) throw new ErrorLanzador("Sesión inválida.", 400);
-    if (!stores.has(id))
-      stores.set(
-        id,
-        (async () => {
-          let state;
-          const filename = path.join(directory, `${id}.json`);
-          try {
-            state = ensureStateShape(
-              JSON.parse(await readFile(filename, "utf8")),
-            );
-          } catch (error) {
-            if (error.code !== "ENOENT") throw error;
-            state = ensureStateShape({});
-          }
-          // A callback belongs strictly to its live process, never across restarts.
-          let changed = false;
-          for (const request of state.requests) {
-            if (request.status === "pending") {
-              request.status = "expired";
-              request.nativeCallbackStatus = "interrupted";
-              if (request.kind === "question") {
-                request.productStatus = "pendiente";
-                request.requiresNewTurn = true;
-              }
-              changed = true;
+    let pending = stores.get(id);
+    if (!pending) {
+      pending = (async () => {
+        let state;
+        const filename = path.join(directory, `${id}.json`);
+        try {
+          state = ensureStateShape(
+            JSON.parse(await readFile(filename, "utf8")),
+          );
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+          state = ensureStateShape({});
+        }
+        // A callback belongs strictly to its live process, never across restarts.
+        let changed = false;
+        for (const request of state.requests) {
+          if (request.status === "pending") {
+            request.status = "expired";
+            request.nativeCallbackStatus = "interrupted";
+            if (request.kind === "question") {
+              request.productStatus = "pendiente";
+              request.requiresNewTurn = true;
             }
+            changed = true;
           }
-          /** @type {ConversationStore} */
-          const store = {
-            state,
-            filename,
-            listeners: new Set(),
-            queue: Promise.resolve(),
-          };
-          if (changed) await save(store);
-          return store;
-        })(),
-      );
-    return stores.get(id);
+        }
+        /** @type {ConversationStore} */
+        const store = {
+          state,
+          filename,
+          listeners: new Set(),
+          queue: Promise.resolve(),
+        };
+        if (changed) await save(store);
+        return store;
+      })();
+      stores.set(id, pending);
+    }
+    return pending;
   }
 
   /** @param {ConversationStore} store */
@@ -353,16 +356,19 @@ export function createProviderConversations({
     let activeController = null;
     let unconfirmedDelivered = false;
 
-    const configSignature = canonicalStringify({
-      motor: session.motor,
-      modelo: session.modelo ?? null,
-      esfuerzo: session.esfuerzo ?? null,
-      cwd,
-      mcpServers: mcpServers === undefined ? "undefined" : mcpServers,
-      geminiDir,
-      disableInheritedMcp,
-      toolProfileId: toolProfile?.id ?? null,
-    });
+    // Stringifying an object literal always yields a string.
+    const configSignature = /** @type {string} */ (
+      canonicalStringify({
+        motor: session.motor,
+        modelo: session.modelo ?? null,
+        esfuerzo: session.esfuerzo ?? null,
+        cwd,
+        mcpServers: mcpServers === undefined ? "undefined" : mcpServers,
+        geminiDir,
+        disableInheritedMcp,
+        toolProfileId: toolProfile?.id ?? null,
+      })
+    );
 
     if (typeof adapter.createController === "function") {
       const existing = controllers.get(session.id);
@@ -1078,9 +1084,15 @@ export function createProviderConversations({
         });
       });
       try {
+        // supportsSteer is only advertised together with steer().
+        if (!job.control.steer)
+          throw new Error("El proveedor no admite redirección.");
         await job.control.steer(command.text, command.attachments);
         await change(store, (state) => {
-          const target = state.commands.find((c) => c.id === command.id);
+          // The command was pushed by the change above.
+          const target = /** @type {ConversationCommand} */ (
+            state.commands.find((c) => c.id === command.id)
+          );
           target.deliveryStatus = "confirmado_proveedor";
           target.updatedAt = new Date().toISOString();
           state.items.push({
@@ -1101,7 +1113,10 @@ export function createProviderConversations({
         };
       } catch (err) {
         await change(store, (state) => {
-          const target = state.commands.find((c) => c.id === command.id);
+          // The command was pushed by the change above.
+          const target = /** @type {ConversationCommand} */ (
+            state.commands.find((c) => c.id === command.id)
+          );
           target.deliveryStatus = "entrega_incierta";
           target.error = err?.message || "Fallo al confirmar redirección";
           target.updatedAt = new Date().toISOString();
@@ -1219,15 +1234,19 @@ export function createProviderConversations({
     let nextItem = null;
     await change(store, (state) => {
       nextItem = state.queue.shift() || null;
-      if (nextItem) {
-        const cmd = state.commands.find((c) => c.id === nextItem.commandId);
+      const item = nextItem;
+      if (item) {
+        const cmd = state.commands.find((c) => c.id === item.commandId);
         if (cmd) {
           cmd.deliveryStatus = "entregado";
           cmd.updatedAt = new Date().toISOString();
         }
       }
     });
-    return structuredClone(nextItem);
+    // Assigned inside change(); TypeScript cannot see writes from closures.
+    return structuredClone(
+      /** @type {QueuedConversationMessage | null} */ (nextItem),
+    );
   }
 
   return {
@@ -1352,9 +1371,11 @@ export function createProviderConversations({
         request.nativeCallbackStatus !== "open"
       )
         throw new ErrorLanzador("La solicitud ya no está vigente.", 409);
+      // A callback is only found through its running job.
+      const job = /** @type {ConversationJob} */ (liveJob);
       if (callback.isConnectionAlive && !callback.isConnectionAlive()) {
         callback.closed = true;
-        liveJob.callbacks.delete(requestId);
+        job.callbacks.delete(requestId);
         await change(store, () => {
           request.status = "expired";
           request.nativeCallbackStatus = "interrupted";
@@ -1369,7 +1390,7 @@ export function createProviderConversations({
         );
       }
       if (request.kind === "approval") {
-        if (!request.choices?.includes(decision)) {
+        if (!decision || !request.choices?.includes(decision)) {
           throw new ErrorLanzador("Decisión inválida.", 400);
         }
         if (
@@ -1450,10 +1471,11 @@ export function createProviderConversations({
         }
       });
 
-      liveJob.callbacks.delete(requestId);
+      job.callbacks.delete(requestId);
+      /** @type {Parameters<PendingConversationCallback["resolve"]>[0]} */
       const replyPayload =
         request.kind === "question"
-          ? answers
+          ? /** @type {any} */ (answers)
           : {
               decision,
               ...(content !== undefined
@@ -1466,7 +1488,7 @@ export function createProviderConversations({
       if (callback.writeAck) {
         try {
           await callback.writeAck;
-          liveJob.markDeliveredPendingConfirmation?.();
+          job.markDeliveredPendingConfirmation?.();
           await change(store, (state) => {
             result.status = "entregada";
             result.delivered = true;
@@ -1508,7 +1530,7 @@ export function createProviderConversations({
       } else if (callback.transportMode === "sdk_callback_return") {
         try {
           await callback.callbackAck;
-          liveJob.markDeliveredPendingConfirmation?.();
+          job.markDeliveredPendingConfirmation?.();
           await change(store, (state) => {
             // Claude SDK callbacks return a Promise to the SDK without an OS pipe write-flush ack.
             result.status = "entregando";
@@ -1555,7 +1577,7 @@ export function createProviderConversations({
           });
         }
       } else {
-        liveJob.markDeliveredPendingConfirmation?.();
+        job.markDeliveredPendingConfirmation?.();
         await change(store, () => {
           result.status = "entregada";
           result.delivered = true;
@@ -1576,7 +1598,7 @@ export function createProviderConversations({
  *   id: string,
  *   conversations: Pick<ReturnType<typeof createProviderConversations>, "snapshot" | "subscribe">,
  *   registro: {
- *     leer(): readonly { id: string, eliminada?: boolean, structured?: boolean, estado?: string, error?: string }[],
+ *     leer(): readonly { id: string, eliminada?: boolean, structured?: boolean, estado?: string, error?: string | null }[],
  *     subscribe(listener: () => void): () => void
  *   }
  * }} options

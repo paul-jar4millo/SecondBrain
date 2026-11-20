@@ -404,9 +404,9 @@ export async function createUserRequestStore(
       return items;
     },
 
-    /** @param {string} id */
+    /** @param {string | null | undefined} id */
     get(id) {
-      const req = requests.get(id);
+      const req = id ? requests.get(id) : undefined;
       return req ? toPublicSummary(req) : null;
     },
 
@@ -470,7 +470,12 @@ export async function createUserRequestStore(
           kind === "approval" ? computeOperationFingerprint(opFields) : null;
 
         if (createRequestId && byCreateRequestId.has(createRequestId)) {
-          const existing = requests.get(byCreateRequestId.get(createRequestId));
+          // byCreateRequestId only maps to ids stored in requests.
+          const existing = /** @type {UserRequest} */ (
+            requests.get(
+              /** @type {string} */ (byCreateRequestId.get(createRequestId)),
+            )
+          );
           const sameContext =
             existing.kind === kind &&
             (input.id ? input.id === existing.id : true) &&
@@ -497,11 +502,12 @@ export async function createUserRequestStore(
           };
         }
         const requestedId = input.id || null;
-        if (requestedId && requests.has(requestedId)) {
+        const taken = requestedId ? requests.get(requestedId) : undefined;
+        if (taken) {
           throw new UserRequestError(
             "El identificador de solicitud ya existe; no se puede sobrescribir otra solicitud.",
             409,
-            { solicitud: toPublicSummary(requests.get(requestedId)) },
+            { solicitud: toPublicSummary(taken) },
           );
         }
         const nowMs = clock();
@@ -972,11 +978,12 @@ export async function createUserRequestStore(
 
     /**
      * @param {string} id
-     * @param {{ status?: string, note?: string }} [state]
+     * @param {{ status?: string, note?: string | null }} [state]
      */
     updateDeliveryState(id, { status, note } = {}) {
       return serial(async () => {
         if (
+          !status ||
           ![
             "entregando",
             "entregada",

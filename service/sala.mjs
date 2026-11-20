@@ -81,8 +81,11 @@ export async function createSala(dataDirectory, Failure) {
     /** @type {Map<string, { agentes: number, tablero: number }>} */
     const cuenta = new Map();
     /** @param {string} id */
-    const de = (id) =>
-      cuenta.get(id) || cuenta.set(id, { agentes: 0, tablero: 0 }).get(id);
+    const de = (id) => {
+      let entry = cuenta.get(id);
+      if (!entry) cuenta.set(id, (entry = { agentes: 0, tablero: 0 }));
+      return entry;
+    };
     for (const [id, e] of espacios) de(id).tablero = e.tablero.length;
 
     return Object.fromEntries(cuenta);
@@ -151,6 +154,7 @@ export async function createSala(dataDirectory, Failure) {
      * @param {ServerResponse} response
      */
     async imagen(id, response) {
+      if (!id) throw new Failure("Referencia no encontrada.", 404);
       const referencia = pin(id);
       if (!referencia || !referencia.imagen.startsWith("https://i.pinimg.com/"))
         throw new Failure("Referencia no encontrada.", 404);
@@ -162,16 +166,18 @@ export async function createSala(dataDirectory, Failure) {
           throw new Failure("Pinterest no entregó la imagen.", 502);
         const chunks = [];
         let size = 0;
-        for await (const chunk of remota.body) {
+        for await (const chunk of remota.body ?? []) {
           size += chunk.length;
           if (size > 5 * 1024 * 1024)
             throw new Failure("La imagen remota supera 5 MB.", 502);
           chunks.push(chunk);
         }
-        if (imagenes.size >= 120) imagenes.delete(imagenes.keys().next().value);
+        const oldest = imagenes.keys().next().value;
+        if (imagenes.size >= 120 && oldest !== undefined)
+          imagenes.delete(oldest);
         imagenes.set(id, Buffer.concat(chunks));
       }
-      const imagen = imagenes.get(id);
+      const imagen = /** @type {Buffer} */ (imagenes.get(id));
       response.writeHead(200, {
         "Content-Type": "image/jpeg",
         "Content-Length": imagen.length,

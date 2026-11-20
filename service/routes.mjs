@@ -1178,7 +1178,9 @@ ROUTES.set("GET /agentes/herramientas/catalogo", {
 ROUTES.set("POST /agentes/herramientas/skills/resolver", {
   public: false,
   room: true,
-  body: ROUTES.get("POST /agentes/herramientas/skills/resolver").body,
+  body: /** @type {RoutePolicy} */ (
+    ROUTES.get("POST /agentes/herramientas/skills/resolver")
+  ).body,
   query: anyQuery,
 });
 ROUTES.set("GET /agentes/conversacion/cola", {

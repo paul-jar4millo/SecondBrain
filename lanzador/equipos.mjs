@@ -47,7 +47,7 @@ function normalizarManifiesto(manifest) {
     throw new ErrorLanzador("Manifiesto de equipo inválido", 400);
   const team = manifest.team.map((card, index) => {
     const motor = card.motor ?? card.engine;
-    if (!MOTORES.has(motor))
+    if (!motor || !MOTORES.has(motor))
       throw new ErrorLanzador("Motor inválido en manifiesto", 400);
     return {
       id: String(card.id || `${manifest.workOrderId || "wo"}-m-${index + 1}`),
@@ -145,7 +145,7 @@ export async function abrirEquipos(
    */
   const latestIntegratedHash = (equipo, ruta) => {
     for (let i = (equipo.integraciones?.length || 0) - 1; i >= 0; i--) {
-      const integ = equipo.integraciones[i];
+      const integ = equipo.integraciones?.[i];
       const hit = integ?.archivos?.find((a) => a.ruta === ruta);
       if (hit) return hit.sha256;
     }
@@ -161,7 +161,7 @@ export async function abrirEquipos(
     const p = equipo.miembros.find((m) => m.id === padre);
     if (!p) throw new Error("Miembro inválido");
     if (p.profundidad >= 2) throw new Error("Profundidad máxima alcanzada");
-    if (!MOTORES.has(motor)) throw new Error("Motor inválido");
+    if (!motor || !MOTORES.has(motor)) throw new Error("Motor inválido");
 
     // The manifest frozen with the team wins over one sent with the call.
     const mf =
@@ -170,7 +170,7 @@ export async function abrirEquipos(
     if (
       (meta.manifestSha256 || meta.manifest?.sha256) &&
       equipo.manifestSha256 &&
-      (meta.manifestSha256 || meta.manifest.sha256) !== equipo.manifestSha256
+      (meta.manifestSha256 || meta.manifest?.sha256) !== equipo.manifestSha256
     ) {
       throw new ErrorLanzador(
         "Manifiesto del encargo desactualizado; recarga el equipo.",
@@ -190,9 +190,10 @@ export async function abrirEquipos(
             403,
           );
         }
+        // card was found by this id just above.
         const alreadyActive = equipo.miembros.some(
           (m) =>
-            m.memberId === card.id &&
+            m.memberId === meta.memberId &&
             activo(m.id) &&
             (!meta.requestId || m.requestId !== meta.requestId),
         );
@@ -417,27 +418,28 @@ export async function abrirEquipos(
           padreId: null,
           profundidad: 0,
           ...(meta.motor || coordCard?.motor
-            ? { motor: meta.motor || coordCard.motor }
+            ? { motor: meta.motor || coordCard?.motor }
             : {}),
           ...(meta.memberId || coordCard?.id
-            ? { memberId: meta.memberId || coordCard.id }
+            ? { memberId: meta.memberId || coordCard?.id }
             : {}),
           ...(meta.role || coordCard?.role
-            ? { role: meta.role || coordCard.role }
+            ? { role: meta.role || coordCard?.role }
             : {}),
           ...(meta.responsibility || coordCard?.responsibility
             ? {
-                responsibility: meta.responsibility || coordCard.responsibility,
+                responsibility:
+                  meta.responsibility || coordCard?.responsibility,
               }
             : {}),
           ...(meta.modelo || coordCard?.model
-            ? { modelo: meta.modelo || coordCard.model }
+            ? { modelo: meta.modelo || coordCard?.model }
             : {}),
           ...(meta.esfuerzo || coordCard?.effort
-            ? { esfuerzo: meta.esfuerzo || coordCard.effort }
+            ? { esfuerzo: meta.esfuerzo || coordCard?.effort }
             : {}),
           ...(meta.toolProfileId || coordCard?.toolProfileId
-            ? { toolProfileId: meta.toolProfileId || coordCard.toolProfileId }
+            ? { toolProfileId: meta.toolProfileId || coordCard?.toolProfileId }
             : {}),
           ...(meta.workspacePath ? { workspacePath: meta.workspacePath } : {}),
           ...(meta.workspaceKind ? { workspaceKind: meta.workspaceKind } : {}),
@@ -1019,7 +1021,8 @@ export async function abrirEquipos(
               }
             }
             for (const item of aprobados) {
-              const dst = destinos.get(item);
+              // Every approved item got a destination in the loop above.
+              const dst = /** @type {string} */ (destinos.get(item));
               await mkdir(path.dirname(dst), { recursive: true, mode: 0o700 });
               const tmpDst = `${dst}.${process.pid}.tmp`;
               await writeFile(tmpDst, item.contenido, "utf8");

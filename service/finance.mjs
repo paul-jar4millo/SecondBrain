@@ -182,7 +182,11 @@ export class Finance {
     if (loaded.receipts) doc.set("financeReceipts", loaded.receipts);
     doc.set("updated", today);
     doc.set("verified", data.reconciledAt);
-    doc.set("expires", addDays(data.reconciledAt, data.validityDays));
+    // validate() requires reconciledAt before a snapshot is written.
+    doc.set(
+      "expires",
+      addDays(/** @type {string} */ (data.reconciledAt), data.validityDays),
+    );
     const node = doc.createNode(data);
     for (const key of [
       "installments",

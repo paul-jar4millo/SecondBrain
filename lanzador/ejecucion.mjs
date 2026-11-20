@@ -1514,7 +1514,10 @@ export function crearEjecutor({
       enColaRecursos: queueSlot,
       motivoCola: queueSlot ? "En cola por límite de procesos activos" : null,
       enqueueOrder,
-      directorio: workspacePath || context?.cwd || proyectos[proyecto],
+      directorio:
+        workspacePath ||
+        context?.cwd ||
+        (proyecto ? proyectos[proyecto] : undefined),
     });
     if (resolvedProfile) sessionProfiles.set(sesion.id, resolvedProfile);
     sessionBillingGrants.set(sesion.id, billingGrantVerified === true);

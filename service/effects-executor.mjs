@@ -105,6 +105,9 @@ export async function createEffectsExecutor(
 
   /** @type {Map<string, Effect>} */
   const effects = new Map();
+  /** An effect whose id the caller already found in `effects`. */
+  const knownEffect = (/** @type {string} */ id) =>
+    /** @type {Effect} */ (effects.get(id));
   /** @type {Map<string, EffectExecutionReceipt>} */
   const receiptsByRequestId = new Map();
   /** @type {Map<string, string>} */
@@ -468,7 +471,7 @@ export async function createEffectsExecutor(
           throw new EffectExecutorError(
             "El identificador de efecto ya existe; no se puede sobrescribir otra operación ni alterar su aprobación.",
             409,
-            { operacion: toPublicEffect(effects.get(input.id)) },
+            { operacion: toPublicEffect(knownEffect(input.id)) },
           );
         }
 
@@ -763,7 +766,7 @@ export async function createEffectsExecutor(
             });
           }
           throw new EffectExecutorError(err.message, err.status || 409, {
-            operacion: toPublicEffect(effects.get(effectId)),
+            operacion: toPublicEffect(knownEffect(effectId)),
           });
         }
         if (
@@ -811,11 +814,11 @@ export async function createEffectsExecutor(
 
           const failStatus = isAmbiguous ? "entrega_incierta" : "fallida";
           const failedEffect = await saveEffect({
-            ...effects.get(effectId),
+            ...knownEffect(effectId),
             status: failStatus,
             pendingExecutionRequestId: isAmbiguous ? requestId : null,
             lastError: String(err?.message || "Fallo en ejecutor externo"),
-            revision: effects.get(effectId).revision + 1,
+            revision: knownEffect(effectId).revision + 1,
             updatedAt: new Date(clock()).toISOString(),
           });
           if (isAmbiguous) {
@@ -832,7 +835,7 @@ export async function createEffectsExecutor(
             );
           }
           throw new EffectExecutorError(
-            failedEffect.lastError,
+            failedEffect.lastError ?? "Fallo en ejecutor externo",
             err?.status || 502,
             { operacion: toPublicEffect(failedEffect) },
           );
@@ -855,12 +858,12 @@ export async function createEffectsExecutor(
         };
 
         const completed = await saveEffect({
-          ...effects.get(effectId),
+          ...knownEffect(effectId),
           status: "ejecutada",
           executionReceipt,
           pendingExecutionRequestId: null,
           lastError: null,
-          revision: effects.get(effectId).revision + 1,
+          revision: knownEffect(effectId).revision + 1,
           updatedAt: nowIso,
         });
 
@@ -913,7 +916,7 @@ export async function createEffectsExecutor(
             400,
           );
         }
-        if (!["confirmada", "fallida"].includes(outcome)) {
+        if (!outcome || !["confirmada", "fallida"].includes(outcome)) {
           throw new EffectExecutorError(
             "El resultado de conciliación debe ser «confirmada» o «fallida».",
             400,

@@ -238,11 +238,13 @@ export interface RunConversationOptions extends Pick<
   | "acpLogFile"
   | "settingSources"
   | "interruptKillGraceMs"
-  | "onSkillsObserved"
   | "spawn"
 > {
   onNativeId(id: string): unknown;
-  toolProfile?: ProviderTurnContext["toolProfile"] & { id?: string };
+  onSkillsObserved?:
+    ((observation: { source: string; names: string[] }) => unknown) | null;
+  toolProfile?:
+    (NonNullable<ProviderTurnContext["toolProfile"]> & { id?: string }) | null;
   disableInheritedMcp?: boolean;
   verifiedBillingGrant?: boolean;
   observeSkills?: boolean;
@@ -284,11 +286,11 @@ export interface PendingConversationCallback {
   nativeId: string;
   turnId: string;
   connectionId: string;
-  writeAck: ConversationTransport["writeAck"];
-  callbackAck: ConversationTransport["callbackAck"];
+  writeAck: ConversationTransport["writeAck"] | null;
+  callbackAck: ConversationTransport["callbackAck"] | null;
   transportMode: ConversationTransport["transportMode"];
   transportObservable: boolean;
-  isConnectionAlive: ConversationTransport["isConnectionAlive"];
+  isConnectionAlive: ConversationTransport["isConnectionAlive"] | null;
   closed: boolean;
 }
 

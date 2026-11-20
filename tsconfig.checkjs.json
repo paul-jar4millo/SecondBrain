@@ -12,7 +12,8 @@
     "strict": false,
     "noImplicitAny": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "strictNullChecks": true
   },
   "include": [
     "service/*.mjs",

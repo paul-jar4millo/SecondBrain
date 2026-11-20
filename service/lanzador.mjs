@@ -29,7 +29,11 @@ export function createLanzador(
   }
   const base = url?.replace(/\/$/, "");
   async function secreto() {
-    return token ?? (await readFile(tokenFile, "utf8")).trim();
+    // The constructor requires either token or tokenFile.
+    return (
+      token ??
+      (await readFile(/** @type {string} */ (tokenFile), "utf8")).trim()
+    );
   }
   /**
    * Follows the launcher's SSE stream; every event only asks the app to re-read.
@@ -52,10 +56,10 @@ export function createLanzador(
         if (!response.ok) throw new Error("Eventos no disponibles");
         listener(); // Reconcile changes that happened while disconnected.
         let pending = "";
-        for await (const chunk of response.body) {
+        for await (const chunk of response.body ?? []) {
           pending += new TextDecoder().decode(chunk, { stream: true });
           const events = pending.split("\n\n");
-          pending = events.pop();
+          pending = events.pop() ?? "";
           if (events.some((event) => /^data:/m.test(event))) listener();
         }
       } catch {
@@ -140,7 +144,7 @@ export function createLanzador(
     proyectos: () => pedir("/proyectos"),
     modelos: () => pedir("/modelos", undefined, 30000),
     uso: () => pedir("/uso"),
-    /** @param {unknown} datos */
+    /** @param {unknown} [datos] Omitted to list; an object to create one. */
     espacios: (datos) => pedir("/espacios", datos),
     /**
      * Opens the launcher's SSE stream of one harness and returns the raw

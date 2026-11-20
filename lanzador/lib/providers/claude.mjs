@@ -44,6 +44,12 @@ import {
  * }} ClaudeTurn
  */
 
+/**
+ * Claude Code receives `content: null` on cancel/decline, as it always has;
+ * the SDK's ElicitationResult type only lists an object or undefined.
+ */
+const NO_CONTENT = /** @type {undefined} */ (/** @type {unknown} */ (null));
+
 function createInputQueue() {
   /** @type {ClaudeUserMessage[]} */
   const buffered = [];
@@ -54,17 +60,15 @@ function createInputQueue() {
     /** @param {ClaudeUserMessage} msg */
     push(msg) {
       if (ended) return;
-      if (waiters.length > 0) {
-        waiters.shift()({ value: msg, done: false });
-      } else {
-        buffered.push(msg);
-      }
+      const waiter = waiters.shift();
+      if (waiter) waiter({ value: msg, done: false });
+      else buffered.push(msg);
     },
     end() {
       if (ended) return;
       ended = true;
-      while (waiters.length > 0) {
-        waiters.shift()({ value: undefined, done: true });
+      for (const waiter of waiters.splice(0)) {
+        waiter({ value: undefined, done: true });
       }
     },
     isEnded: () => ended,
@@ -73,7 +77,10 @@ function createInputQueue() {
       return {
         next() {
           if (buffered.length > 0) {
-            return Promise.resolve({ value: buffered.shift(), done: false });
+            return Promise.resolve({
+              value: /** @type {ClaudeUserMessage} */ (buffered.shift()),
+              done: false,
+            });
           }
           if (ended) {
             return Promise.resolve({ value: undefined, done: true });
@@ -123,7 +130,7 @@ export function createClaudeController(queryOverride = null) {
   const settleActiveTurn = (turn, method, payload) => {
     if (!turn || activeTurn !== turn || turn.settled) return;
     turn.settled = true;
-    clearTimeout(turn.killTimer);
+    clearTimeout(turn.killTimer ?? undefined);
     activeTurn = null;
     turn[method](/** @type {ClaudeTurnResult} */ (payload));
   };
@@ -185,7 +192,7 @@ export function createClaudeController(queryOverride = null) {
                       "MultiEdit",
                       "NotebookEdit",
                       "synth_artifact_write",
-                    ].includes(shortName)
+                    ].includes(shortName ?? "")
                   ) {
                     const input = /** @type {Record<string, unknown>} */ (
                       used.input
@@ -282,7 +289,8 @@ export function createClaudeController(queryOverride = null) {
     if (isAlive()) return;
     if (connectPromise) return connectPromise;
     connectPromise = (async () => {
-      motor = ctx.session.motor;
+      // The executor always sets the engine of the session it runs.
+      motor = /** @type {string} */ (ctx.session.motor);
       pumpDead = false;
       pumpStarted = false;
       /** @type {ClaudeQuery} */
@@ -380,12 +388,15 @@ export function createClaudeController(queryOverride = null) {
             childProc = trackChildExit(
               ctx.spawn(options.command, options.args, options.env),
             );
-            return childProc;
+            // Spawned with piped stdio, so stdin/stdout are never null.
+            return /** @type {import("@anthropic-ai/claude-agent-sdk").SpawnedProcess} */ (
+              /** @type {unknown} */ (childProc)
+            );
           },
           onElicitation: async (request) => {
             const turn = activeTurn;
             if (!turn || turn.settled || turn.connectionId !== connectionId) {
-              return { action: "cancel", content: null };
+              return { action: "cancel", content: NO_CONTENT };
             }
             const mode = request?.mode || "form";
             if (mode !== "form") {
@@ -435,7 +446,7 @@ export function createClaudeController(queryOverride = null) {
                 /** @type {import("@anthropic-ai/claude-agent-sdk").ElicitationResult} */
                 const payload = {
                   action: answer.decision === "decline" ? "decline" : "cancel",
-                  content: null,
+                  content: NO_CONTENT,
                 };
                 scheduleAfterReturn();
                 return payload;
@@ -594,7 +605,11 @@ export function createClaudeController(queryOverride = null) {
         "DeepSeek bloqueado por la política de gasto sin autorización explícita de gasto. Usa un motor de suscripción o autoriza la ruta facturada.",
       );
     }
-    validarAdjuntosMotor(ctx.session.motor, ctx.attachments || [], ctx.cwd);
+    validarAdjuntosMotor(
+      /** @type {string} */ (ctx.session.motor),
+      ctx.attachments || [],
+      /** @type {string} */ (ctx.cwd),
+    );
     await startStream(ctx);
     if (
       ctx.onSkillsObserved &&
@@ -620,10 +635,11 @@ export function createClaudeController(queryOverride = null) {
       }
     }
 
+    // Both are replaced synchronously by the Promise executor below.
     /** @type {ClaudeTurn["resolve"]} */
-    let resolveTurn;
+    let resolveTurn = () => {};
     /** @type {ClaudeTurn["reject"]} */
-    let rejectTurn;
+    let rejectTurn = () => {};
     /** @type {Promise<ClaudeTurnResult>} */
     const completed = new Promise((resolve, reject) => {
       resolveTurn = resolve;
@@ -668,6 +684,7 @@ export function createClaudeController(queryOverride = null) {
       pid: childProc?.pid ?? null,
     });
 
+    if (!inputQueue) throw new Error("Claude no está conectado.");
     inputQueue.push({
       type: "user",
       message: {

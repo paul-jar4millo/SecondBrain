@@ -43,7 +43,7 @@ export class History {
     let lines = "";
     for (const { relative, before, afterHash } of entries) {
       const previous = before === null ? null : hash(before);
-      if (previous) await this.store(previous, before);
+      if (previous && before !== null) await this.store(previous, before);
       lines +=
         JSON.stringify({
           at: new Date(at).toISOString(),

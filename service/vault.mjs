@@ -215,9 +215,11 @@ export class Vault {
    */
   async snapshot(filePaths) {
     if (this.batchSnapshot && !filePaths) {
-      if (this.pendingPaths.size) {
-        const touched = [...this.pendingPaths];
-        this.pendingPaths.clear();
+      // importItems() sets pendingPaths together with batchSnapshot.
+      const pending = /** @type {Set<string>} */ (this.pendingPaths);
+      if (pending.size) {
+        const touched = [...pending];
+        pending.clear();
         const changed = await this.snapshot(touched);
         const batch = this.batchSnapshot;
         for (const [id, record] of batch.records)
@@ -269,7 +271,10 @@ export class Vault {
         });
         continue;
       }
-      const cachedParts = this.fileCache.get(relative).parts;
+      // The try block above either fills the cache for this path or continues.
+      const cachedParts = /** @type {{ parts: any }} */ (
+        this.fileCache.get(relative)
+      ).parts;
       const parts = { ...cachedParts, doc: cachedParts.doc.clone() };
       const metadata = plain(parts.doc);
       const sb =
@@ -454,7 +459,8 @@ export class Vault {
         delete task.lastMutation;
         if (records.has(taskId)) {
           const message = "Identificador duplicado en el vault.";
-          records.get(taskId).item.validationErrors = [message];
+          const duplicate = records.get(taskId);
+          if (duplicate) duplicate.item.validationErrors = [message];
           task.validationErrors = [message];
           task.id = stableId("duplicate-task:" + relative + ":" + index);
           issues.push({ path: relative, message });
@@ -478,7 +484,10 @@ export class Vault {
         const errors = validate(item, accounts);
         if (errors.length) {
           item.validationErrors = [...(item.validationErrors || []), ...errors];
-          issues.push({ path: item.vaultPath, message: errors.join(" ") });
+          issues.push({
+            path: item.vaultPath ?? "",
+            message: errors.join(" "),
+          });
         }
       }
     this.last = { records, byPath, items, issues };

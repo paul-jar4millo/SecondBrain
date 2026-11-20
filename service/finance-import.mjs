@@ -74,7 +74,8 @@ const money = (cell) =>
 
 /** @param {string} day @param {string} month @param {number} asOfYear @param {number | undefined} endMonth */
 function cycleDate(day, month, asOfYear, endMonth) {
-  const m = MONTHS[month];
+  // Callers only pass month names matched by the MONTHS regex.
+  const m = /** @type {number} */ (MONTHS[month]);
   let year = asOfYear;
   if (endMonth && m > endMonth) year -= 1;
   return `${year}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;

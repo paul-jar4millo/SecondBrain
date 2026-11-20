@@ -73,12 +73,13 @@ const UNKNOWN_TYPE = "application/octet-stream";
 const MAX_NAME = 120;
 /** @param {unknown} value */
 export function cleanName(value) {
-  const base = String(value ?? "")
-    .replace(/\\/g, "/")
-    .split("/")
-    .pop()
-    .replace(/[\u0000-\u001f\u007f"<>:|?*]/g, "")
-    .trim();
+  const base =
+    String(value ?? "")
+      .replace(/\\/g, "/")
+      .split("/")
+      .at(-1)
+      ?.replace(/[\u0000-\u001f\u007f"<>:|?*]/g, "")
+      .trim() ?? "";
   if (/^\.*$/.test(base)) return "";
   // Long names keep their extension, which is what identifies the file.
   const extension = path.extname(base).slice(0, 20);
@@ -170,7 +171,8 @@ export function createSharedFiles(directory, Failure, { onChange } = {}) {
   }
   /** @param {unknown} name @param {string | null} area @param {number} size @param {number} total */
   function describe(name, area, size, total) {
-    if (!AREAS.includes(area)) throw new Failure("Carpeta desconocida.");
+    if (area === null || !AREAS.includes(area))
+      throw new Failure("Carpeta desconocida.");
     const clean = cleanName(name);
     const extension = path.extname(clean).slice(1).toLowerCase();
     if (!clean) throw new Failure("El nombre del archivo no es válido.");
@@ -178,6 +180,7 @@ export function createSharedFiles(directory, Failure, { onChange } = {}) {
     if (total + size > MAX_TOTAL)
       throw new Failure("El Maletín alcanzó su límite de 2 GB.", 507);
     return {
+      area,
       clean,
       mime: Object.hasOwn(TYPES, extension) ? TYPES[extension] : UNKNOWN_TYPE,
     };
@@ -197,7 +200,7 @@ export function createSharedFiles(directory, Failure, { onChange } = {}) {
       const id = randomUUID();
       const entry = {
         id,
-        area,
+        area: meta.area,
         name: meta.clean,
         size,
         sha256: sha,
@@ -210,7 +213,7 @@ export function createSharedFiles(directory, Failure, { onChange } = {}) {
           Date.now() + RETENTION_DAYS * 86400000,
         ).toISOString(),
       };
-      await mkdir(path.join(root, area), { recursive: true });
+      await mkdir(path.join(root, meta.area), { recursive: true });
       await rename(temporary, location(entry));
       files.push(entry);
       await save(files);

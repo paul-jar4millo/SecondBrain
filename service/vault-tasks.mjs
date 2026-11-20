@@ -40,7 +40,8 @@ export async function repeat(item) {
   const id = stableId(item.id + ":next");
   if (snapshot.records.has(id)) return;
   const raw = item.date || item.plannedDate;
-  const date = Temporal.PlainDate.from(raw);
+  // repeat() only runs for recurring items, which validate() gives a date.
+  const date = Temporal.PlainDate.from(/** @type {string} */ (raw));
   const anchor = item.recurrenceDay || date.day;
   let next =
     item.recurrence === "daily"

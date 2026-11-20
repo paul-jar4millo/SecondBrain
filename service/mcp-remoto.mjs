@@ -283,7 +283,7 @@ export async function crearMcpRemoto({
       }
       if (pathname === "/oauth/authorize" && metodo === "GET") {
         const p = Object.fromEntries(
-          new URL(request.url, "http://x").searchParams,
+          new URL(request.url ?? "/", "http://x").searchParams,
         );
         const c = validarAutorizacion(p);
         return html(
@@ -394,7 +394,7 @@ export async function crearMcpRemoto({
             },
           );
         limite("mcp:" + c.id, 120);
-        if (!["POST", "GET", "DELETE"].includes(metodo))
+        if (!["POST", "GET", "DELETE"].includes(metodo ?? ""))
           throw new Failure("Método no permitido.", 405);
         let cuerpo;
         if (metodo === "POST") {

@@ -186,7 +186,7 @@ function crearAcumulador() {
     drenar() {
       const lista = [...cambiados]
         .map((id) => items.get(id))
-        .filter(Boolean)
+        .filter((x) => x !== undefined)
         .map((x) => structuredClone(x));
       cambiados.clear();
       return lista;
@@ -360,9 +360,9 @@ function leerCodex(e, acc, linea) {
   if (e.type !== "response_item") return;
   const p = e.payload ?? {};
   const ts = e.timestamp ?? null;
-  if (p.type === "message" && ["user", "assistant"].includes(p.role)) {
+  if (p.type === "message" && ["user", "assistant"].includes(p.role ?? "")) {
     let texto = (p.content ?? [])
-      .filter((c) => ["input_text", "output_text"].includes(c.type))
+      .filter((c) => ["input_text", "output_text"].includes(c.type ?? ""))
       .map((c) => c.text)
       .join("\n")
       .trim();
@@ -378,7 +378,9 @@ function leerCodex(e, acc, linea) {
       ts,
     });
   } else if (
-    ["function_call", "custom_tool_call", "local_shell_call"].includes(p.type)
+    ["function_call", "custom_tool_call", "local_shell_call"].includes(
+      p.type ?? "",
+    )
   ) {
     const clave = p.call_id ?? p.id ?? `l${linea}`;
     const item = herramienta(
@@ -390,7 +392,9 @@ function leerCodex(e, acc, linea) {
     acc.herramientas.set(clave, item);
     acc.poner(item);
   } else if (
-    ["function_call_output", "custom_tool_call_output"].includes(p.type) &&
+    ["function_call_output", "custom_tool_call_output"].includes(
+      p.type ?? "",
+    ) &&
     p.call_id
   ) {
     const { texto, error } = resultadoCodex(p.output);
@@ -528,9 +532,11 @@ async function buscarCodex(raiz, id) {
  * @param {NodeJS.ProcessEnv} env
  */
 export async function localizarTranscript(sesion, env) {
-  const ids = [sesion.conversacionId, sesion.id].filter(
-    (id, i, todos) =>
-      typeof id === "string" && UUID.test(id) && todos.indexOf(id) === i,
+  const ids = /** @type {string[]} */ (
+    [sesion.conversacionId, sesion.id].filter(
+      (id, i, todos) =>
+        typeof id === "string" && UUID.test(id) && todos.indexOf(id) === i,
+    )
   );
   const casa = env.HOME ?? "";
   if (sesion.motor === "claude" || sesion.motor === "deepseek") {
@@ -603,6 +609,7 @@ function seguirArchivo({ localizar, motor, intervalo, alCambiar }) {
   /** @type {string | null} */
   let archivo = null;
   let offset = 0;
+  /** @type {string | null} null after a seek, until the next full line. */
   let resto = "";
   /** @type {import("node:fs").FSWatcher | null} */
   let vigia = null;
@@ -707,7 +714,7 @@ function seguirArchivo({ localizar, motor, intervalo, alCambiar }) {
  * }} options
  */
 export function crearItems({ registro, env = process.env, intervalo = 1000 }) {
-  /** @type {Map<string, { lectores: Set<TranscriptListener>, seguidor?: ReturnType<typeof seguirArchivo> }>} */
+  /** @type {Map<string, { lectores: Set<TranscriptListener>, seguidor: ReturnType<typeof seguirArchivo> }>} */
   const seguidores = new Map();
   return {
     activos: () => seguidores.size,
@@ -723,10 +730,11 @@ export function crearItems({ registro, env = process.env, intervalo = 1000 }) {
           ultimos: /** @returns {TranscriptItem[]} */ () => [],
           off() {},
         };
-      let entrada = seguidores.get(id);
-      if (!entrada) {
-        entrada = { lectores: new Set() };
-        entrada.seguidor = seguirArchivo({
+      let existente = seguidores.get(id);
+      if (!existente) {
+        /** @type {Set<TranscriptListener>} */
+        const lectores = new Set();
+        const seguidor = seguirArchivo({
           motor: sesion.motor,
           intervalo,
           localizar: () =>
@@ -735,11 +743,13 @@ export function crearItems({ registro, env = process.env, intervalo = 1000 }) {
               env,
             ),
           alCambiar: (lista) => {
-            for (const lector of entrada.lectores) lector(lista);
+            for (const lector of lectores) lector(lista);
           },
         });
-        seguidores.set(id, entrada);
+        existente = { lectores, seguidor };
+        seguidores.set(id, existente);
       }
+      const entrada = existente;
       entrada.lectores.add(alCambiar);
       return {
         /** @param {number} [n] */

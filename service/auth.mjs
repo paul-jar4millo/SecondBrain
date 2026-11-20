@@ -103,12 +103,17 @@ export class Auth {
     this.capabilities = new Map();
     this.capSerial = Promise.resolve();
     this.serial = Promise.resolve();
+    this.file = path.join(directory, "auth.json");
+    this.capFile = path.join(directory, "capabilities.json");
+    // Loaded by init(), which callers await before using the instance.
+    /** @type {AuthState} */
+    this.state = /** @type {any} */ (undefined);
+    /** @type {string} */
+    this.agentToken = /** @type {any} */ (undefined);
   }
   async init() {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     await chmod(this.directory, 0o700);
-    this.file = path.join(this.directory, "auth.json");
-    this.capFile = path.join(this.directory, "capabilities.json");
     try {
       /** @type {AuthState} */
       const state = JSON.parse(await readFile(this.file, "utf8"));
@@ -326,7 +331,7 @@ export class Auth {
   /** @param {HttpRequest} request */
   capabilityOf(request) {
     const remote = request.socket?.remoteAddress?.replace("::ffff:", "");
-    if (!["127.0.0.1", "::1"].includes(remote)) return null;
+    if (!["127.0.0.1", "::1"].includes(remote ?? "")) return null;
     const header = request.headers?.authorization || "";
     if (!header.startsWith("Bearer ")) return null;
     const raw = header.slice(7);
@@ -340,7 +345,7 @@ export class Auth {
   isSupervisor(request) {
     if (this.capabilityOf(request)) return false;
     const remote = request.socket?.remoteAddress?.replace("::ffff:", "");
-    if (!["127.0.0.1", "::1"].includes(remote)) return false;
+    if (!["127.0.0.1", "::1"].includes(remote ?? "")) return false;
     if (
       this.agentToken &&
       equal(request.headers?.authorization || "", `Bearer ${this.agentToken}`)
@@ -353,7 +358,7 @@ export class Auth {
   isAgent(request) {
     const remote = request.socket.remoteAddress?.replace("::ffff:", "");
     return (
-      ["127.0.0.1", "::1"].includes(remote) &&
+      ["127.0.0.1", "::1"].includes(remote ?? "") &&
       ((!!this.agentToken &&
         equal(
           request.headers.authorization || "",
@@ -365,7 +370,7 @@ export class Auth {
   /** @param {HttpRequest} request */
   isRoomAgent(request) {
     const remote = request.socket.remoteAddress?.replace("::ffff:", "");
-    if (!["127.0.0.1", "::1"].includes(remote)) return false;
+    if (!["127.0.0.1", "::1"].includes(remote ?? "")) return false;
     if (this.capabilityOf(request)) return true;
     return (
       !!this.roomToken &&
@@ -432,7 +437,7 @@ export class Auth {
       const forwarded = String(request.headers["x-forwarded-for"] || "")
         .split(",")
         .at(-1)
-        .trim();
+        ?.trim();
       if (forwarded) return forwarded;
     }
     return remote;
@@ -513,7 +518,12 @@ export class Auth {
       body.password.length > 512
     )
       throw new Failure("Usuario o contraseña incorrectos.", 401);
-    const key = await scrypt(body.password, state.salt, 64);
+    // passwordHash and salt are always written together by setup().
+    const key = await scrypt(
+      body.password,
+      /** @type {string} */ (state.salt),
+      64,
+    );
     if (
       !equal(key.toString("hex"), state.passwordHash) ||
       !equal(username(body.username), state.username)
@@ -526,16 +536,17 @@ export class Auth {
         const index = state.recoveryDigests?.indexOf(digest(code)) ?? -1;
         if (index < 0)
           throw new Failure("Código de recuperación incorrecto.", 401);
-        state.recoveryDigests.splice(index, 1);
+        state.recoveryDigests?.splice(index, 1);
         await this.persist();
       } else {
+        const secret = state.totpSecret;
         const step = Math.floor(Date.now() / 30000);
         const matched = [-1, 0, 1]
           .map((offset) => step + offset)
           .find(
             (candidate) =>
               candidate > (state.lastTotpStep ?? -1) &&
-              equal(totp(state.totpSecret, candidate), code),
+              equal(totp(secret, candidate), code),
           );
         if (matched === undefined)
           throw new Failure("Código de verificación incorrecto.", 401);
@@ -593,14 +604,12 @@ export class Auth {
   /** @param {unknown} code */
   async enableTotp(code) {
     return this.lock(async () => {
+      const pending = this.state.pendingTotpSecret;
       if (
-        !this.state.pendingTotpSecret ||
+        !pending ||
         ![-1, 0, 1].some((offset) =>
           equal(
-            totp(
-              this.state.pendingTotpSecret,
-              Math.floor(Date.now() / 30000) + offset,
-            ),
+            totp(pending, Math.floor(Date.now() / 30000) + offset),
             String(code || ""),
           ),
         )

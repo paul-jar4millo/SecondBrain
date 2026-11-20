@@ -296,10 +296,16 @@ export function createCodexController() {
             }
           }
           if (method === "item/agentMessage/delta") {
-            turn.ctx.delta(p.itemId, p.delta);
+            // Codex always sends itemId and delta with this notification.
+            turn.ctx.delta(
+              /** @type {string} */ (p.itemId),
+              /** @type {string} */ (p.delta),
+            );
           }
           if (method === "item/started" || method === "item/completed") {
             const item = p.item;
+            // Item notifications always carry the item; nothing to do without it.
+            if (!item) return;
             if (item.type === "agentMessage") {
               turn.ctx.message(item.id, item.text || "");
             } else if (

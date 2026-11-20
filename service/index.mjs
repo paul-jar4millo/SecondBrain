@@ -559,6 +559,7 @@ export async function createApplication(options = {}) {
     const controller = new AbortController();
     activeSessionBridges.set(sessionId, controller);
     const seen = new Set();
+    /** @type {NodeJS.Timeout | null} */
     let awaitingTurn = null;
     void (async () => {
       try {
@@ -569,7 +570,7 @@ export async function createApplication(options = {}) {
         );
         let buffer = "";
         const decoder = new TextDecoder();
-        for await (const chunk of upstream.body) {
+        for await (const chunk of upstream.body ?? []) {
           if (controller.signal.aborted) break;
           buffer += decoder.decode(chunk, { stream: true });
           const frames = buffer.split("\n\n");
@@ -655,7 +656,7 @@ export async function createApplication(options = {}) {
                 state.status,
               )
             ) {
-              clearTimeout(awaitingTurn);
+              clearTimeout(awaitingTurn ?? undefined);
               awaitingTurn = null;
             } else if (followUpTurns.delete(sessionId)) {
               // Give the queued message time to start; a cancelled one
@@ -671,7 +672,7 @@ export async function createApplication(options = {}) {
       } catch {
         /* Bridge terminates silently when stream closes or is aborted. */
       } finally {
-        clearTimeout(awaitingTurn);
+        clearTimeout(awaitingTurn ?? undefined);
         activeSessionBridges.delete(sessionId);
         // A message that arrived while this bridge was closing.
         if (followUpTurns.delete(sessionId) && !closed)
@@ -752,9 +753,10 @@ export async function createApplication(options = {}) {
     } catch {
       throw new Failure("JSON inválido.");
     }
-    const route = new URL(request.url, "http://localhost").pathname.slice(
-      "/api/v1".length,
-    );
+    const route = new URL(
+      request.url ?? "/",
+      "http://localhost",
+    ).pathname.slice("/api/v1".length);
     const parsed = routePolicy(request.method, route)?.body.safeParse(value);
     if (!parsed?.success)
       throw new Failure(
@@ -771,7 +773,7 @@ export async function createApplication(options = {}) {
   /**
    * @param {ServerResponse} response
    * @param {number} status
-   * @param {unknown} value
+   * @param {unknown} [value] Omitted for bodiless replies such as 204.
    */
   function send(response, status, value) {
     response.writeHead(status, {
@@ -812,9 +814,10 @@ export async function createApplication(options = {}) {
     response.once("finish", () => {
       let route = "unknown";
       try {
-        const p = new URL(request.url, "http://localhost").pathname.slice(
-          "/api/v1".length,
-        );
+        const p = new URL(
+          request.url ?? "/",
+          "http://localhost",
+        ).pathname.slice("/api/v1".length);
         if (routePolicy(request.method, p)) route = p;
       } catch {}
       logger({
@@ -837,7 +840,7 @@ export async function createApplication(options = {}) {
       // Parsing runs inside the try: an async handler that throws would kill the process.
       let pathname;
       try {
-        pathname = new URL(request.url, "http://localhost").pathname;
+        pathname = new URL(request.url ?? "/", "http://localhost").pathname;
       } catch {
         throw new Failure("Ruta inválida.", 400);
       }
@@ -858,7 +861,7 @@ export async function createApplication(options = {}) {
             "La credencial de la sala solo permite herramientas de SecondBrain.",
             403,
           );
-        if (!["GET", "HEAD"].includes(method) && !auth.isAgent(request))
+        if (!["GET", "HEAD"].includes(method ?? "") && !auth.isAgent(request))
           auth.checkCsrf(request);
         if (!policy?.public && !auth.authenticated(request))
           throw new Failure("Inicia sesión para abrir el vault.", 401);
@@ -866,7 +869,8 @@ export async function createApplication(options = {}) {
           request,
           `${method} ${route}`,
         );
-        const consulta = new URL(request.url, "http://localhost").searchParams;
+        const consulta = new URL(request.url ?? "/", "http://localhost")
+          .searchParams;
         const accionEquipo =
           method === "POST" &&
           /^\/equipo\/(encargar|esperar|estado|mensaje|bandeja|entregar|integrar)$/.exec(
@@ -986,7 +990,13 @@ export async function createApplication(options = {}) {
           }
           let resultado;
           try {
-            resultado = await lanzador.equipo(accion, sesion, actor, forwarded);
+            // Both headers were validated against their patterns above.
+            resultado = await lanzador.equipo(
+              accion,
+              /** @type {string} */ (sesion),
+              /** @type {string} */ (actor),
+              forwarded,
+            );
             if (mintedChild && resultado?.id) {
               if (resultado.repetido) {
                 // Idempotent replay: the existing child keeps its own
@@ -1089,6 +1099,9 @@ export async function createApplication(options = {}) {
           !policy.query.safeParse(Object.fromEntries(consulta)).success
         )
           throw new Failure("Consulta inválida.");
+        /** A query value the route's schema requires, so already validated. */
+        const required = (/** @type {string} */ name) =>
+          /** @type {string} */ (consulta.get(name));
         /**
          * @param {ServerResponse} res
          * @param {Response} upstream
@@ -1221,7 +1234,7 @@ export async function createApplication(options = {}) {
           "POST /agentes/espacios": async () =>
             send(response, 200, await lanzador.espacios(await body(request))),
           "GET /agentes/conversacion/stream": async () =>
-            routes["GET /agentes/terminal/stream"](),
+            routes["GET /agentes/terminal/stream"]?.(),
           "GET /agentes/conversacion/artefactos/descargar": async () => {
             const upstream = await lanzador.descargarArtefacto(
               consulta.get("id"),
@@ -1256,7 +1269,7 @@ export async function createApplication(options = {}) {
             }, 20000);
             vigilar.unref();
             try {
-              for await (const chunk of upstream.body) {
+              for await (const chunk of upstream.body ?? []) {
                 if (response.destroyed) break;
                 if (!response.write(chunk)) await once(response, "drain");
               }
@@ -1379,7 +1392,7 @@ export async function createApplication(options = {}) {
               response,
               200,
               await lanzador.diff({
-                id: consulta.get("id"),
+                id: required("id"),
                 desde: consulta.get("desde") ?? undefined,
                 hasta: consulta.get("hasta") ?? undefined,
               }),
@@ -1600,7 +1613,9 @@ export async function createApplication(options = {}) {
           },
           "GET /sala/imagen": async () => {
             return await sala.imagen(
-              new URL(request.url, "http://localhost").searchParams.get("id"),
+              new URL(request.url ?? "/", "http://localhost").searchParams.get(
+                "id",
+              ),
               response,
             );
           },
@@ -1797,7 +1812,7 @@ export async function createApplication(options = {}) {
           "GET /encargos": async () =>
             send(response, 200, { encargos: workOrders.list() }),
           "GET /encargos/detalle": async () => {
-            const id = consulta.get("id");
+            const id = required("id");
             const rawCursor = consulta.get("cursor");
             const cursor = rawCursor !== null ? Number(rawCursor) : 0;
             const recipientScope = consulta.get("recipientScope") || undefined;
@@ -1845,7 +1860,7 @@ export async function createApplication(options = {}) {
             return send(response, 200, detalle);
           },
           "GET /encargos/artefactos/descargar": async () => {
-            const workOrderId = consulta.get("workOrderId");
+            const workOrderId = required("workOrderId");
             const artifactId = consulta.get("artifactId");
             const wo = workOrders.get(workOrderId);
             if (!wo) throw new Failure("Encargo no encontrado.", 404);
@@ -2147,7 +2162,7 @@ export async function createApplication(options = {}) {
             });
           },
           "GET /efectos/detalle": async () => {
-            const operacion = effects.get(consulta.get("id"), {
+            const operacion = effects.get(required("id"), {
               includeSensitive: true,
             });
             if (!operacion) {
@@ -2410,7 +2425,7 @@ export async function createApplication(options = {}) {
           "Interfaz desactivada; el servicio de conocimiento sigue disponible.",
           404,
         );
-      if (!["GET", "HEAD"].includes(request.method))
+      if (!["GET", "HEAD"].includes(request.method ?? ""))
         throw new Failure("Método no permitido.", 405);
       const staticRoot = path.resolve(
         options.staticRoot ||
@@ -2520,12 +2535,12 @@ export async function createApplication(options = {}) {
     await workOrders.close();
     stopLanzadorEvents();
     for (const watcher of watchers) watcher.close();
-    clearTimeout(changeTimer);
+    clearTimeout(changeTimer ?? undefined);
     for (const client of clients) client.end();
     server.closeAllConnections();
     if (server.listening)
       await new Promise((resolve, reject) =>
-        server.close((e) => (e ? reject(e) : resolve())),
+        server.close((e) => (e ? reject(e) : resolve(undefined))),
       );
   };
   return {
@@ -2560,7 +2575,7 @@ function reminders(items) {
     .filter(
       (i) =>
         !i.deleted &&
-        !["done", "cancelled"].includes(i.status) &&
+        !["done", "cancelled"].includes(i.status ?? "") &&
         ["task", "event", "obligation", "statement"].includes(i.kind),
     )
     .flatMap((i) => {

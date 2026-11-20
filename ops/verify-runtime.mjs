@@ -628,11 +628,15 @@ export async function runLiveVerification({
       const detReload = await fetch(
         `${baseApi}/encargos/detalle?id=${workOrderId}&cursor=0`,
       ).then((r) => r.json());
+      // Assigned by the SSE task; TypeScript cannot see writes from closures.
+      const answered = /** @type {ProductQuestionAnswer | null} */ (
+        productQuestionAnswered
+      );
       /** @type {{ solicitud?: RuntimeProductQuestion } | null} */
-      const qReload = productQuestionAnswered
-        ? await fetch(
-            `${baseApi}/solicitudes/detalle?id=${productQuestionAnswered.id}`,
-          ).then((r) => r.json())
+      const qReload = answered
+        ? await fetch(`${baseApi}/solicitudes/detalle?id=${answered.id}`).then(
+            (r) => r.json(),
+          )
         : null;
 
       const arts = detReload.snapshot.artifacts || [];
@@ -841,7 +845,10 @@ export async function runLiveVerification({
         sha256: p.sha256,
         source: p.evidence?.source || null,
       }));
-      const convSnap = lastSkillsSnap;
+      // Written by skillsSseTask; TypeScript cannot see writes from closures.
+      const convSnap = /** @type {RuntimeConversationSnapshot | null} */ (
+        lastSkillsSnap
+      );
 
       await fetch(
         `${launcherUrl}/sesiones/${skillsSession.id}/conversation/shutdown`,
@@ -908,9 +915,10 @@ export async function runLiveVerification({
   } finally {
     clearTimeout(watchdog);
     if (app) await app.close().catch(() => {});
-    if (launcher) {
-      launcher.closeAllConnections?.();
-      await new Promise((r) => launcher.close(r));
+    const server = launcher;
+    if (server) {
+      server.closeAllConnections?.();
+      await new Promise((r) => server.close(r));
     }
     await rm(root, {
       recursive: true,

@@ -151,7 +151,8 @@ export function crearAcciones({
           : await propuesta(id);
       return pr.crear({
         sesion,
-        cwd: cwdDe(sesion),
+        // crearPr is only offered for sessions with a registered repository.
+        cwd: /** @type {string} */ (cwdDe(sesion)),
         titulo: typeof titulo === "string" ? titulo : base.titulo,
         descripcion:
           typeof descripcion === "string" ? descripcion : base.descripcion,
@@ -173,7 +174,8 @@ export function crearAcciones({
       return {
         ...(await pr.redactar({
           sesion,
-          cwd: cwdDe(sesion),
+          // redactarPr is only offered for sessions with a registered repository.
+          cwd: /** @type {string} */ (cwdDe(sesion)),
           propuesta: base,
           parche,
           catalogo: await catalogo.modelos().catch(() => ({})),

@@ -114,7 +114,7 @@ function normalizeTeam(team, workOrderId) {
     }
     seenIds.add(id);
     const engine = member.engine ?? member.motor;
-    if (!["claude", "codex", "agy", "deepseek"].includes(engine)) {
+    if (!engine || !["claude", "codex", "agy", "deepseek"].includes(engine)) {
       throw new WorkOrderError("Motor de integrante inválido.", 400);
     }
     const assigned = member.assigned !== false;
@@ -277,10 +277,11 @@ export async function createWorkOrderStore(
     for (const [id, wo] of Object.entries(parsed.orders ?? {})) {
       orders.set(id, wo);
       eventsByOrder.set(id, []);
-      commandIndexByOrder.set(id, new Map());
+      const commandIndex = new Map();
+      commandIndexByOrder.set(id, commandIndex);
       eventDedupeByOrder.set(id, new Set());
       for (const cmd of wo.commands ?? []) {
-        commandIndexByOrder.get(id).set(cmd.clientMessageId, cmd);
+        commandIndex.set(cmd.clientMessageId, cmd);
       }
     }
     for (const [id, list] of Object.entries(parsed.eventsByOrder ?? {})) {
@@ -384,12 +385,15 @@ export async function createWorkOrderStore(
     const dedupe = eventDedupeByOrder.get(workOrderId) ?? new Set();
 
     if (input.id && dedupe.has(input.id)) {
-      const existing = list.find((e) => e.id === input.id);
+      // The dedupe set only holds ids of events in the list.
+      const existing = /** @type {WorkEvent} */ (
+        list.find((e) => e.id === input.id)
+      );
       return { event: structuredClone(existing), duplicated: true };
     }
     if (input.idempotencyKey && dedupe.has(`key:${input.idempotencyKey}`)) {
-      const existing = list.find(
-        (e) => e.idempotencyKey === input.idempotencyKey,
+      const existing = /** @type {WorkEvent} */ (
+        list.find((e) => e.idempotencyKey === input.idempotencyKey)
       );
       return { event: structuredClone(existing), duplicated: true };
     }
@@ -430,10 +434,10 @@ export async function createWorkOrderStore(
     let mutated = false;
     const updated = structuredClone(wo);
     if (input.type === "artifact.published" && input.payload?.fileRef) {
+      const fileRef = input.payload.fileRef;
       const nextVersion =
         (updated.artifacts?.reduce(
-          (m, a) =>
-            a.fileRef === input.payload.fileRef ? Math.max(m, a.version) : m,
+          (m, a) => (a.fileRef === fileRef ? Math.max(m, a.version) : m),
           0,
         ) ?? 0) + 1;
       updated.artifacts.push({
@@ -457,7 +461,8 @@ export async function createWorkOrderStore(
           ? input.payload.evidenceRefs.map(String)
           : [],
         verification: "pendiente",
-        createdAt: event.timestamp,
+        // appendEventInternal() always stamps the event (input ?? clock()).
+        createdAt: /** @type {string} */ (event.timestamp),
       });
       mutated = true;
     } else if (input.type === "turn.started" && updated.status === "en_cola") {
@@ -662,7 +667,7 @@ export async function createWorkOrderStore(
               reason: "team_revision_queued",
               previousTeamRevision: prevTeamRevision,
               teamRevision: updated.teamRevision,
-              applyMode: updated.pendingTeamRevision.applyMode,
+              applyMode: updated.pendingTeamRevision?.applyMode,
             },
           });
         }

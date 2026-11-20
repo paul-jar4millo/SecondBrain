@@ -122,7 +122,7 @@ export function crearCatalogo({
   }
   /**
    * Rejects anything not offered right now: the values become CLI arguments.
-   * @param {string} motor
+   * @param {string | undefined} motor Unvalidated request field; unknown engines list no models.
    * @param {string | null} [modelo]
    * @param {string | null} [esfuerzo]
    */

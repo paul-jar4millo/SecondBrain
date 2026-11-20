@@ -571,9 +571,10 @@ function validateScalarValue(key, value, spec) {
         seen.add(marker);
       }
     }
-    if (spec.items) {
+    const items = spec.items;
+    if (items) {
       value.forEach((item, idx) =>
-        validateScalarValue(`${key}[${idx}]`, item, spec.items),
+        validateScalarValue(`${key}[${idx}]`, item, items),
       );
     }
   }
@@ -606,8 +607,11 @@ export function validateAndExtractElicitationContent(
     }
     return structuredClone(providedContent);
   }
+  // Non-null input always yields a schema; null is handled above.
   const { properties, required, schema } =
-    validateRequestedSchema(requestedSchema);
+    /** @type {NonNullable<ReturnType<typeof validateRequestedSchema>>} */ (
+      validateRequestedSchema(requestedSchema)
+    );
   if (providedContent === undefined || providedContent === null) {
     if (required.length > 0) {
       throw new ErrorLanzador(

@@ -22,10 +22,11 @@ export async function operationalStatus({
       (file) => (file ? bounded(file) : null),
     ),
   );
-  const revision = /^[a-f0-9]{40}$/.test(revisionText?.trim())
-    ? revisionText.trim()
+  const revisionTrimmed = revisionText?.trim() ?? "";
+  const revision = /^[a-f0-9]{40}$/.test(revisionTrimmed)
+    ? revisionTrimmed
     : null;
-  const launcherText = (pinText || runtimeText)?.trim();
+  const launcherText = (pinText || runtimeText)?.trim() ?? "";
   const launcherRevision = /^\/opt\/secondbrain\/releases\/[a-f0-9]{40}$/.test(
     launcherText,
   )
