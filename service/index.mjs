@@ -17,8 +17,6 @@ import {
   intersectProfileBounds,
 } from "./agent-profiles.mjs";
 
-import { mexicoDay } from "./finance.mjs";
-
 import { ConflictoAprobacion } from "./aprobaciones.mjs";
 import { sendItems } from "./http-items.mjs";
 import { downloadHeaders } from "./shared-files.mjs";
@@ -33,6 +31,7 @@ import {
   validateNotePath,
 } from "./http/io.mjs";
 import { createContext } from "./http/context.mjs";
+import { financeRoutes } from "./http/routes/finance.mjs";
 import { authRoutes } from "./http/routes/auth.mjs";
 import { roomRoutes } from "./http/routes/room.mjs";
 import { worldRoutes } from "./http/routes/world.mjs";
@@ -380,6 +379,7 @@ export async function createApplication(options = {}) {
         const req = { request, response, consulta, required, callerCap };
         /** @type {Partial<Record<string, () => Promise<unknown>>>} */
         const routes = {
+          ...financeRoutes(context, req),
           ...authRoutes(context, req),
           ...roomRoutes(context, req),
           ...worldRoutes(context, req),
@@ -877,43 +877,6 @@ export async function createApplication(options = {}) {
             response.end(archive);
             return;
           },
-          "GET /finance/overview": async () => {
-            return send(response, 200, await finance.overview(mexicoDay()));
-          },
-          "POST /finance/ops": async () => {
-            const operacion = await body(request);
-            const previous = await finance.previous(operacion);
-            if (previous) return send(response, 200, previous);
-            await finance.validate(operacion, mexicoDay());
-            let aprobacionId;
-            if (auth.isRoomAgent(request)) {
-              const solicitud = await aprobaciones.solicitar({
-                actor: actorOf(request),
-                operacion,
-              });
-              aprobacionId = solicitud.id;
-              if ((await solicitud.esperar) !== "aprobada")
-                throw new Failure("La operación no fue aprobada.", 403);
-            }
-            let result;
-            try {
-              result = await finance.run(operacion, mexicoDay());
-            } catch (error) {
-              if (aprobacionId)
-                await aprobaciones.finalizar(
-                  aprobacionId,
-                  "No aplicada: la operación no se pudo guardar.",
-                );
-              throw error;
-            }
-            if (aprobacionId)
-              await aprobaciones.finalizar(
-                aprobacionId,
-                "Aplicada: la operación se guardó.",
-              );
-            change();
-            return send(response, 200, result);
-          },
           "GET /aprobaciones": async () =>
             send(response, 200, aprobaciones.listar()),
           "POST /aprobaciones/decidir": async () => {
@@ -1391,9 +1354,6 @@ export async function createApplication(options = {}) {
               }),
             );
             return send(response, 200, resultado);
-          },
-          "GET /finance/ledger": async () => {
-            return send(response, 200, await vault.ledger());
           },
           "GET /files": async () => {
             return send(response, 200, {
