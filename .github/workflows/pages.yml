@@ -26,8 +26,8 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: dashboard/package-lock.json
-      - run: npm --prefix dashboard ci
+          cache-dependency-path: package-lock.json
+      - run: npm ci
       - name: Build the static demo
         working-directory: dashboard
         env:

@@ -6,6 +6,13 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 const origin = process.argv[2] || "http://127.0.0.1:5173";
 const output = fileURLToPath(new URL("../public/portraits/", import.meta.url));
+// npm workspaces hoist three to the repository's node_modules: serve the file
+// Node resolves through Vite's /@fs/ prefix.
+const threeUrl =
+  "/@fs/" +
+  fileURLToPath(import.meta.resolve("three"))
+    .replace(/\\/g, "/")
+    .replace(/^\//, "");
 await mkdir(output, { recursive: true });
 const executablePath =
   process.env.BROWSER_EXECUTABLE ||
@@ -26,8 +33,8 @@ try {
     }),
   );
   await page.goto(`${origin}/__portraits`);
-  await page.evaluate(async () => {
-    const THREE = await import("/node_modules/three/build/three.module.js");
+  await page.evaluate(async (threeUrl) => {
+    const THREE = await import(threeUrl);
     const { AGENT_SPECS, createCharacter } =
       await import("/src/features/room/room-characters");
     const renderer = new THREE.WebGLRenderer({
@@ -67,7 +74,7 @@ try {
       });
       renderer.render(scene, camera);
     };
-  });
+  }, threeUrl);
   for (const id of ["ambar", "menta", "lira", "marina"]) {
     await page.evaluate((id) => window.renderPortrait(id), id);
     await page
