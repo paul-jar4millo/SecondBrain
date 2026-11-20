@@ -7,9 +7,12 @@
     "types": ["node"],
     "typeRoots": ["./node_modules/@types"],
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
     "noEmit": true,
-    "strict": false,
+    "strict": true,
+    // JS files can only annotate catch variables as any or unknown, so this
+    // would mean an any cast on every catch; errors are narrowed where used.
+    "useUnknownInCatchVariables": false,
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
@@ -19,6 +22,11 @@
     "lanzador/*.mjs",
     "ops/*.mjs",
     "ops/deploy/*.mjs",
-    "ops/homelab/*.mjs"
+    "ops/homelab/*.mjs",
+    "lanzador/lib/**/*.mjs",
+    "lanzador/execution/*.mjs",
+    "service/lib/*.mjs",
+    "service/http/**/*.mjs",
+    "ops/lanzador/*.mjs"
   ]
 }

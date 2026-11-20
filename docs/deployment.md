@@ -2,10 +2,10 @@
 
 SecondBrain runs on one machine you control. There are two supported paths:
 
-| Path | Use it for | Agents (`lanzador`) |
-| --- | --- | --- |
-| [Docker Compose](#docker-compose) | Trying the app, a NAS, a small VPS | Not included |
-| [Proxmox VE container](#proxmox-ve-container-full-install) | The full system with isolated agents, CD and backups | Included |
+| Path                                                       | Use it for                                           | Agents (`lanzador`) |
+| ---------------------------------------------------------- | ---------------------------------------------------- | ------------------- |
+| [Docker Compose](#docker-compose)                          | Trying the app, a NAS, a small VPS                   | Not included        |
+| [Proxmox VE container](#proxmox-ve-container-full-install) | The full system with isolated agents, CD and backups | Included            |
 
 The app never needs inbound ports other than HTTPS through your reverse proxy.
 Configuration is in [configuration](configuration.md); day-two tasks
@@ -85,25 +85,25 @@ After the runner is registered, deployments come from version tags through
 `deploy.yml` with a manual approval — see [CI/CD](ci-cd.md). In GitHub, create
 the `production` environment with:
 
-| Setting | Value |
-| --- | --- |
-| Required reviewers | You |
-| Deployment branches and tags | Tags matching `v*` |
-| Variable `SB_DEPLOY_OWNER` | Your GitHub user or organization |
-| Variable `SB_PUBLIC_URL` | `https://your-domain` (optional) |
+| Setting                      | Value                            |
+| ---------------------------- | -------------------------------- |
+| Required reviewers           | You                              |
+| Deployment branches and tags | Tags matching `v*`               |
+| Variable `SB_DEPLOY_OWNER`   | Your GitHub user or organization |
+| Variable `SB_PUBLIC_URL`     | `https://your-domain` (optional) |
 
 The runner's label must match the one in `deploy.yml`
 (`secondbrain-production`) and `RUNNER_ETIQUETA` in `lxc.env`.
 
 ### Production layout
 
-| Path | Content |
-| --- | --- |
-| `/opt/secondbrain/releases/<sha>`, `current` | Application code |
-| `/srv/secondbrain/vault` | Vault (own Git repository) |
-| `/var/lib/secondbrain` | `DATA_DIR`: auth, journal, history, briefcase |
-| `/var/lib/sb-agente` | Agent sessions, conversations, provider logins |
-| `/etc/secondbrain/*.env` | Host-only settings (backup, alerts, deploy) |
-| `/opt/actions-runner` | Deployment runner (user `sb-runner`) |
+| Path                                         | Content                                        |
+| -------------------------------------------- | ---------------------------------------------- |
+| `/opt/secondbrain/releases/<sha>`, `current` | Application code                               |
+| `/srv/secondbrain/vault`                     | Vault (own Git repository)                     |
+| `/var/lib/secondbrain`                       | `DATA_DIR`: auth, journal, history, briefcase  |
+| `/var/lib/sb-agente`                         | Agent sessions, conversations, provider logins |
+| `/etc/secondbrain/*.env`                     | Host-only settings (backup, alerts, deploy)    |
+| `/opt/actions-runner`                        | Deployment runner (user `sb-runner`)           |
 
 A release package contains code only: no vault, credentials or state.

@@ -1,4 +1,4 @@
-// @ts-check
+import { DomainError } from "./domain-error.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import {
@@ -8,6 +8,8 @@ import {
 } from "./lib/durable-store.mjs";
 import path from "node:path";
 import { replayAndRepairJournal } from "./user-requests.mjs";
+
+/** @import { AcceptanceCriterionInput, Recipient, ScopedItem, Viewer, WorkEvent, WorkEventInput, WorkOrder, WorkOrderCommand, WorkOrderInput, WorkOrderJournalRecord, WorkOrderMemberInput } from "./work-order-types.d.ts" */
 
 export const WORK_ORDER_PAYLOAD_VERSION = 1;
 
@@ -62,33 +64,37 @@ export const EVENT_TYPES = new Set([
   "verification.completed",
 ]);
 
-export class WorkOrderError extends Error {
-  constructor(message, status = 400, details = {}) {
-    super(message);
-    this.status = status;
-    Object.assign(this, details);
-  }
-}
+export class WorkOrderError extends DomainError {}
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 function canonicalJson(value) {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(",")}]`;
   }
   if (value && typeof value === "object") {
-    const keys = Object.keys(value).sort();
+    const record = /** @type {Record<string, unknown>} */ (value);
+    const keys = Object.keys(record).sort();
     return `{${keys
-      .filter((k) => value[k] !== undefined)
-      .map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`)
+      .filter((k) => record[k] !== undefined)
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(record[k])}`)
       .join(",")}}`;
   }
   return JSON.stringify(value);
 }
 
+/** @param {unknown} value */
 export function computeSha256(value) {
   const input = typeof value === "string" ? value : canonicalJson(value);
   return createHash("sha256").update(input, "utf8").digest("hex");
 }
 
+/**
+ * @param {WorkOrderMemberInput[]} team
+ * @param {string} workOrderId
+ */
 function normalizeTeam(team, workOrderId) {
   if (!Array.isArray(team) || team.length < 1 || team.length > 4) {
     throw new WorkOrderError(
@@ -108,7 +114,7 @@ function normalizeTeam(team, workOrderId) {
     }
     seenIds.add(id);
     const engine = member.engine ?? member.motor;
-    if (!["claude", "codex", "agy", "deepseek"].includes(engine)) {
+    if (!engine || !["claude", "codex", "agy", "deepseek"].includes(engine)) {
       throw new WorkOrderError("Motor de integrante inválido.", 400);
     }
     const assigned = member.assigned !== false;
@@ -145,6 +151,7 @@ function normalizeTeam(team, workOrderId) {
   return normalized;
 }
 
+/** @param {AcceptanceCriterionInput[]} criteria */
 function normalizeCriteria(criteria) {
   if (!Array.isArray(criteria) || criteria.length === 0) {
     throw new WorkOrderError(
@@ -162,6 +169,10 @@ function normalizeCriteria(criteria) {
   }));
 }
 
+/**
+ * @param {string} type
+ * @param {Recipient | null} recipient
+ */
 function defaultVisibilityForEvent(type, recipient) {
   if (recipient?.scope === "directo" && recipient?.memberId) {
     return "directo";
@@ -172,10 +183,11 @@ function defaultVisibilityForEvent(type, recipient) {
   return "equipo";
 }
 
-function canViewerSeeScopedItem(
-  item,
-  { recipientScope, memberId } = /** @type {any} */ ({}),
-) {
+/**
+ * @param {ScopedItem} item
+ * @param {Viewer} [viewer]
+ */
+function canViewerSeeScopedItem(item, { recipientScope, memberId } = {}) {
   if (recipientScope === "todos") return true;
   if (!recipientScope && !memberId) return true;
   const isDirect =
@@ -191,10 +203,18 @@ function canViewerSeeScopedItem(
   return true;
 }
 
+/**
+ * @param {WorkEvent[]} events
+ * @param {Viewer} [viewer]
+ */
 function filterEventsForViewer(events, viewer = {}) {
   return events.filter((ev) => canViewerSeeScopedItem(ev, viewer));
 }
 
+/**
+ * @param {WorkOrder} wo
+ * @param {Viewer} [viewer]
+ */
 function filterSnapshotForViewer(wo, viewer = {}) {
   const snapshot = structuredClone(wo);
   if (
@@ -203,9 +223,18 @@ function filterSnapshotForViewer(wo, viewer = {}) {
   ) {
     return snapshot;
   }
-  for (const field of ["commands", "handoffs", "tasks", "artifacts"]) {
-    if (Array.isArray(snapshot[field])) {
-      snapshot[field] = snapshot[field].filter((item) =>
+  const scopedLists =
+    /** @type {Record<"commands" | "handoffs" | "tasks" | "artifacts", ScopedItem[]>} */ (
+      snapshot
+    );
+  for (const field of /** @type {const} */ ([
+    "commands",
+    "handoffs",
+    "tasks",
+    "artifacts",
+  ])) {
+    if (Array.isArray(scopedLists[field])) {
+      scopedLists[field] = scopedLists[field].filter((item) =>
         canViewerSeeScopedItem(item, viewer),
       );
     }
@@ -213,20 +242,25 @@ function filterSnapshotForViewer(wo, viewer = {}) {
   return snapshot;
 }
 
+/**
+ * @param {string} dir
+ * @param {{ clock?: () => string, onChange?: () => void }} [options]
+ */
 export async function createWorkOrderStore(
   dir,
-  {
-    clock = () => new Date().toISOString(),
-    onChange = /** @type {(...args: any[]) => any} */ (() => {}),
-  } = /** @type {any} */ ({}),
+  { clock = () => new Date().toISOString(), onChange = () => {} } = {},
 ) {
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const journalFile = path.join(dir, "encargos-journal.jsonl");
   const snapshotFile = path.join(dir, "encargos-snapshots.json");
 
+  /** @type {Map<string, WorkOrder>} */
   const orders = new Map();
+  /** @type {Map<string, WorkEvent[]>} */
   const eventsByOrder = new Map();
+  /** @type {Map<string, Map<string, WorkOrderCommand>>} */
   const commandIndexByOrder = new Map();
+  /** @type {Map<string, Set<string>>} */
   const eventDedupeByOrder = new Map();
   let nextOrderNumber = 1;
   let closed = false;
@@ -237,15 +271,17 @@ export async function createWorkOrderStore(
     throw e;
   });
   if (snapshotRaw.trim()) {
+    /** @type {{ nextOrderNumber?: number, orders?: Record<string, WorkOrder>, eventsByOrder?: Record<string, WorkEvent[]> }} */
     const parsed = JSON.parse(snapshotRaw);
     nextOrderNumber = parsed.nextOrderNumber || 1;
     for (const [id, wo] of Object.entries(parsed.orders ?? {})) {
       orders.set(id, wo);
       eventsByOrder.set(id, []);
-      commandIndexByOrder.set(id, new Map());
+      const commandIndex = new Map();
+      commandIndexByOrder.set(id, commandIndex);
       eventDedupeByOrder.set(id, new Set());
       for (const cmd of wo.commands ?? []) {
-        commandIndexByOrder.get(id).set(cmd.clientMessageId, cmd);
+        commandIndex.set(cmd.clientMessageId, cmd);
       }
     }
     for (const [id, list] of Object.entries(parsed.eventsByOrder ?? {})) {
@@ -261,6 +297,7 @@ export async function createWorkOrderStore(
 
   const { hadRecords, repaired } = await replayAndRepairJournal(
     journalFile,
+    /** @param {WorkOrderJournalRecord} rec */
     (rec) => {
       if (rec.op === "order.put" && rec.order?.id) {
         const wo = rec.order;
@@ -306,6 +343,7 @@ export async function createWorkOrderStore(
 
   const serial = createSerialQueue();
 
+  /** @param {WorkOrderJournalRecord} record */
   const appendJournalRecord = (record) => appendJsonLine(journalFile, record);
 
   function notifyObservers() {
@@ -316,6 +354,7 @@ export async function createWorkOrderStore(
     }
   }
 
+  /** @param {WorkOrder} order */
   async function saveOrder(order) {
     orders.set(order.id, order);
     await appendJournalRecord({
@@ -328,6 +367,10 @@ export async function createWorkOrderStore(
     return structuredClone(order);
   }
 
+  /**
+   * @param {string} workOrderId
+   * @param {WorkEventInput} input
+   */
   async function appendEventInternal(workOrderId, input) {
     const wo = orders.get(workOrderId);
     if (!wo) throw new WorkOrderError("Encargo no encontrado.", 404);
@@ -342,12 +385,15 @@ export async function createWorkOrderStore(
     const dedupe = eventDedupeByOrder.get(workOrderId) ?? new Set();
 
     if (input.id && dedupe.has(input.id)) {
-      const existing = list.find((e) => e.id === input.id);
+      // The dedupe set only holds ids of events in the list.
+      const existing = /** @type {WorkEvent} */ (
+        list.find((e) => e.id === input.id)
+      );
       return { event: structuredClone(existing), duplicated: true };
     }
     if (input.idempotencyKey && dedupe.has(`key:${input.idempotencyKey}`)) {
-      const existing = list.find(
-        (e) => e.idempotencyKey === input.idempotencyKey,
+      const existing = /** @type {WorkEvent} */ (
+        list.find((e) => e.idempotencyKey === input.idempotencyKey)
       );
       return { event: structuredClone(existing), duplicated: true };
     }
@@ -357,6 +403,7 @@ export async function createWorkOrderStore(
     const visibility =
       input.visibility ?? defaultVisibilityForEvent(input.type, recipient);
 
+    /** @type {WorkEvent} */
     const event = {
       id: input.id || randomUUID(),
       sequence,
@@ -387,10 +434,10 @@ export async function createWorkOrderStore(
     let mutated = false;
     const updated = structuredClone(wo);
     if (input.type === "artifact.published" && input.payload?.fileRef) {
+      const fileRef = input.payload.fileRef;
       const nextVersion =
         (updated.artifacts?.reduce(
-          (m, a) =>
-            a.fileRef === input.payload.fileRef ? Math.max(m, a.version) : m,
+          (m, a) => (a.fileRef === fileRef ? Math.max(m, a.version) : m),
           0,
         ) ?? 0) + 1;
       updated.artifacts.push({
@@ -414,7 +461,8 @@ export async function createWorkOrderStore(
           ? input.payload.evidenceRefs.map(String)
           : [],
         verification: "pendiente",
-        createdAt: event.timestamp,
+        // appendEventInternal() always stamps the event (input ?? clock()).
+        createdAt: /** @type {string} */ (event.timestamp),
       });
       mutated = true;
     } else if (input.type === "turn.started" && updated.status === "en_cola") {
@@ -452,14 +500,19 @@ export async function createWorkOrderStore(
       return structuredClone([...orders.values()]);
     },
 
+    /** @param {string} workOrderId */
     get(workOrderId) {
       const wo = orders.get(workOrderId);
       return wo ? structuredClone(wo) : null;
     },
 
+    /**
+     * @param {string} workOrderId
+     * @param {Viewer & { cursor?: number | string }} [options]
+     */
     getSnapshotAndFeed(
       workOrderId,
-      { cursor = 0, recipientScope, memberId } = /** @type {any} */ ({}),
+      { cursor = 0, recipientScope, memberId } = {},
     ) {
       const wo = orders.get(workOrderId);
       if (!wo) return null;
@@ -481,6 +534,7 @@ export async function createWorkOrderStore(
       };
     },
 
+    /** @param {WorkOrderInput} input */
     createWorkOrder(input) {
       return serial(async () => {
         if (closed) throw new WorkOrderError("Almacén cerrado.", 503);
@@ -502,6 +556,7 @@ export async function createWorkOrderStore(
         const code =
           input.code || `ENC-${String(nextOrderNumber++).padStart(3, "0")}`;
 
+        /** @type {WorkOrder} */
         const order = {
           payloadVersion: WORK_ORDER_PAYLOAD_VERSION,
           id,
@@ -531,6 +586,10 @@ export async function createWorkOrderStore(
       });
     },
 
+    /**
+     * @param {string} workOrderId
+     * @param {{ team: WorkOrderMemberInput[], applyMode?: string, expectedRevision?: number, decisions?: unknown[], pending?: unknown[] }} options
+     */
     updateTeam(
       workOrderId,
       {
@@ -608,7 +667,7 @@ export async function createWorkOrderStore(
               reason: "team_revision_queued",
               previousTeamRevision: prevTeamRevision,
               teamRevision: updated.teamRevision,
-              applyMode: updated.pendingTeamRevision.applyMode,
+              applyMode: updated.pendingTeamRevision?.applyMode,
             },
           });
         }
@@ -618,10 +677,11 @@ export async function createWorkOrderStore(
       });
     },
 
-    startWorkOrder(
-      workOrderId,
-      { expectedRevision } = /** @type {any} */ ({}),
-    ) {
+    /**
+     * @param {string} workOrderId
+     * @param {{ expectedRevision?: number }} [options]
+     */
+    startWorkOrder(workOrderId, { expectedRevision } = {}) {
       return serial(async () => {
         const wo = orders.get(workOrderId);
         if (!wo) throw new WorkOrderError("Encargo no encontrado.", 404);
@@ -686,6 +746,10 @@ export async function createWorkOrderStore(
       });
     },
 
+    /**
+     * @param {string} workOrderId
+     * @param {{ clientMessageId: string, recipient?: Recipient, mode?: string, text?: unknown, attachments?: unknown[], expectedRevision?: number }} options
+     */
     enqueueMessage(
       workOrderId,
       {
@@ -745,6 +809,7 @@ export async function createWorkOrderStore(
 
         const now = clock();
         const deliveryStatus = mode === "queue" ? "en_cola" : "recibido";
+        /** @type {WorkOrderCommand} */
         const command = {
           id: randomUUID(),
           workOrderId,
@@ -800,6 +865,11 @@ export async function createWorkOrderStore(
       });
     },
 
+    /**
+     * @param {string} workOrderId
+     * @param {string} commandId
+     * @param {string} deliveryStatus
+     */
     updateCommandDeliveryStatus(workOrderId, commandId, deliveryStatus) {
       return serial(async () => {
         if (!DELIVERY_STATUSES.has(deliveryStatus)) {
@@ -820,6 +890,10 @@ export async function createWorkOrderStore(
       });
     },
 
+    /**
+     * @param {string} workOrderId
+     * @param {WorkEventInput} eventInput
+     */
     appendEvent(workOrderId, eventInput) {
       return serial(async () => {
         if (closed) throw new WorkOrderError("Almacén cerrado.", 503);
@@ -827,6 +901,10 @@ export async function createWorkOrderStore(
       });
     },
 
+    /**
+     * @param {string} workOrderId
+     * @param {{ fromSessionId?: unknown, toSessionId?: unknown, decisions?: unknown, artifacts?: unknown, pending?: unknown, acknowledgedAt?: string | null }} input
+     */
     createHandoff(workOrderId, input) {
       return serial(async () => {
         const wo = orders.get(workOrderId);
@@ -858,14 +936,13 @@ export async function createWorkOrderStore(
       });
     },
 
+    /**
+     * @param {string} workOrderId
+     * @param {{ criteriaUpdates?: (AcceptanceCriterionInput & { id: string })[], complete?: boolean, note?: unknown, actor?: string }} [options]
+     */
     verifyWorkOrder(
       workOrderId,
-      {
-        criteriaUpdates = [],
-        complete = false,
-        note = "",
-        actor = "app",
-      } = /** @type {any} */ ({}),
+      { criteriaUpdates = [], complete = false, note = "", actor = "app" } = {},
     ) {
       return serial(async () => {
         const wo = orders.get(workOrderId);

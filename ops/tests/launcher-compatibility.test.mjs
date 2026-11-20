@@ -22,7 +22,7 @@ async function fixture(t, sessions, marker) {
   );
   if (marker !== undefined)
     await writeFile(
-      path.join(release, "lanzador/registro-version.mjs"),
+      path.join(release, "lanzador/version-registry.mjs"),
       marker,
     );
   return () =>
@@ -93,7 +93,7 @@ test("selecciona la release compatible retenida cuando current apunta a un rollb
   await mkdir(old);
   await mkdir(path.join(compatible, "lanzador"), { recursive: true });
   await writeFile(
-    path.join(compatible, "lanzador/registro-version.mjs"),
+    path.join(compatible, "lanzador/version-registry.mjs"),
     "export const REGISTRO_VERSION = 2;\n",
   );
   const index = path.join(dir, "sesiones.json");
@@ -110,7 +110,7 @@ test("selecciona la release compatible retenida cuando current apunta a un rollb
 
 test("la marca real del lanzador cumple también el formato estricto de helpers ya instalados", async (t) => {
   const marker = await readFile(
-    new URL("../../lanzador/registro-version.mjs", import.meta.url),
+    new URL("../../lanzador/version-registry.mjs", import.meta.url),
     "utf8",
   );
   // Helpers installed before 0.1.1 only accept a file made of the export line.

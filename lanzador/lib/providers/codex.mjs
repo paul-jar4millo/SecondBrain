@@ -1,8 +1,7 @@
-// @ts-check
 // Controller for the Codex app-server protocol.
 import { randomUUID } from "node:crypto";
-import { ErrorLanzador } from "../../errores.mjs";
-import { validarAdjuntosMotor } from "../../motores.mjs";
+import { ErrorLanzador } from "../../errors.mjs";
+import { validarAdjuntosMotor } from "../../engines.mjs";
 import { providerRpc } from "../../provider-rpc.mjs";
 import {
   buildCodexArgs,
@@ -24,14 +23,87 @@ import {
   waitChildExit,
 } from "./shared.mjs";
 
+/**
+ * @typedef {import("./controller-types.mjs").ProviderTurnContext &
+ *   import("./codex-config.mjs").CodexConfigContext &
+ *   import("./codex-config.mjs").CodexArgsContext & {
+ *     verifyMcpRuntime?: boolean,
+ *     requireConfigRead?: boolean,
+ *     observeSkills?: boolean,
+ *     expectedSkills?: string[],
+ *     expire(id: string): void
+ *   }} CodexContext
+ */
+/** @typedef {Partial<import("../../provider-rpc.mjs").RpcRequestMetadata>} RpcRequestMetadata */
+/** @typedef {import("../../provider-rpc.mjs").RpcId} RpcId */
+/** @typedef {import("../../provider-rpc.mjs").ProviderChild} ProviderChild */
+/** @typedef {{ id?: string, status?: string }} CodexTurnPayload */
+/** @typedef {{ threadId?: string, thread?: { id?: string }, turnId?: string, turn?: CodexTurnPayload }} CodexTurnEvent */
+/**
+ * @typedef {object} CodexItem
+ * @property {string} id
+ * @property {string} type
+ * @property {string} [text]
+ * @property {unknown} [command]
+ * @property {unknown} [query]
+ * @property {string} [tool]
+ * @property {string} [name]
+ * @property {{ path?: string, kind?: string }[]} [changes]
+ * @property {string} [aggregatedOutput]
+ * @property {{ isError?: boolean }} [result]
+ * @property {string} [status]
+ * @property {Record<string, unknown>} [arguments]
+ */
+/**
+ * @typedef {CodexTurnEvent & {
+ *   toModel?: string, model?: string, actualModel?: string,
+ *   itemId?: string, delta?: string, item?: CodexItem, requestId?: string | number
+ * }} CodexNotification
+ */
+/**
+ * @typedef {CodexTurnEvent & {
+ *   questions?: unknown[], mode?: string, requestedSchema?: unknown,
+ *   message?: string, serverName?: string, url?: string,
+ *   reason?: string, command?: unknown, changes?: unknown,
+ *   permissions?: unknown, availableDecisions?: string[]
+ * }} CodexRequest
+ */
+/**
+ * @typedef {{ answers: Record<string, { answers: unknown[] }> } |
+ *   { action: "accept" | "decline" | "cancel", content: object | null, _meta: null } |
+ *   { permissions: unknown, scope: "turn" } |
+ *   { decision: string | undefined }
+ * } CodexResponse
+ */
+/** @typedef {{ status: "completed" | "interrupted", turnId: string | null, pid: number | null, persistent: boolean }} CodexTurnResult */
+/**
+ * @typedef {import("./controller-types.mjs").ProviderTurnState<CodexContext> & {
+ *   expectedThreadId: string | null,
+ *   activeTurnId: string | null,
+ *   startResponded: boolean,
+ *   earlyCompletion: { turnId: string, turn: CodexTurnPayload } | null,
+ *   aborted: boolean,
+ *   killTimer: NodeJS.Timeout | null,
+ *   resolve: (result: CodexTurnResult) => void,
+ *   reject: (reason: unknown) => void
+ * }} CodexTurn
+ */
+/** @typedef {{ name?: string, tools?: object, runtimeStatus?: unknown, serverInfo?: unknown }} CodexMcpStatus */
+
 export function createCodexController() {
   const connectionId = randomUUID();
+  /** @type {Set<string>} */
   const retiredTurnIds = new Set();
+  /** @type {ProviderChild | null} */
   let child = null;
+  /** @type {ReturnType<typeof providerRpc> | null} */
   let rpc = null;
+  /** @type {string | null} */
   let threadId = null;
+  /** @type {CodexTurn | null} */
   let activeTurn = null;
   let closing = false;
+  /** @type {Promise<void> | null} */
   let connectPromise = null;
   const createdAt = new Date().toISOString();
   let lastUsedAt = Date.now();
@@ -46,6 +118,11 @@ export function createCodexController() {
       (child.exitCode === null || child.exitCode === undefined),
     );
 
+  /**
+   * @param {CodexTurn | null} turn
+   * @param {CodexTurnEvent} [p]
+   * @returns {turn is CodexTurn}
+   */
   const acceptTurnEvent = (turn, p = {}) => {
     if (
       !turn ||
@@ -69,17 +146,27 @@ export function createCodexController() {
     return true;
   };
 
+  /**
+   * @template {"resolve" | "reject"} Method
+   * @param {CodexTurn} turn
+   * @param {Method} method
+   * @param {Parameters<CodexTurn[Method]>[0]} payload
+   */
   const settleActiveTurn = (turn, method, payload) => {
     if (!turn || activeTurn !== turn || turn.settled) return;
     turn.settled = true;
-    clearTimeout(turn.killTimer);
+    clearTimeout(turn.killTimer ?? undefined);
     if (turn.activeTurnId) {
       retiredTurnIds.add(turn.activeTurnId);
     }
     activeTurn = null;
-    turn[method](payload);
+    turn[method](/** @type {CodexTurnResult} */ (payload));
   };
 
+  /**
+   * @param {CodexTurn} turn
+   * @param {CodexTurnPayload | undefined} turnPayload
+   */
   const finalizeCompletedTurn = (turn, turnPayload) => {
     const status = turnPayload?.status;
     Promise.allSettled(turn.pendingWork)
@@ -88,14 +175,14 @@ export function createCodexController() {
         if (status === "completed") {
           settleActiveTurn(turn, "resolve", {
             status: "completed",
-            turnId: turnPayload.id ?? turn.activeTurnId,
+            turnId: turnPayload?.id ?? turn.activeTurnId,
             pid: child?.pid ?? null,
             persistent: isAlive(),
           });
         } else if (status === "interrupted") {
           settleActiveTurn(turn, "resolve", {
             status: "interrupted",
-            turnId: turnPayload.id ?? turn.activeTurnId,
+            turnId: turnPayload?.id ?? turn.activeTurnId,
             pid: child?.pid ?? null,
             persistent: isAlive(),
           });
@@ -110,6 +197,7 @@ export function createCodexController() {
       .catch((err) => settleActiveTurn(turn, "reject", err));
   };
 
+  /** @param {CodexContext} ctx */
   async function ensureConnected(ctx) {
     if (isAlive() && threadId) return;
     if (connectPromise) return connectPromise;
@@ -147,7 +235,7 @@ export function createCodexController() {
       });
 
       rpc = providerRpc(child, {
-        onClose: (reason) => {
+        onClose: (/** @type {string} */ reason) => {
           const turn = activeTurn;
           turn?.ctx?.invalidateConnection?.(connectionId, reason);
           if (turn && !turn.settled) {
@@ -165,7 +253,13 @@ export function createCodexController() {
             );
           }
         },
-        notify(method, p) {
+        /**
+         * @param {string} method
+         * @param {unknown} params
+         */
+        notify(method, params) {
+          // The RPC layer passes untyped params; this is the shape the provider sends.
+          const p = /** @type {CodexNotification} */ (params);
           const turn = activeTurn;
           if (!acceptTurnEvent(turn, p)) return;
           if (method === "thread/started" && p.thread?.id) {
@@ -204,10 +298,16 @@ export function createCodexController() {
             }
           }
           if (method === "item/agentMessage/delta") {
-            turn.ctx.delta(p.itemId, p.delta);
+            // Codex always sends itemId and delta with this notification.
+            turn.ctx.delta(
+              /** @type {string} */ (p.itemId),
+              /** @type {string} */ (p.delta),
+            );
           }
           if (method === "item/started" || method === "item/completed") {
             const item = p.item;
+            // Item notifications always carry the item; nothing to do without it.
+            if (!item) return;
             if (item.type === "agentMessage") {
               turn.ctx.message(item.id, item.text || "");
             } else if (
@@ -246,7 +346,7 @@ export function createCodexController() {
                       ],
                       comment: `Cambio Codex (${ch.kind || "update"})`,
                       publishedKeys: turn.publishedArtifactKeys,
-                    }).catch(() => null);
+                    }).catch(/** @returns {null} */ () => null);
                     turn.pendingWork.push(work);
                   }
                 } else if (
@@ -274,7 +374,7 @@ export function createCodexController() {
                       ],
                       comment: `Herramienta MCP ${item.tool || item.name}`,
                       publishedKeys: turn.publishedArtifactKeys,
-                    }).catch(() => null);
+                    }).catch(/** @returns {null} */ () => null);
                     turn.pendingWork.push(work);
                   }
                 }
@@ -285,16 +385,17 @@ export function createCodexController() {
             turn.ctx.expire(String(p.requestId));
           }
           if (method === "turn/completed") {
-            const completedTurnId = p.turn?.id ?? null;
+            const completedTurn = p.turn;
+            const completedTurnId = completedTurn?.id ?? null;
             if (completedTurnId && retiredTurnIds.has(completedTurnId)) {
               return;
             }
             if (!turn.activeTurnId) {
               if (!turn.startResponded) {
-                if (completedTurnId) {
+                if (completedTurn?.id) {
                   turn.earlyCompletion = {
-                    turnId: completedTurnId,
-                    turn: p.turn,
+                    turnId: completedTurn.id,
+                    turn: completedTurn,
                   };
                 }
                 return;
@@ -313,7 +414,16 @@ export function createCodexController() {
             finalizeCompletedTurn(turn, p.turn);
           }
         },
-        async request(method, p, id, rpcMeta = {}) {
+        /**
+         * @param {string} method
+         * @param {unknown} params
+         * @param {RpcId} id
+         * @param {RpcRequestMetadata} [rpcMeta]
+         * @returns {Promise<CodexResponse>}
+         */
+        async request(method, params, id, rpcMeta = {}) {
+          // The RPC layer passes untyped params; this is the shape the provider sends.
+          const p = /** @type {CodexRequest} */ (params);
           const turn = activeTurn;
           if (!acceptTurnEvent(turn, p)) {
             throw Object.assign(
@@ -449,15 +559,19 @@ export function createCodexController() {
         },
       });
 
-      const initResult = await rpc.call("initialize", {
-        clientInfo: { name: "secondbrain", version: "1.0.0" },
-        capabilities: { experimentalApi: true },
-      });
+      const initResult = /** @type {{ codexHome?: string }} */ (
+        await rpc.call("initialize", {
+          clientInfo: { name: "secondbrain", version: "1.0.0" },
+          capabilities: { experimentalApi: true },
+        })
+      );
       rpc.notify("initialized", {});
 
       if (disableInherited && (initResult?.codexHome || ctx.verifyMcpRuntime)) {
         try {
-          const mcpStatus = await rpc.call("mcpServerStatus/list", {});
+          const mcpStatus = /** @type {{ data?: CodexMcpStatus[] }} */ (
+            await rpc.call("mcpServerStatus/list", {})
+          );
           const activeUnexpected = (mcpStatus?.data || []).filter((entry) => {
             if (!entry?.name || Object.hasOwn(mcpServers, entry.name)) {
               return false;
@@ -486,6 +600,7 @@ export function createCodexController() {
           if (ctx.requireConfigRead) {
             cfgRead = await rpc.call("config/read", { includeLayers: true });
           } else {
+            /** @type {NodeJS.Timeout} */
             let timer;
             cfgRead = await Promise.race([
               rpc.call("config/read", { includeLayers: true }),
@@ -495,7 +610,11 @@ export function createCodexController() {
               }),
             ]).finally(() => clearTimeout(timer));
           }
-          const effectiveMcp = cfgRead?.config?.mcp_servers;
+          const result =
+            /** @type {{ config?: { mcp_servers?: Record<string, { enabled?: boolean }> } }} */ (
+              cfgRead
+            );
+          const effectiveMcp = result?.config?.mcp_servers;
           if (effectiveMcp && typeof effectiveMcp === "object") {
             const enabledUnexpected = Object.entries(effectiveMcp)
               .filter(
@@ -536,14 +655,16 @@ export function createCodexController() {
           discoveredKeys,
         ),
       };
-      const result = await rpc.call(
-        ctx.session.conversacionId ? "thread/resume" : "thread/start",
-        {
-          ...config,
-          ...(ctx.session.conversacionId
-            ? { threadId: ctx.session.conversacionId }
-            : {}),
-        },
+      const result = /** @type {{ thread: { id: string } }} */ (
+        await rpc.call(
+          ctx.session.conversacionId ? "thread/resume" : "thread/start",
+          {
+            ...config,
+            ...(ctx.session.conversacionId
+              ? { threadId: ctx.session.conversacionId }
+              : {}),
+          },
+        )
       );
       threadId = result.thread.id;
       await ctx.nativeId(threadId);
@@ -552,12 +673,16 @@ export function createCodexController() {
         (ctx.observeSkills || ctx.expectedSkills?.length)
       ) {
         try {
-          const skillsRes = await rpc.call("skills/list", {
-            cwds: ctx.cwd ? [ctx.cwd] : [],
-          });
+          /** @typedef {{ name?: string, id?: string }} CodexSkill */
+          const skillsRes =
+            /** @type {{ skills?: CodexSkill[], data?: CodexSkill[] }} */ (
+              await rpc.call("skills/list", {
+                cwds: ctx.cwd ? [ctx.cwd] : [],
+              })
+            );
           const names = (skillsRes?.skills || skillsRes?.data || [])
             .map((s) => s?.name || s?.id)
-            .filter(Boolean);
+            .filter(/** @returns {name is string} */ (name) => Boolean(name));
           await ctx.onSkillsObserved({
             source: "codex_skills_list",
             names,
@@ -577,6 +702,7 @@ export function createCodexController() {
     }
   }
 
+  /** @param {CodexContext} ctx */
   async function runTurn(ctx) {
     lastUsedAt = Date.now();
     const validatedAttachments = validarAdjuntosMotor(
@@ -586,14 +712,15 @@ export function createCodexController() {
     );
     await ensureConnected(ctx);
 
-    let resolveTurn;
-    let rejectTurn;
-    const completed = new Promise((resolve, reject) => {
-      resolveTurn = resolve;
-      rejectTurn = reject;
-    });
+    /** @type {PromiseWithResolvers<CodexTurnResult>} */
+    const {
+      promise: completed,
+      resolve: resolveTurn,
+      reject: rejectTurn,
+    } = Promise.withResolvers();
     completed.catch(() => {});
 
+    /** @type {CodexTurn} */
     const turn = {
       ctx,
       connectionId,
@@ -653,12 +780,15 @@ export function createCodexController() {
       },
     });
 
-    const turnStarted = await rpc.call("turn/start", {
-      threadId,
-      input: formatCodexInput(ctx.prompt, validatedAttachments),
-      ...(ctx.session.modelo ? { model: ctx.session.modelo } : {}),
-      ...(ctx.session.esfuerzo ? { effort: ctx.session.esfuerzo } : {}),
-    });
+    if (!rpc) throw new Error("Proveedor desconectado");
+    const turnStarted = /** @type {{ turn?: CodexTurnPayload }} */ (
+      await rpc.call("turn/start", {
+        threadId,
+        input: formatCodexInput(ctx.prompt, validatedAttachments),
+        ...(ctx.session.modelo ? { model: ctx.session.modelo } : {}),
+        ...(ctx.session.esfuerzo ? { effort: ctx.session.esfuerzo } : {}),
+      })
+    );
     if (activeTurn === turn && !turn.settled) {
       turn.startResponded = true;
       const authoritativeTurnId = turnStarted?.turn?.id || null;

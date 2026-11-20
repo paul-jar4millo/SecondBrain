@@ -1,4 +1,3 @@
-// @ts-check
 // Shared persistence primitives for the journaled stores (work orders, user
 // requests and effects): an append-only JSON-lines journal plus an atomic
 // snapshot, and a queue that serializes their writes.

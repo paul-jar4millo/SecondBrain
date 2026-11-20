@@ -1,13 +1,30 @@
-// @ts-check
 // Finance module: one structured Markdown document is the source of truth.
 // Everything shown in the UI (utilization, cash-flow margin, categories, alerts)
 // is derived by overview() on every read; nothing computed is persisted.
 import { readFile } from "node:fs/promises";
 import { parseDocument, Document } from "yaml";
 import { Failure, hash } from "./vault.mjs";
+/** @import { Vault } from "./vault.mjs" */
+/** @import { FinanceData, FinanceOperation } from "./finance-types.d.ts" */
+/** @import { YAMLMap, YAMLSeq } from "yaml" */
 
-/** YAML node to plain data; YAML types are not modelled for checkJs. */
-const toPlain = (/** @type {any} */ node) => node?.toJSON();
+/** @typedef {Record<string, { result: ReturnType<typeof applyOperation>["result"] }>} FinanceReceipts */
+/**
+ * @typedef {object} ExistingFinance
+ * @property {true} exists
+ * @property {string} source
+ * @property {ReturnType<typeof parseDocument> | Document} doc
+ * @property {FinanceData} data
+ * @property {string} body
+ * @property {string} newline
+ * @property {string} fileHash
+ * @property {FinanceReceipts} [receipts]
+ */
+/** @typedef {ExistingFinance | { exists: false, data?: undefined, receipts?: FinanceReceipts }} LoadedFinance */
+
+/** @param {unknown} node @returns {FinanceReceipts | undefined} */
+const toPlain = (node) =>
+  /** @type {{ toJSON: () => FinanceReceipts } | undefined} */ (node)?.toJSON();
 
 export const FINANCE_PATH = "02-Areas/Finanzas/Datos-financieros.md";
 const FRONTMATTER = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
@@ -25,9 +42,11 @@ import {
 } from "./finance-domain.mjs";
 /* ---------- persistence ---------- */
 export class Finance {
+  /** @param {Vault} vault */
   constructor(vault) {
     this.vault = vault;
   }
+  /** @returns {Promise<LoadedFinance>} */
   async load() {
     let source;
     try {
@@ -48,7 +67,7 @@ export class Finance {
         "Datos financieros con YAML inválido: repara el archivo antes de editarlo.",
         409,
       );
-    const raw = /** @type {any} */ (doc.get("finance"));
+    const raw = /** @type {{ toJSON?: () => unknown }} */ (doc.get("finance"));
     const data = normalize(
       raw && typeof raw.toJSON === "function" ? raw.toJSON() : raw,
     );
@@ -62,12 +81,14 @@ export class Finance {
       fileHash: hash(source),
     };
   }
+  /** @param {string} today */
   async overview(today) {
     await this.vault.queue;
     const loaded = await this.load();
     if (!loaded.exists) return { configured: false };
     return overview(loaded.data, today);
   }
+  /** @param {FinanceOperation} op */
   async previous(op) {
     if (!op?.requestId) return undefined;
     await this.vault.queue;
@@ -82,6 +103,7 @@ export class Finance {
         }
       : undefined;
   }
+  /** @param {FinanceOperation} op @param {string} today */
   async validate(op, today) {
     await this.vault.queue;
     const loaded = await this.load();
@@ -96,6 +118,8 @@ export class Finance {
   /**
    * Compact receipts and balances share the vault's atomic journal transaction.
    * A retry returns the original operation result and the current financial overview.
+   * @param {FinanceOperation} op
+   * @param {string} today
    */
   async run(op, today) {
     const requestId = typeof op?.requestId === "string" ? op.requestId : null;
@@ -141,7 +165,12 @@ export class Finance {
       });
     });
   }
-  /** Writes the whole structure (used by init/import and by run). */
+  /**
+   * Writes the whole structure (used by init/import and by run).
+   * @param {LoadedFinance} loaded
+   * @param {FinanceData} data
+   * @param {string} today
+   */
   async write(loaded, data, today) {
     const doc = loaded.exists
       ? loaded.doc
@@ -153,7 +182,11 @@ export class Finance {
     if (loaded.receipts) doc.set("financeReceipts", loaded.receipts);
     doc.set("updated", today);
     doc.set("verified", data.reconciledAt);
-    doc.set("expires", addDays(data.reconciledAt, data.validityDays));
+    // validate() requires reconciledAt before a snapshot is written.
+    doc.set(
+      "expires",
+      addDays(/** @type {string} */ (data.reconciledAt), data.validityDays),
+    );
     const node = doc.createNode(data);
     for (const key of [
       "installments",
@@ -162,7 +195,10 @@ export class Finance {
       "transactions",
       "questions",
     ]) {
-      const seq = node.get(key, true);
+      // These keys contain sequences of mappings in the node we just created.
+      const seq = /** @type {YAMLSeq<YAMLMap> | undefined} */ (
+        /** @type {unknown} */ (node.get(key, true))
+      );
       if (seq?.items) for (const item of seq.items) item.flow = true;
     }
     doc.set("finance", node);
@@ -181,7 +217,11 @@ export class Finance {
       loaded.exists ? loaded.fileHash : null,
     );
   }
-  /** Used by the one-time importer: creates the file from a complete structure. */
+  /**
+   * Used by the one-time importer: creates the file from a complete structure.
+   * @param {FinanceData} data
+   * @param {string} today
+   */
   async create(data, today) {
     return this.vault.exclusive(() =>
       this.vault.transaction(async () => {

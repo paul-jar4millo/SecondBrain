@@ -1,4 +1,3 @@
-// @ts-check
 // The same MCP tools through a shell, for providers without native MCP support.
 // No vault mirror, tokens in arguments, or provider-specific APIs.
 import { readFile } from "node:fs/promises";

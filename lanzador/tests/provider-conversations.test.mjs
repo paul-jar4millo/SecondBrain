@@ -7,8 +7,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { createProviderConversations } from "../provider-conversations.mjs";
 import { createApplication } from "../../service/index.mjs";
-import { abrirRegistro } from "../sesiones.mjs";
-import { crearEjecutor } from "../ejecucion.mjs";
+import { abrirRegistro } from "../sessions.mjs";
+import { crearEjecutor } from "../executor.mjs";
 import { crearServidor } from "../index.mjs";
 
 async function fixture(t, adapter) {

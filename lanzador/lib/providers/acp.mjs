@@ -1,8 +1,7 @@
-// @ts-check
 // Controller for Agent Client Protocol (ACP) CLIs.
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
-import { validarAdjuntosMotor } from "../../motores.mjs";
+import { validarAdjuntosMotor } from "../../engines.mjs";
 import { providerRpc } from "../../provider-rpc.mjs";
 import {
   exitedChildren,
@@ -16,6 +15,52 @@ import {
   waitChildExit,
 } from "./shared.mjs";
 
+/** @typedef {import("./controller-types.mjs").ProviderTurnContext & import("./shared.mjs").AcpLaunchContext} AcpContext */
+/** @typedef {Partial<import("../../provider-rpc.mjs").RpcRequestMetadata>} RpcRequestMetadata */
+/** @typedef {import("../../provider-rpc.mjs").RpcId} RpcId */
+/** @typedef {import("../../provider-rpc.mjs").ProviderChild} ProviderChild */
+/** @typedef {{ type?: string, text?: string, path?: string }} AcpContentBlock */
+/** @typedef {{ type: "text", text: string } | { type: "image" | "audio" | "resource" | "resource_link" }} AcpMessageContent */
+/** @typedef {{ path?: string }} AcpLocation */
+/**
+ * @typedef {object} AcpToolCall
+ * @property {string} [id]
+ * @property {string} [name]
+ * @property {string} [title]
+ * @property {string} [kind]
+ * @property {AcpLocation[]} [locations]
+ * @property {AcpContentBlock[]} [content]
+ * @property {Record<string, unknown> | null} [rawInput]
+ */
+/**
+ * @typedef {AcpToolCall & {
+ *   sessionUpdate: "tool_call" | "tool_call_update",
+ *   toolCallId: string,
+ *   status?: string,
+ *   rawOutput?: unknown
+ * }} AcpToolCallUpdate
+ */
+/**
+ * @typedef {AcpToolCallUpdate |
+ *   { sessionUpdate: "available_commands_update", availableCommands?: { name?: string }[] } |
+ *   { sessionUpdate: "config_option_update", configOptions?: unknown[] } |
+ *   { sessionUpdate: "agent_message_chunk", content?: AcpMessageContent }
+ * } AcpSessionUpdate
+ */
+/** @typedef {{ sessionId?: string, update?: AcpSessionUpdate }} AcpNotification */
+/** @typedef {{ optionId: string, kind: string, name?: string }} AcpPermissionOption */
+/** @typedef {{ sessionId?: string, options?: AcpPermissionOption[], toolCall?: AcpToolCall }} AcpPermissionRequest */
+/**
+ * @typedef {import("./controller-types.mjs").ProviderTurnState<AcpContext> & {
+ *   generation: number,
+ *   messageIndex: number,
+ *   acceptingUpdates: boolean,
+ *   toolCalls: Map<string, AcpToolCall>,
+ *   rejectConnection?: (reason: Error) => void
+ * }} AcpTurn
+ */
+
+/** @param {AcpToolCall} rec */
 function extractAcpArtifactCandidates(rec) {
   if (!rec) return [];
   const kind = String(rec.kind || "").toLowerCase();
@@ -53,8 +98,9 @@ function extractAcpArtifactCandidates(rec) {
       "Path",
       "file",
     ]) {
-      if (typeof rawInput[key] === "string" && rawInput[key].trim()) {
-        candidates.push(rawInput[key].trim());
+      const value = rawInput[key];
+      if (typeof value === "string" && value.trim()) {
+        candidates.push(value.trim());
       }
     }
   }
@@ -77,16 +123,25 @@ function extractAcpArtifactCandidates(rec) {
 
 export function createAcpController() {
   const connectionId = randomUUID();
+  /** @type {ProviderChild | null} */
   let child = null;
+  /** @type {ReturnType<typeof providerRpc> | null} */
   let rpc = null;
+  /** @type {string | null} */
   let sessionId = null;
+  /** @type {string | null} */
   let observedModel = null;
+  /** @type {AcpTurn | null} */
   let activeTurn = null;
   let closing = false;
+  /** @type {Promise<void> | null} */
   let connectPromise = null;
+  /** @type {string | null} */
   let autoCleanupGeminiDir = null;
   let promptGeneration = 0;
+  /** @type {string[] | null} */
   let latestObservedCommands = null;
+  /** @type {AcpContext | null} */
   let connectCtx = null;
   const createdAt = new Date().toISOString();
   let lastUsedAt = Date.now();
@@ -101,6 +156,15 @@ export function createAcpController() {
       (child.exitCode === null || child.exitCode === undefined),
     );
 
+  const requireRpc = () => {
+    if (!rpc) throw new Error("Antigravity ACP desconectado");
+    return rpc;
+  };
+
+  /**
+   * @param {AcpContext} ctx
+   * @param {unknown} [currentConfigOptions]
+   */
   async function ensureModelPinned(ctx, currentConfigOptions = null) {
     if (!ctx.session.modelo) return;
     if (currentConfigOptions) {
@@ -116,11 +180,13 @@ export function createAcpController() {
     }
     if (observedModel === ctx.session.modelo) return;
     try {
-      const configRes = await rpc.call("session/set_config_option", {
-        sessionId,
-        configId: "model",
-        value: ctx.session.modelo,
-      });
+      const configRes = /** @type {{ configOptions?: unknown }} */ (
+        await requireRpc().call("session/set_config_option", {
+          sessionId,
+          configId: "model",
+          value: ctx.session.modelo,
+        })
+      );
       if (Array.isArray(configRes?.configOptions)) {
         observedModel = verifyAcpConfigModel(
           configRes.configOptions,
@@ -136,7 +202,7 @@ export function createAcpController() {
         err?.code === -32602 ||
         err?.message === "Método no compatible"
       ) {
-        await rpc.call("session/set_model", {
+        await requireRpc().call("session/set_model", {
           sessionId,
           modelId: ctx.session.modelo,
         });
@@ -147,6 +213,7 @@ export function createAcpController() {
     }
   }
 
+  /** @param {AcpContext} ctx */
   async function ensureConnected(ctx) {
     connectCtx = ctx;
     if (isAlive() && sessionId) return;
@@ -169,27 +236,36 @@ export function createAcpController() {
       });
 
       rpc = providerRpc(child, {
-        onClose: (reason) => {
+        onClose: (/** @type {string} */ reason) => {
           const turn = activeTurn;
           turn?.ctx?.invalidateConnection?.(connectionId, reason);
           turn?.rejectConnection?.(
             new Error(reason || "Antigravity ACP desconectado"),
           );
         },
-        notify(method, p) {
+        /**
+         * @param {string} method
+         * @param {unknown} params
+         */
+        notify(method, params) {
+          // The RPC layer passes untyped params; this is the shape the provider sends.
+          const p = /** @type {AcpNotification} */ (params);
           if (method === "session/update") {
             if (!p?.sessionId || !sessionId || p.sessionId === sessionId) {
               if (
                 p.update?.sessionUpdate === "available_commands_update" &&
                 Array.isArray(p.update.availableCommands)
               ) {
-                latestObservedCommands = p.update.availableCommands
+                const names = p.update.availableCommands
                   .map((c) => c?.name)
-                  .filter(Boolean);
+                  .filter(
+                    /** @returns {name is string} */ (name) => Boolean(name),
+                  );
+                latestObservedCommands = names;
                 const sink = activeTurn?.ctx || connectCtx;
                 void sink?.onSkillsObserved?.({
                   source: "acp_available_commands",
-                  names: latestObservedCommands,
+                  names,
                 });
               }
             }
@@ -258,7 +334,7 @@ export function createAcpController() {
                     ],
                     comment: record.title || "Artefacto ACP",
                     publishedKeys: turn.publishedArtifactKeys,
-                  }).catch(() => null),
+                  }).catch(/** @returns {null} */ () => null),
                 );
               }
             }
@@ -301,13 +377,21 @@ export function createAcpController() {
                     ],
                     comment: merged.title || "Artefacto ACP",
                     publishedKeys: turn.publishedArtifactKeys,
-                  }).catch(() => null),
+                  }).catch(/** @returns {null} */ () => null),
                 );
               }
             }
           }
         },
-        async request(method, p, id, rpcMeta = {}) {
+        /**
+         * @param {string} method
+         * @param {unknown} params
+         * @param {RpcId} id
+         * @param {RpcRequestMetadata} [rpcMeta]
+         */
+        async request(method, params, id, rpcMeta = {}) {
+          // The RPC layer passes untyped params; this is the shape the provider sends.
+          const p = /** @type {AcpPermissionRequest} */ (params);
           const turn = activeTurn;
           if (
             !turn ||
@@ -334,6 +418,7 @@ export function createAcpController() {
             (o) => o.kind !== "allow_always",
           );
           const sortedOptions = [...safeOptions].sort((a, b) => {
+            /** @param {string} k */
             const rank = (k) =>
               k === "allow_once" ? 0 : k === "reject_once" ? 1 : 2;
             return rank(a.kind) - rank(b.kind);
@@ -412,16 +497,21 @@ export function createAcpController() {
         },
       });
 
-      const init = await rpc.call("initialize", {
-        protocolVersion: 1,
-        clientCapabilities: spec.isolatedDir
-          ? {
-              fs: { readTextFile: false, writeTextFile: false },
-              terminal: false,
-            }
-          : {},
-        clientInfo: { name: "secondbrain", version: "1.0.0" },
-      });
+      const init = /** @type {{
+        authMethods?: unknown[],
+        agentCapabilities?: { sessionCapabilities?: { resume?: boolean }, loadSession?: boolean }
+      }} */ (
+        await rpc.call("initialize", {
+          protocolVersion: 1,
+          clientCapabilities: spec.isolatedDir
+            ? {
+                fs: { readTextFile: false, writeTextFile: false },
+                terminal: false,
+              }
+            : {},
+          clientInfo: { name: "secondbrain", version: "1.0.0" },
+        })
+      );
       if (
         ctx.geminiDir ||
         (Array.isArray(init.authMethods) && init.authMethods.length > 0)
@@ -469,9 +559,11 @@ export function createAcpController() {
           mcpServers: spec.servers,
         });
       }
-      sessionId = ctx.session.conversacionId || result.sessionId;
+      const sessionResult =
+        /** @type {{ sessionId: string, configOptions?: unknown }} */ (result);
+      sessionId = ctx.session.conversacionId || sessionResult.sessionId;
       await ctx.nativeId(sessionId);
-      await ensureModelPinned(ctx, result?.configOptions);
+      await ensureModelPinned(ctx, sessionResult?.configOptions);
     })();
     try {
       await connectPromise;
@@ -483,6 +575,7 @@ export function createAcpController() {
     }
   }
 
+  /** @param {AcpContext} ctx */
   async function runTurn(ctx) {
     lastUsedAt = Date.now();
     const validatedAttachments = validarAdjuntosMotor(
@@ -503,14 +596,15 @@ export function createAcpController() {
     await ensureModelPinned(ctx);
 
     let aborted = false;
-    let killTimer = null;
-    let rejectDisconnect;
-    const disconnectPromise = new Promise((_, reject) => {
-      rejectDisconnect = reject;
-    });
+    /** @type {NodeJS.Timeout | undefined} */
+    let killTimer;
+    /** @type {PromiseWithResolvers<never>} */
+    const { promise: disconnectPromise, reject: rejectDisconnect } =
+      Promise.withResolvers();
     disconnectPromise.catch(() => {});
 
     const generation = ++promptGeneration;
+    /** @type {AcpTurn} */
     const turn = {
       ctx,
       connectionId,
@@ -567,17 +661,19 @@ export function createAcpController() {
     });
 
     try {
-      const completion = await Promise.race([
-        rpc.call(
-          "session/prompt",
-          {
-            sessionId,
-            prompt: formatAcpInput(ctx.prompt, validatedAttachments),
-          },
-          0,
-        ),
-        disconnectPromise,
-      ]);
+      const completion = /** @type {{ stopReason?: string }} */ (
+        await Promise.race([
+          requireRpc().call(
+            "session/prompt",
+            {
+              sessionId,
+              prompt: formatAcpInput(ctx.prompt, validatedAttachments),
+            },
+            0,
+          ),
+          disconnectPromise,
+        ])
+      );
       clearTimeout(killTimer);
       turn.acceptingUpdates = false;
       await Promise.allSettled(turn.pendingWork);

@@ -1,4 +1,3 @@
-// @ts-check
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -6,9 +5,13 @@ import {
   PROVIDER_ADAPTERS,
   validateAndExtractElicitationContent,
 } from "./provider-adapters.mjs";
-import { ErrorLanzador } from "./errores.mjs";
+import { ErrorLanzador } from "./errors.mjs";
 import { sha256Hex } from "./lib/hash.mjs";
 
+/** @import {ConversationAdapter, ConversationAnswer, ConversationCommand, ConversationConnection, ConversationContext, ConversationController, ConversationEvent, ConversationEventInput, ConversationItem, ConversationJob, ConversationReceipt, ConversationRequest, ConversationState, ConversationStore, MessageDeliveryStatus, NativeCallbackStatus, PendingConversationCallback, QueuedConversationMessage, RunConversationOptions, SendConversationMessageOptions} from "./provider-conversation-types.mjs" */
+/** @import {ProviderControl} from "./lib/providers/controller-types.mjs" */
+
+/** @type {Set<string>} */
 export const MESSAGE_DELIVERY_STATUSES = new Set([
   "recibido",
   "en_cola",
@@ -26,22 +29,32 @@ export const REQUEST_DELIVERY_STATUSES = new Set([
   "entrega_incierta",
 ]);
 
+/** @param {unknown} id */
 const validId = (id) => typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id);
 
+/**
+ * @param {unknown} value
+ * @returns {string | undefined}
+ */
 function canonicalStringify(value) {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalStringify).join(",")}]`;
   }
   if (value && typeof value === "object") {
-    const keys = Object.keys(value).sort();
+    const entries = /** @type {Record<string, unknown>} */ (value);
+    const keys = Object.keys(entries).sort();
     return `{${keys
-      .filter((k) => value[k] !== undefined)
-      .map((k) => `${JSON.stringify(k)}:${canonicalStringify(value[k])}`)
+      .filter((k) => entries[k] !== undefined)
+      .map((k) => `${JSON.stringify(k)}:${canonicalStringify(entries[k])}`)
       .join(",")}}`;
   }
   return JSON.stringify(value);
 }
 
+/**
+ * @param {Partial<ConversationState>} state
+ * @returns {ConversationState}
+ */
 function ensureStateShape(state) {
   state.seq ??= 0;
   state.items ??= [];
@@ -54,61 +67,77 @@ function ensureStateShape(state) {
   state.eventSeq ??= state.events.length;
   state.lastTurnStatus ??= null;
   state.connection ??= null;
-  return state;
+  return /** @type {ConversationState} */ (state);
 }
 
-/** Durable protocol events, commands, queues, artifacts, and requests; zero PTY/transcript inference. */
+/**
+ * Durable protocol events, commands, queues, artifacts, and requests; zero PTY/transcript inference.
+ * @param {{
+ *   directory: string,
+ *   adapters?: Record<string, ConversationAdapter>,
+ *   onEvent?: (sessionId: string, event: ConversationEvent) => void
+ * }} options
+ */
 export function createProviderConversations({
   directory,
   adapters = PROVIDER_ADAPTERS,
-  onEvent = /** @type {(...args: any[]) => any} */ (() => {}),
+  onEvent = () => {},
 }) {
+  /** @type {Map<string, Promise<ConversationStore>>} */
   const stores = new Map();
+  /** @type {Map<string, ConversationJob>} */
   const running = new Map();
+  /** @type {Map<string, { controller: ConversationController, configSignature: string }>} */
   const controllers = new Map();
 
+  /**
+   * @param {string} id
+   * @returns {Promise<ConversationStore>}
+   */
   async function load(id) {
     if (!validId(id)) throw new ErrorLanzador("Sesión inválida.", 400);
-    if (!stores.has(id))
-      stores.set(
-        id,
-        (async () => {
-          let state;
-          const filename = path.join(directory, `${id}.json`);
-          try {
-            state = ensureStateShape(
-              JSON.parse(await readFile(filename, "utf8")),
-            );
-          } catch (error) {
-            if (error.code !== "ENOENT") throw error;
-            state = ensureStateShape({});
-          }
-          // A callback belongs strictly to its live process, never across restarts.
-          let changed = false;
-          for (const request of state.requests) {
-            if (request.status === "pending") {
-              request.status = "expired";
-              request.nativeCallbackStatus = "interrupted";
-              if (request.kind === "question") {
-                request.productStatus = "pendiente";
-                request.requiresNewTurn = true;
-              }
-              changed = true;
+    let pending = stores.get(id);
+    if (!pending) {
+      pending = (async () => {
+        let state;
+        const filename = path.join(directory, `${id}.json`);
+        try {
+          state = ensureStateShape(
+            JSON.parse(await readFile(filename, "utf8")),
+          );
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+          state = ensureStateShape({});
+        }
+        // A callback belongs strictly to its live process, never across restarts.
+        let changed = false;
+        for (const request of state.requests) {
+          if (request.status === "pending") {
+            request.status = "expired";
+            request.nativeCallbackStatus = "interrupted";
+            if (request.kind === "question") {
+              request.productStatus = "pendiente";
+              request.requiresNewTurn = true;
             }
+            changed = true;
           }
-          const store = {
-            state,
-            filename,
-            listeners: new Set(),
-            queue: Promise.resolve(),
-          };
-          if (changed) await save(store);
-          return store;
-        })(),
-      );
-    return stores.get(id);
+        }
+        /** @type {ConversationStore} */
+        const store = {
+          state,
+          filename,
+          listeners: new Set(),
+          queue: Promise.resolve(),
+        };
+        if (changed) await save(store);
+        return store;
+      })();
+      stores.set(id, pending);
+    }
+    return pending;
   }
 
+  /** @param {ConversationStore} store */
   function save(store) {
     const content = JSON.stringify(store.state);
     const write = store.queue.then(async () => {
@@ -127,6 +156,11 @@ export function createProviderConversations({
     return write;
   }
 
+  /**
+   * @param {ConversationState} state
+   * @param {string} sessionId
+   * @param {ConversationEventInput} ev
+   */
   function pushEvent(state, sessionId, ev) {
     const event = {
       id: ev.id || randomUUID(),
@@ -153,6 +187,10 @@ export function createProviderConversations({
     return event;
   }
 
+  /**
+   * @param {ConversationStore} store
+   * @param {(state: ConversationState) => void} fn
+   */
   function change(store, fn) {
     fn(store.state);
     store.state.seq++;
@@ -160,16 +198,19 @@ export function createProviderConversations({
     return save(store);
   }
 
+  /** @param {string} id */
   async function snapshot(id) {
     const store = await load(id);
     await store.queue;
     return structuredClone(store.state);
   }
 
-  async function shutdownController(
-    id,
-    { reason = "Cierre explícito" } = /** @type {any} */ ({}),
-  ) {
+  /**
+   * @param {string} id
+   * @param {{ reason?: string }} [options]
+   * @returns {Promise<{ closed: boolean, id: string, pid: number | null, reason?: string }>}
+   */
+  async function shutdownController(id, { reason = "Cierre explícito" } = {}) {
     const entry = controllers.get(id);
     if (!entry) return { closed: false, id, pid: null };
     const oldPid = entry.controller.pid();
@@ -183,9 +224,10 @@ export function createProviderConversations({
     } catch {
       /* ensure cleanup proceeds even on dead child */
     }
-    const store = await load(id).catch(() => null);
+    const store = await load(id).catch(/** @returns {null} */ () => null);
     if (store) {
       const evicted = /evic|límite|recurso/i.test(reason);
+      /** @type {ConversationConnection} */
       const nextConn = {
         status: evicted ? "evicted" : "closed",
         pid: null,
@@ -212,6 +254,7 @@ export function createProviderConversations({
     );
   }
 
+  /** @param {string[]} [excludeIds] */
   async function evictOldestIdle(
     reason = "Cerrada por límite de procesos activos",
     excludeIds = [],
@@ -228,6 +271,7 @@ export function createProviderConversations({
     return shutdownController(victimId, { reason });
   }
 
+  /** @param {string} id */
   function hasLiveController(id) {
     return Boolean(controllers.get(id)?.controller?.isAlive());
   }
@@ -253,6 +297,7 @@ export function createProviderConversations({
     return items;
   }
 
+  /** @param {string} idOrMotor */
   function capabilities(idOrMotor) {
     const entry = controllers.get(idOrMotor);
     if (entry?.controller?.capabilities) {
@@ -270,6 +315,7 @@ export function createProviderConversations({
     };
   }
 
+  /** @param {RunConversationOptions} options */
   async function run({
     session,
     prompt,
@@ -294,8 +340,11 @@ export function createProviderConversations({
     if (!adapter) throw new Error("Proveedor no compatible");
     const store = await load(session.id);
     const turnId = randomUUID();
+    /** @type {Map<string, PendingConversationCallback>} */
     const callbacks = new Map();
+    /** @type {(() => void)[]} */
     const aborters = [];
+    /** @type {Partial<ProviderControl>} */
     let control = { supportsSteer: false };
     let nativeId = session.conversacionId;
     let sequence = 0;
@@ -303,19 +352,23 @@ export function createProviderConversations({
     let connectionDropped = false;
     let pendingWrite = Promise.resolve();
     let persistenceError;
+    /** @type {ConversationController | null} */
     let activeController = null;
     let unconfirmedDelivered = false;
 
-    const configSignature = canonicalStringify({
-      motor: session.motor,
-      modelo: session.modelo ?? null,
-      esfuerzo: session.esfuerzo ?? null,
-      cwd,
-      mcpServers: mcpServers === undefined ? "undefined" : mcpServers,
-      geminiDir,
-      disableInheritedMcp,
-      toolProfileId: toolProfile?.id ?? null,
-    });
+    // Stringifying an object literal always yields a string.
+    const configSignature = /** @type {string} */ (
+      canonicalStringify({
+        motor: session.motor,
+        modelo: session.modelo ?? null,
+        esfuerzo: session.esfuerzo ?? null,
+        cwd,
+        mcpServers: mcpServers === undefined ? "undefined" : mcpServers,
+        geminiDir,
+        disableInheritedMcp,
+        toolProfileId: toolProfile?.id ?? null,
+      })
+    );
 
     if (typeof adapter.createController === "function") {
       const existing = controllers.get(session.id);
@@ -340,6 +393,7 @@ export function createProviderConversations({
     }
     const connectionId = activeController?.connectionId || randomUUID();
 
+    /** @param {(state: ConversationState) => void} fn */
     const write = (fn) => {
       const next = pendingWrite.then(() => change(store, fn));
       pendingWrite = next.catch((error) => {
@@ -348,6 +402,7 @@ export function createProviderConversations({
       return next;
     };
 
+    /** @param {ConversationState} state */
     const promoteDeliveredReceipts = (state) => {
       if (!unconfirmedDelivered) return;
       let stillPending = false;
@@ -386,6 +441,10 @@ export function createProviderConversations({
       unconfirmedDelivered = stillPending;
     };
 
+    /**
+     * @param {ConversationState} state
+     * @param {string} reasonMessage
+     */
     const reconcileUnconfirmedCallbacks = (state, reasonMessage) => {
       for (const r of state.receipts) {
         if (
@@ -416,6 +475,10 @@ export function createProviderConversations({
       unconfirmedDelivered = false;
     };
 
+    /**
+     * @param {string} id
+     * @param {Partial<ConversationItem>} patch
+     */
     const upsert = (id, patch) =>
       write((state) => {
         let item = state.items.find((i) => i.id === id);
@@ -431,7 +494,9 @@ export function createProviderConversations({
         Object.assign(item, patch);
       });
 
+    /** @type {Map<string, { value: string, ephemeral: boolean }>} */
     const deltas = new Map();
+    /** @type {NodeJS.Timeout | undefined} */
     let deltaTimer;
     const flushDeltas = () => {
       clearTimeout(deltaTimer);
@@ -457,6 +522,10 @@ export function createProviderConversations({
       });
     };
 
+    /**
+     * @param {NativeCallbackStatus} reason
+     * @param {string} errMessage
+     */
     const invalidateCallbacks = (reason, errMessage) => {
       if (callbacks.size === 0) return;
       const pending = [...callbacks.entries()];
@@ -478,6 +547,10 @@ export function createProviderConversations({
       }
     };
 
+    /**
+     * @param {string} targetConnId
+     * @param {string} reasonMessage
+     */
     const invalidateConnection = (targetConnId, reasonMessage) => {
       connectionDropped = true;
       for (const [reqId, cb] of [...callbacks.entries()]) {
@@ -555,6 +628,7 @@ export function createProviderConversations({
       });
     });
 
+    /** @type {ConversationContext} */
     const ctx = {
       turnId,
       connectionId,
@@ -774,6 +848,7 @@ export function createProviderConversations({
             closed: false,
           });
           write((state) => {
+            /** @type {ConversationRequest} */
             const record = {
               ...request,
               id,
@@ -803,6 +878,7 @@ export function createProviderConversations({
     };
 
     let adapterOutcome = { status: "completed" };
+    /** @type {Error | null} */
     let turnError = null;
     try {
       const outcome = activeController
@@ -895,6 +971,10 @@ export function createProviderConversations({
     );
   }
 
+  /**
+   * @param {string} id
+   * @param {SendConversationMessageOptions} [options]
+   */
   async function sendMessage(
     id,
     {
@@ -906,7 +986,7 @@ export function createProviderConversations({
       // The caller still holds the session: a turn this layer has already
       // finished must not leave the message accepted but never delivered.
       queueIfIdle = false,
-    } = /** @type {any} */ ({}),
+    } = {},
   ) {
     if (!clientMessageId || typeof clientMessageId !== "string") {
       throw new ErrorLanzador("clientMessageId inválido.", 400);
@@ -931,10 +1011,11 @@ export function createProviderConversations({
     }
 
     const now = new Date().toISOString();
+    /** @type {ConversationCommand} */
     const command = {
       id: randomUUID(),
       clientMessageId,
-      mode,
+      mode: /** @type {ConversationCommand["mode"]} */ (mode),
       text: String(text || "").trim(),
       attachments: structuredClone(attachments),
       deliveryStatus: "recibido",
@@ -952,6 +1033,7 @@ export function createProviderConversations({
         (mode === "queue" || mode === "send" || !job.control?.supportsSteer))
     ) {
       command.deliveryStatus = "en_cola";
+      /** @type {QueuedConversationMessage} */
       const queueItem = {
         commandId: command.id,
         clientMessageId: command.clientMessageId,
@@ -1002,9 +1084,15 @@ export function createProviderConversations({
         });
       });
       try {
+        // supportsSteer is only advertised together with steer().
+        if (!job.control.steer)
+          throw new Error("El proveedor no admite redirección.");
         await job.control.steer(command.text, command.attachments);
         await change(store, (state) => {
-          const target = state.commands.find((c) => c.id === command.id);
+          // The command was pushed by the change above.
+          const target = /** @type {ConversationCommand} */ (
+            state.commands.find((c) => c.id === command.id)
+          );
           target.deliveryStatus = "confirmado_proveedor";
           target.updatedAt = new Date().toISOString();
           state.items.push({
@@ -1025,7 +1113,10 @@ export function createProviderConversations({
         };
       } catch (err) {
         await change(store, (state) => {
-          const target = state.commands.find((c) => c.id === command.id);
+          // The command was pushed by the change above.
+          const target = /** @type {ConversationCommand} */ (
+            state.commands.find((c) => c.id === command.id)
+          );
           target.deliveryStatus = "entrega_incierta";
           target.error = err?.message || "Fallo al confirmar redirección";
           target.updatedAt = new Date().toISOString();
@@ -1063,6 +1154,12 @@ export function createProviderConversations({
     };
   }
 
+  /**
+   * @param {string} id
+   * @param {string} commandId
+   * @param {MessageDeliveryStatus} deliveryStatus
+   * @param {string | null} [error]
+   */
   async function markCommandDelivery(
     id,
     commandId,
@@ -1088,12 +1185,17 @@ export function createProviderConversations({
     return structuredClone(updated);
   }
 
+  /** @param {string} id */
   async function listQueue(id) {
     const store = await load(id);
     await store.queue;
     return structuredClone(store.state.queue);
   }
 
+  /**
+   * @param {string} id
+   * @param {string} clientMessageId
+   */
   async function cancelQueuedMessage(id, clientMessageId) {
     const store = await load(id);
     await store.queue;
@@ -1123,22 +1225,28 @@ export function createProviderConversations({
     return { ok: true, command: structuredClone(cancelled) };
   }
 
+  /** @param {string} id */
   async function consumeNextQueuedMessage(id) {
     const store = await load(id);
     await store.queue;
     if (store.state.queue.length === 0) return null;
+    /** @type {QueuedConversationMessage | null} */
     let nextItem = null;
     await change(store, (state) => {
       nextItem = state.queue.shift() || null;
-      if (nextItem) {
-        const cmd = state.commands.find((c) => c.id === nextItem.commandId);
+      const item = nextItem;
+      if (item) {
+        const cmd = state.commands.find((c) => c.id === item.commandId);
         if (cmd) {
           cmd.deliveryStatus = "entregado";
           cmd.updatedAt = new Date().toISOString();
         }
       }
     });
-    return structuredClone(nextItem);
+    // Assigned inside change(); TypeScript cannot see writes from closures.
+    return structuredClone(
+      /** @type {QueuedConversationMessage | null} */ (nextItem),
+    );
   }
 
   return {
@@ -1155,6 +1263,10 @@ export function createProviderConversations({
     shutdown: shutdownController,
     shutdownAll,
     evictOldestIdle,
+    /**
+     * @param {string} sessionId
+     * @param {string} artifactId
+     */
     async readArtifact(sessionId, artifactId) {
       if (!validId(sessionId) || !validId(artifactId)) {
         throw new ErrorLanzador("Identificador de artefacto inválido.", 400);
@@ -1192,6 +1304,7 @@ export function createProviderConversations({
       }
       return { artifact: structuredClone(entry), buffer };
     },
+    /** @param {string} id */
     async remove(id) {
       if (running.has(id))
         throw new ErrorLanzador("Detén la sesión antes de eliminarla", 409);
@@ -1207,12 +1320,21 @@ export function createProviderConversations({
       }).catch(() => {});
       stores.delete(id);
     },
+    /** @param {string} id */
     abort: (id) => running.get(id)?.abort(),
+    /**
+     * @param {string} id
+     * @param {() => void} listener
+     */
     async subscribe(id, listener) {
       const store = await load(id);
       store.listeners.add(listener);
       return () => store.listeners.delete(listener);
     },
+    /**
+     * @param {string} id
+     * @param {ConversationAnswer & { requestId: string, responseId: string }} input
+     */
     async answer(id, { requestId, responseId, answers, decision, content }) {
       if (!validId(requestId) || !validId(responseId))
         throw new ErrorLanzador("Respuesta inválida.", 400);
@@ -1249,9 +1371,11 @@ export function createProviderConversations({
         request.nativeCallbackStatus !== "open"
       )
         throw new ErrorLanzador("La solicitud ya no está vigente.", 409);
+      // A callback is only found through its running job.
+      const job = /** @type {ConversationJob} */ (liveJob);
       if (callback.isConnectionAlive && !callback.isConnectionAlive()) {
         callback.closed = true;
-        liveJob.callbacks.delete(requestId);
+        job.callbacks.delete(requestId);
         await change(store, () => {
           request.status = "expired";
           request.nativeCallbackStatus = "interrupted";
@@ -1266,7 +1390,7 @@ export function createProviderConversations({
         );
       }
       if (request.kind === "approval") {
-        if (!request.choices?.includes(decision)) {
+        if (!decision || !request.choices?.includes(decision)) {
           throw new ErrorLanzador("Decisión inválida.", 400);
         }
         if (
@@ -1297,6 +1421,7 @@ export function createProviderConversations({
 
       // Step 1: Claim synchronously and persist answer durably ("respuesta_recibida") BEFORE dispatch.
       request._claiming = true;
+      /** @type {ConversationReceipt} */
       const result = {
         requestId,
         responseId,
@@ -1346,10 +1471,11 @@ export function createProviderConversations({
         }
       });
 
-      liveJob.callbacks.delete(requestId);
+      job.callbacks.delete(requestId);
+      /** @type {Parameters<PendingConversationCallback["resolve"]>[0]} */
       const replyPayload =
         request.kind === "question"
-          ? answers
+          ? /** @type {any} */ (answers)
           : {
               decision,
               ...(content !== undefined
@@ -1362,7 +1488,7 @@ export function createProviderConversations({
       if (callback.writeAck) {
         try {
           await callback.writeAck;
-          liveJob.markDeliveredPendingConfirmation?.();
+          job.markDeliveredPendingConfirmation?.();
           await change(store, (state) => {
             result.status = "entregada";
             result.delivered = true;
@@ -1404,7 +1530,7 @@ export function createProviderConversations({
       } else if (callback.transportMode === "sdk_callback_return") {
         try {
           await callback.callbackAck;
-          liveJob.markDeliveredPendingConfirmation?.();
+          job.markDeliveredPendingConfirmation?.();
           await change(store, (state) => {
             // Claude SDK callbacks return a Promise to the SDK without an OS pipe write-flush ack.
             result.status = "entregando";
@@ -1451,7 +1577,7 @@ export function createProviderConversations({
           });
         }
       } else {
-        liveJob.markDeliveredPendingConfirmation?.();
+        job.markDeliveredPendingConfirmation?.();
         await change(store, () => {
           result.status = "entregada";
           result.delivered = true;
@@ -1466,6 +1592,17 @@ export function createProviderConversations({
   };
 }
 
+/**
+ * @param {{
+ *   res: import("node:http").ServerResponse,
+ *   id: string,
+ *   conversations: Pick<ReturnType<typeof createProviderConversations>, "snapshot" | "subscribe">,
+ *   registro: {
+ *     leer(): readonly { id: string, eliminada?: boolean, structured?: boolean, estado?: string, error?: string | null }[],
+ *     subscribe(listener: () => void): () => void
+ *   }
+ * }} options
+ */
 export async function serveProviderConversation({
   res,
   id,
@@ -1476,6 +1613,7 @@ export async function serveProviderConversation({
   if (!session?.structured)
     throw new ErrorLanzador("Conversación estructurada no disponible.", 409);
   let closed = false;
+  /** @type {Promise<void | import("node:http").ServerResponse>} */
   let pending = Promise.resolve();
   const send = () => {
     pending = pending

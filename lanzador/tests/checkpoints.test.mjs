@@ -16,8 +16,8 @@ import {
   crearCheckpoints,
   crearSeguimiento,
 } from "../checkpoints.mjs";
-import { abrirRegistro } from "../sesiones.mjs";
-import { crearEjecutor } from "../ejecucion.mjs";
+import { abrirRegistro } from "../sessions.mjs";
+import { crearEjecutor } from "../executor.mjs";
 import { git, repoSintetico } from "./helpers-git.mjs";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";

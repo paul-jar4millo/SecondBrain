@@ -1,7 +1,10 @@
-// @ts-check
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
+/**
+ * @param {{ tool_name?: unknown, toolName?: unknown, tool?: { name?: unknown } }} entrada
+ * @param {unknown} id
+ */
 export function eventoHook(entrada, id) {
   const herramienta =
     entrada?.tool_name || entrada?.toolName || entrada?.tool?.name;

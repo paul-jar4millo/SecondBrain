@@ -1,33 +1,35 @@
-// @ts-check
 import http from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { inferirFase } from "./fases.mjs";
+import { inferirFase } from "./phases.mjs";
 import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { acquireInstance } from "../service/instance.mjs";
-import { abrirRegistro } from "./sesiones.mjs";
-import { crearEjecutor } from "./ejecucion.mjs";
-import { abrirEquipos } from "./equipos.mjs";
-import { crearCatalogo } from "./modelos.mjs";
-import { observarConversaciones } from "./conversaciones.mjs";
-import { abrirEspacios } from "./espacios.mjs";
-import { crearUso } from "./uso.mjs";
+import { abrirRegistro } from "./sessions.mjs";
+import { crearEjecutor } from "./executor.mjs";
+import { abrirEquipos } from "./teams.mjs";
+import { crearCatalogo } from "./models.mjs";
+import { observarConversaciones } from "./conversations.mjs";
+import { abrirEspacios } from "./workspaces.mjs";
+import { crearUso } from "./usage.mjs";
 import { crearItems } from "./items.mjs";
-import { servirFlujo } from "./flujo.mjs";
+import { servirFlujo } from "./flow.mjs";
 import { crearGit } from "./git.mjs";
 import { crearCheckpoints, crearSeguimiento } from "./checkpoints.mjs";
 import { crearPr } from "./pr.mjs";
-import { crearAcciones } from "./acciones.mjs";
-import { ErrorLanzador } from "./errores.mjs";
-import { ocultarDiagnostico } from "./diagnostico.mjs";
-import { CAPACIDADES, REQUISITOS } from "./motores.mjs";
+import { crearAcciones } from "./actions.mjs";
+import { ErrorLanzador } from "./errors.mjs";
+import { ocultarDiagnostico } from "./diagnostics.mjs";
+import { CAPACIDADES, REQUISITOS } from "./engines.mjs";
 import { readLimits } from "./limits.mjs";
 import {
   createProviderConversations,
   serveProviderConversation,
 } from "./provider-conversations.mjs";
-import { createToolCatalogStore } from "./catalogo-herramientas.mjs";
+import { createToolCatalogStore } from "./tool-catalog.mjs";
+
+/** @import { LauncherRequestBody, LauncherServerOptions } from "./launcher-server-types.d.ts" */
+/** @import { ExecutionRequest } from "./types.d.ts" */
 
 // Plain Errors thrown while checking a request; they are the caller's fault.
 const VALIDACIONES = new Set([
@@ -61,18 +63,21 @@ const VALIDACIONES = new Set([
 
 export async function arrancar(env = process.env) {
   const limits = readLimits(env);
-  for (const nombre of [
-    "SB_LANZADOR_DATA_DIR",
-    "SB_CONTROL_HASH_FILE",
-    "SB_HOOK_HASH_FILE",
-    "SB_PROYECTOS_FILE",
-  ])
-    if (!env[nombre] || !path.isAbsolute(env[nombre]))
+  /** An absolute path the launcher cannot start without. */
+  const requiredPath = (/** @type {string} */ nombre) => {
+    const value = env[nombre];
+    if (!value || !path.isAbsolute(value))
       throw new Error(`Falta configuración: ${nombre}`);
+    return value;
+  };
+  const dataDir = requiredPath("SB_LANZADOR_DATA_DIR");
+  const controlHashFile = requiredPath("SB_CONTROL_HASH_FILE");
+  const hookHashFile = requiredPath("SB_HOOK_HASH_FILE");
+  const proyectosFile = requiredPath("SB_PROYECTOS_FILE");
   const puerto = Number(env.SB_LANZADOR_PORT ?? 8092);
   if (!Number.isInteger(puerto) || puerto < 0 || puerto > 65535)
     throw new Error("Puerto inválido");
-  const proyectos = JSON.parse(await readFile(env.SB_PROYECTOS_FILE, "utf8"));
+  const proyectos = JSON.parse(await readFile(proyectosFile, "utf8"));
   if (!proyectos || Array.isArray(proyectos) || typeof proyectos !== "object")
     throw new Error("Proyectos inválidos");
   for (const [nombre, directorio] of Object.entries(proyectos)) {
@@ -86,47 +91,44 @@ export async function arrancar(env = process.env) {
     if (!(await stat(proyectos[nombre])).isDirectory())
       throw new Error("Proyecto no es directorio");
   }
-  const controlHash = (await readFile(env.SB_CONTROL_HASH_FILE, "utf8")).trim();
-  const hookHash = (await readFile(env.SB_HOOK_HASH_FILE, "utf8")).trim();
-  const soltar = await acquireInstance(env.SB_LANZADOR_DATA_DIR);
+  const controlHash = (await readFile(controlHashFile, "utf8")).trim();
+  const hookHash = (await readFile(hookHashFile, "utf8")).trim();
+  const soltar = await acquireInstance(dataDir);
   try {
-    const registro = await abrirRegistro(
-      path.join(env.SB_LANZADOR_DATA_DIR, "sesiones.json"),
-      { retencionDias: limits.retencionDias },
-    );
-    const equipos = await abrirEquipos(
-      path.join(env.SB_LANZADOR_DATA_DIR, "equipos"),
-      {
-        activo: (id) =>
-          registro
-            .leer()
-            .some(
-              (s) =>
-                s.id === id && ["pendiente", "trabajando"].includes(s.estado),
-            ),
-        onChange: () => registro.notificar(),
-      },
-    );
+    const registro = await abrirRegistro(path.join(dataDir, "sesiones.json"), {
+      retencionDias: limits.retencionDias,
+    });
+    const equipos = await abrirEquipos(path.join(dataDir, "equipos"), {
+      activo: (id) =>
+        registro
+          .leer()
+          .some(
+            (s) =>
+              s.id === id && ["pendiente", "trabajando"].includes(s.estado),
+          ),
+      onChange: () => registro.notificar(),
+    });
     const espacios = await abrirEspacios({
-      archivo: path.join(env.SB_LANZADOR_DATA_DIR, "espacios.json"),
+      archivo: path.join(dataDir, "espacios.json"),
       proyectos,
-      workspaces: path.join(env.SB_LANZADOR_DATA_DIR, "workspaces"),
+      workspaces: path.join(dataDir, "workspaces"),
     });
     const ejecutorGit = crearGit({ env });
     const checkpoints = crearCheckpoints({
       git: ejecutorGit,
-      dirIndices: path.join(env.SB_LANZADOR_DATA_DIR, "indices-checkpoint"),
+      dirIndices: path.join(dataDir, "indices-checkpoint"),
     });
     const seguimiento = crearSeguimiento({
       registro,
       checkpoints,
-      cwdDe: (s) => s.directorio || proyectos[s.proyecto] || null,
+      cwdDe: (s) =>
+        s.directorio || (s.proyecto ? proyectos[s.proyecto] : null) || null,
     });
     const conversations = createProviderConversations({
-      directory: path.join(env.SB_LANZADOR_DATA_DIR, "conversations"),
+      directory: path.join(dataDir, "conversations"),
     });
     const toolCatalog = await createToolCatalogStore({
-      dataDir: env.SB_LANZADOR_DATA_DIR,
+      dataDir: dataDir,
       env,
     });
     const ejecutor = crearEjecutor({
@@ -188,6 +190,10 @@ export async function arrancar(env = process.env) {
   }
 }
 
+/**
+ * @param {unknown} header
+ * @param {string} hash
+ */
 function autorizado(header, hash) {
   if (typeof header !== "string" || !header.startsWith("Bearer ")) return false;
   const esperado = Buffer.from(hash, "hex");
@@ -199,6 +205,11 @@ function autorizado(header, hash) {
 
 // The catalog checks both what the caller asked for and what the approved
 // manifest card fixes, so a card cannot carry an unavailable model.
+/**
+ * @param {Pick<ReturnType<typeof crearCatalogo>, "validar">} catalogo
+ * @param {Pick<LauncherRequestBody, "motor" | "modelo" | "esfuerzo" | "manifest" | "memberId">} datos
+ * @param {{ coordinadora: boolean }} options
+ */
 async function validarSeleccion(catalogo, datos, { coordinadora }) {
   await catalogo.validar(datos.motor, datos.modelo, datos.esfuerzo);
   const team = Array.isArray(datos.manifest?.team) ? datos.manifest.team : [];
@@ -213,6 +224,7 @@ async function validarSeleccion(catalogo, datos, { coordinadora }) {
     await catalogo.validar(datos.motor, card.model, card.effort || undefined);
 }
 
+/** @param {LauncherServerOptions} options */
 export function crearServidor({
   registro,
   ejecutor,
@@ -234,12 +246,18 @@ export function crearServidor({
     controlHash === hookHash
   )
     throw new Error("Credenciales de control y hooks inválidas");
+  /** @type {Awaited<ReturnType<typeof createToolCatalogStore>> | null} */
   let fallbackToolCatalog = null;
   const getToolCatalog = async () =>
     toolCatalog ||
     (fallbackToolCatalog ??= await createToolCatalogStore({ env: {} }));
   return http.createServer(async (req, res) => {
+    /** @type {LauncherRequestBody | undefined} */
     let datos;
+    /**
+     * @param {number} status
+     * @param {unknown} [data]
+     */
     const enviar = (status, data) => {
       res.writeHead(status, {
         "Content-Type": "application/json",
@@ -248,23 +266,27 @@ export function crearServidor({
       res.end(data === undefined ? undefined : JSON.stringify(data));
     };
     try {
-      const esHook = req.method === "POST" && req.url === "/eventos";
+      // Always set for requests that reach an http.Server.
+      const url = req.url ?? "/";
+      const esHook = req.method === "POST" && url === "/eventos";
       if (
         !autorizado(req.headers.authorization, esHook ? hookHash : controlHash)
       )
         return enviar(401, { error: "No autorizado." });
-      const ruta = new URL(req.url, "http://127.0.0.1");
+      const ruta = new URL(url, "http://127.0.0.1");
       const accionSesion =
         /^\/sesiones\/([a-f0-9-]{36})\/(diff|pr\/propuesta|revertir|pr\/redactar|pr)$/i.exec(
           ruta.pathname,
         );
-      if (req.method === "GET" && req.url === "/capacidades")
+      if (req.method === "GET" && url === "/capacidades")
         return enviar(200, { motores: CAPACIDADES, requisitos: REQUISITOS });
       if (req.method === "GET" && accionSesion && acciones) {
         if (accionSesion[2] === "diff") {
+          /** @param {string | null} v */
           const numero = (v) => (v === null ? undefined : Number(v));
           const desde = numero(ruta.searchParams.get("desde"));
           const hasta = ruta.searchParams.get("hasta");
+          /** @param {number | undefined} v */
           const valido = (v) =>
             v === undefined || (Number.isInteger(v) && v >= 1);
           if (
@@ -284,7 +306,7 @@ export function crearServidor({
         if (accionSesion[2] === "pr/propuesta")
           return enviar(200, await acciones.propuesta(accionSesion[1]));
       }
-      if (req.method === "GET" && req.url === "/estado")
+      if (req.method === "GET" && url === "/estado")
         return enviar(
           200,
           acciones
@@ -294,13 +316,13 @@ export function crearServidor({
                 .filter((s) => !s.eliminada)
                 .map(({ terminal: _terminal, ...session }) => session),
         );
-      if (req.method === "GET" && req.url === "/proyectos")
+      if (req.method === "GET" && url === "/proyectos")
         return enviar(200, Object.keys(proyectos));
-      if (req.method === "GET" && req.url === "/modelos")
+      if (req.method === "GET" && url === "/modelos")
         return enviar(200, await catalogo.modelos());
-      if (req.method === "GET" && req.url === "/uso")
+      if (req.method === "GET" && url === "/uso")
         return enviar(200, await uso());
-      if (req.method === "GET" && req.url === "/espacios" && espacios)
+      if (req.method === "GET" && url === "/espacios" && espacios)
         return enviar(200, espacios.leer());
       if (req.method === "GET" && ruta.pathname === "/herramientas/catalogo") {
         const cat = await getToolCatalog();
@@ -318,10 +340,8 @@ export function crearServidor({
           }),
         );
       }
-      const terminalRoute = /^\/sesiones\/([a-f0-9-]{36})\/terminal$/.exec(
-        req.url,
-      );
-      const flujoRoute = /^\/sesiones\/([a-f0-9-]{36})\/stream$/.exec(req.url);
+      const terminalRoute = /^\/sesiones\/([a-f0-9-]{36})\/terminal$/.exec(url);
+      const flujoRoute = /^\/sesiones\/([a-f0-9-]{36})\/stream$/.exec(url);
       const conversationRoute =
         /^\/sesiones\/([a-f0-9-]{36})\/conversation(?:\/(answer|messages|queue|queue\/cancel|shutdown))?$/.exec(
           ruta.pathname,
@@ -391,7 +411,7 @@ export function crearServidor({
           registro,
           items,
         });
-      if (req.method === "GET" && req.url === "/events") {
+      if (req.method === "GET" && url === "/events") {
         res.writeHead(200, {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
@@ -412,14 +432,14 @@ export function crearServidor({
       }
       const cancelar =
         req.method === "POST" &&
-        /^\/sesiones\/([a-f0-9-]+)\/cancelar$/i.exec(req.url);
+        /^\/sesiones\/([a-f0-9-]+)\/cancelar$/i.exec(url);
       if (cancelar) {
         await ejecutor.cancelar(cancelar[1]);
         return enviar(202, { ok: true });
       }
       const eliminar =
         req.method === "POST" &&
-        /^\/sesiones\/([a-f0-9-]{36})\/eliminar$/i.exec(req.url);
+        /^\/sesiones\/([a-f0-9-]{36})\/eliminar$/i.exec(url);
       if (eliminar) return enviar(200, await ejecutor.eliminar(eliminar[1]));
       const accionesEquipo = [
         "encargar",
@@ -431,9 +451,8 @@ export function crearServidor({
         "integrar",
       ];
       const accionEquipo =
-        req.url.startsWith("/equipo/") &&
-        accionesEquipo.includes(req.url.slice(8))
-          ? req.url.slice(8)
+        url.startsWith("/equipo/") && accionesEquipo.includes(url.slice(8))
+          ? url.slice(8)
           : null;
       if (
         req.method !== "POST" ||
@@ -443,7 +462,7 @@ export function crearServidor({
           "/espacios",
           "/herramientas/perfiles",
           "/herramientas/skills/resolver",
-        ].includes(req.url) &&
+        ].includes(url) &&
           !accionEquipo &&
           !terminalRoute &&
           !conversationRoute &&
@@ -469,24 +488,37 @@ export function crearServidor({
       }
       if (!datos || typeof datos !== "object" || Array.isArray(datos))
         return enviar(400, { error: "Petición inválida." });
-      if (req.url === "/espacios" && espacios)
-        return enviar(200, await espacios.vincular(datos));
-      if (req.url === "/herramientas/perfiles") {
+      // Validated as a plain object above; a const keeps that inside callbacks.
+      const body = datos;
+      if (url === "/espacios" && espacios)
+        return enviar(
+          200,
+          await espacios.vincular(
+            /** @type {Parameters<typeof espacios.vincular>[0]} */ (body),
+          ),
+        );
+      if (url === "/herramientas/perfiles") {
         const cat = await getToolCatalog();
         try {
-          return enviar(200, await cat.updateProfile(datos.profileId, datos));
+          return enviar(
+            200,
+            await cat.updateProfile(
+              /** @type {string} */ (body.profileId),
+              body,
+            ),
+          );
         } catch (err) {
           throw new ErrorLanzador(err.message, 400);
         }
       }
-      if (req.url === "/herramientas/skills/resolver") {
+      if (url === "/herramientas/skills/resolver") {
         const cat = await getToolCatalog();
         const {
           billingAuthorized: _ignoredBilling,
           verifiedOperatorBillingGrant: _ignoredGrant,
           optInProbe = false,
           ...safeDatos
-        } = datos && typeof datos === "object" ? datos : {};
+        } = body && typeof body === "object" ? body : {};
         try {
           if (optInProbe === true) {
             await cat.runHealthChecks({
@@ -507,21 +539,30 @@ export function crearServidor({
         if (!session?.structured)
           throw new ErrorLanzador("Conversación no disponible.", 404);
         if (conversationRoute[2] === "answer")
-          return enviar(200, await conversations.answer(session.id, datos));
+          return enviar(
+            200,
+            await conversations.answer(
+              session.id,
+              /** @type {Parameters<typeof conversations.answer>[1]} */ (body),
+            ),
+          );
         if (conversationRoute[2] === "messages")
-          return enviar(200, await ejecutor.enviarMensaje(session.id, datos));
+          return enviar(200, await ejecutor.enviarMensaje(session.id, body));
         if (conversationRoute[2] === "queue/cancel")
           return enviar(
             200,
-            await ejecutor.cancelarCola(session.id, datos.clientMessageId),
+            await ejecutor.cancelarCola(
+              session.id,
+              /** @type {string} */ (body.clientMessageId),
+            ),
           );
         if (conversationRoute[2] === "shutdown")
           return enviar(
             200,
             await ejecutor.cerrarConexion(
               session.id,
-              typeof datos.reason === "string" && datos.reason.trim()
-                ? datos.reason.trim()
+              typeof body.reason === "string" && body.reason.trim()
+                ? body.reason.trim()
                 : undefined,
             ),
           );
@@ -529,116 +570,118 @@ export function crearServidor({
       if (accionSesion && acciones) {
         const id = accionSesion[1];
         if (accionSesion[2] === "revertir")
-          return enviar(200, await acciones.revertir(id, datos.n));
+          return enviar(
+            200,
+            await acciones.revertir(id, /** @type {number} */ (body.n)),
+          );
         if (accionSesion[2] === "pr")
-          return enviar(200, await acciones.pr(id, datos));
+          return enviar(200, await acciones.pr(id, body));
         if (accionSesion[2] === "pr/redactar")
           return enviar(200, await acciones.redactar(id));
         return enviar(404, { error: "Ruta no encontrada." });
       }
       if (terminalRoute) {
-        if (datos.interrumpir === true && acciones) {
+        if (body.interrumpir === true && acciones) {
           const sesion = registro.leer().find((s) => s.id === terminalRoute[1]);
           if (sesion && !(await acciones.capacidades(sesion))?.interrumpir)
             throw new ErrorLanzador(
               "Esta sesión no tiene terminal en marcha para interrumpir el turno.",
             );
         }
-        return enviar(200, ejecutor.entrada(terminalRoute[1], datos));
+        return enviar(200, ejecutor.entrada(terminalRoute[1], body));
       }
       if (accionEquipo) {
         const sesion = registro
           .leer()
-          .find((s) => s.id === datos.sesion && s.estado === "trabajando");
-        const actor = {
+          .find((s) => s.id === body.sesion && s.estado === "trabajando");
+        /** @type {Record<string, string>} */
+        const actores = {
           claude: "ambar",
           codex: "menta",
           agy: "lira",
           deepseek: "marina",
-        }[sesion?.motor];
-        if (!equipos || !sesion || !actor || datos.actor !== actor)
+        };
+        const actor = actores[sesion?.motor ?? ""];
+        if (!equipos || !sesion || !actor || body.actor !== actor)
           return enviar(403, { error: "Sesión no activa." });
         let resultado;
         if (accionEquipo === "encargar") {
-          await validarSeleccion(catalogo, datos, { coordinadora: false });
-          resultado = await ejecutor.encargarHija(datos.sesion, {
-            id: datos.id || null,
-            motor: datos.motor,
-            proyecto: datos.proyecto,
-            brief: datos.brief,
-            modelo: datos.modelo,
-            esfuerzo: datos.esfuerzo,
-            toolProfileId: datos.toolProfileId || null,
-            effectiveProfile: datos.effectiveProfile || null,
-            skillIds: Array.isArray(datos.skillIds) ? datos.skillIds : null,
-            capabilityToken: datos.capabilityToken || null,
+          await validarSeleccion(catalogo, body, { coordinadora: false });
+          resultado = await ejecutor.encargarHija(sesion.id, {
+            id: body.id || null,
+            motor: /** @type {string} */ (body.motor),
+            proyecto: body.proyecto,
+            brief: /** @type {string} */ (body.brief),
+            modelo: body.modelo,
+            esfuerzo: body.esfuerzo,
+            toolProfileId: body.toolProfileId || null,
+            effectiveProfile: body.effectiveProfile || null,
+            skillIds: Array.isArray(body.skillIds) ? body.skillIds : null,
+            capabilityToken: body.capabilityToken || null,
             billingGrantVerified: false,
-            ...(datos.memberId !== undefined
-              ? { memberId: datos.memberId }
+            ...(body.memberId !== undefined ? { memberId: body.memberId } : {}),
+            ...(body.role !== undefined ? { role: body.role } : {}),
+            ...(body.responsibility !== undefined
+              ? { responsibility: body.responsibility }
               : {}),
-            ...(datos.role !== undefined ? { role: datos.role } : {}),
-            ...(datos.responsibility !== undefined
-              ? { responsibility: datos.responsibility }
+            ...(body.workOrderId !== undefined
+              ? { workOrderId: body.workOrderId }
               : {}),
-            ...(datos.workOrderId !== undefined
-              ? { workOrderId: datos.workOrderId }
+            ...(body.manifest !== undefined ? { manifest: body.manifest } : {}),
+            ...(body.manifestSha256 !== undefined
+              ? { manifestSha256: body.manifestSha256 }
               : {}),
-            ...(datos.manifest !== undefined
-              ? { manifest: datos.manifest }
+            ...(body.requestId !== undefined
+              ? { requestId: body.requestId }
               : {}),
-            ...(datos.manifestSha256 !== undefined
-              ? { manifestSha256: datos.manifestSha256 }
-              : {}),
-            ...(datos.requestId !== undefined
-              ? { requestId: datos.requestId }
-              : {}),
-            ...(datos.enqueueIfFull !== undefined
-              ? { enqueueIfFull: datos.enqueueIfFull }
+            ...(body.enqueueIfFull !== undefined
+              ? { enqueueIfFull: body.enqueueIfFull }
               : {}),
           });
         }
         if (accionEquipo === "esperar")
           resultado = await ejecutor.esperarHija(
-            datos.sesion,
-            datos.id,
-            datos.timeout,
+            sesion.id,
+            /** @type {string} */ (body.id),
+            body.timeout,
           );
-        if (accionEquipo === "estado") resultado = equipos.estado(datos.sesion);
+        if (accionEquipo === "estado") resultado = equipos.estado(sesion.id);
         if (accionEquipo === "mensaje")
           resultado = await equipos.mensaje(
-            datos.sesion,
-            datos.para,
-            datos.texto,
+            sesion.id,
+            /** @type {string} */ (body.para),
+            /** @type {string} */ (body.texto),
           );
-        if (accionEquipo === "bandeja")
-          resultado = equipos.bandeja(datos.sesion);
+        if (accionEquipo === "bandeja") resultado = equipos.bandeja(sesion.id);
         if (accionEquipo === "entregar") {
           const tieneCamposExtra =
-            datos.ruta !== undefined ||
-            datos.baseSha256 !== undefined ||
-            datos.archivos !== undefined;
+            body.ruta !== undefined ||
+            body.baseSha256 !== undefined ||
+            body.archivos !== undefined;
           resultado = tieneCamposExtra
-            ? await equipos.entregar(datos.sesion, {
-                titulo: datos.titulo,
-                contenido: datos.contenido,
-                ruta: datos.ruta,
-                baseSha256: datos.baseSha256,
-                archivos: datos.archivos,
+            ? await equipos.entregar(sesion.id, {
+                titulo: /** @type {string} */ (body.titulo),
+                contenido: body.contenido,
+                ruta: body.ruta,
+                baseSha256: body.baseSha256,
+                archivos: body.archivos,
               })
             : await equipos.entregar(
-                datos.sesion,
-                datos.titulo,
-                datos.contenido,
+                sesion.id,
+                /** @type {string} */ (body.titulo),
+                body.contenido ?? undefined,
               );
         }
         if (accionEquipo === "integrar") {
           let resolvedTarget =
-            sesion.directorio || proyectos[sesion.proyecto] || null;
-          if (typeof datos.targetDir === "string" && datos.targetDir.trim()) {
+            sesion.directorio ||
+            (sesion.proyecto ? proyectos[sesion.proyecto] : null) ||
+            null;
+          if (typeof body.targetDir === "string" && body.targetDir.trim()) {
             const baseAllowed = resolvedTarget
               ? path.resolve(resolvedTarget)
               : null;
-            const requested = path.resolve(datos.targetDir.trim());
+            const requested = path.resolve(body.targetDir.trim());
             if (
               baseAllowed &&
               (requested === baseAllowed ||
@@ -652,10 +695,10 @@ export function crearServidor({
               );
             }
           }
-          resultado = await equipos.integrar(datos.sesion, {
-            entregableIds: datos.entregableIds,
+          resultado = await equipos.integrar(sesion.id, {
+            entregableIds: body.entregableIds,
             targetDir: resolvedTarget,
-            resoluciones: datos.resoluciones,
+            resoluciones: body.resoluciones,
           });
         }
         // Marks the sender so the room can animate a real handoff; ids only.
@@ -663,12 +706,12 @@ export function crearServidor({
           try {
             const para =
               accionEquipo === "mensaje"
-                ? datos.para
-                : equipos.estado(datos.sesion).lider;
-            if (para && para !== datos.sesion)
-              await registro.actualizar(datos.sesion, {
+                ? body.para
+                : equipos.estado(sesion.id).lider;
+            if (para && para !== sesion.id)
+              await registro.actualizar(sesion.id, {
                 relevo: {
-                  id: resultado.id,
+                  id: /** @type {{ id: string }} */ (resultado).id,
                   tipo: accionEquipo === "mensaje" ? "mensaje" : "entregable",
                   para,
                 },
@@ -684,16 +727,16 @@ export function crearServidor({
           .leer()
           .find(
             (s) =>
-              s.id === datos.id &&
+              s.id === body.id &&
               ["pendiente", "trabajando"].includes(s.estado),
           );
         if (!sesion) return enviar(404, { error: "Sesión no activa." });
         if (
-          typeof datos.herramienta !== "string" ||
-          datos.herramienta.length > 100
+          typeof body.herramienta !== "string" ||
+          body.herramienta.length > 100
         )
           return enviar(400, { error: "Herramienta inválida." });
-        const fase = inferirFase(datos.herramienta);
+        const fase = inferirFase(body.herramienta);
         if (fase)
           await registro.actualizar(sesion.id, {
             fase,
@@ -707,28 +750,36 @@ export function crearServidor({
         return enviar(204);
       }
       if (
-        ["modelo", "esfuerzo"].some(
-          (k) => datos[k] !== undefined && typeof datos[k] !== "string",
+        /** @type {const} */ (["modelo", "esfuerzo"]).some(
+          (k) => body[k] !== undefined && typeof body[k] !== "string",
         )
       )
         return enviar(400, { error: "Petición inválida." });
-      if (datos.continuar) {
+      if (body.continuar) {
         const previa = acciones
-          ? registro.leer().find((s) => s.id === datos.continuar)
+          ? registro.leer().find((s) => s.id === body.continuar)
           : null;
-        if (previa && !(await acciones.capacidades(previa))?.continuar)
+        // previa is only looked up when acciones exists.
+        if (
+          previa &&
+          acciones &&
+          !(await acciones.capacidades(previa))?.continuar
+        )
           throw new ErrorLanzador(
             "Este agente no permite continuar esta conversación; abre una nueva.",
           );
       }
-      if (datos.continuar)
+      if (body.continuar)
         return enviar(
           202,
-          await ejecutor.continuar(datos.continuar, datos.brief),
+          await ejecutor.continuar(
+            /** @type {string} */ (body.continuar),
+            /** @type {string} */ (body.brief),
+          ),
         );
       if (
-        datos.billingAuthorized === true &&
-        datos.billingGrantVerified !== true
+        body.billingAuthorized === true &&
+        body.billingGrantVerified !== true
       ) {
         return enviar(403, {
           error:
@@ -736,13 +787,15 @@ export function crearServidor({
           seguro: true,
         });
       }
-      await validarSeleccion(catalogo, datos, { coordinadora: true });
+      await validarSeleccion(catalogo, body, { coordinadora: true });
       return enviar(
         202,
-        await ejecutor.encargar({
-          ...datos,
-          billingGrantVerified: datos.billingGrantVerified === true,
-        }),
+        await ejecutor.encargar(
+          /** @type {ExecutionRequest} */ ({
+            ...body,
+            billingGrantVerified: body.billingGrantVerified === true,
+          }),
+        ),
       );
     } catch (error) {
       if (error instanceof ErrorLanzador && !res.headersSent)

@@ -20,13 +20,22 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { arrancar } from "../lanzador/index.mjs";
 import { createApplication } from "../service/index.mjs";
+/** @import { Server } from "node:http" */
+/** @import { ConversationReceipt } from "../lanzador/provider-conversation-types.mjs" */
+/** @import { LauncherSession } from "../lanzador/session-types.d.ts" */
+/** @import { ProductQuestionAnswer, RuntimeCatalog, RuntimeConversationSnapshot, RuntimeProductQuestion, RuntimeTurn, RuntimeVerificationReport, RuntimeWorkOrderDetail } from "./runtime-verification-types.d.ts" */
 
 const execFileAsync = promisify(execFile);
+/** Port of a server listening on TCP. */
+const portOf = (/** @type {import("node:net").Server} */ server) =>
+  /** @type {import("node:net").AddressInfo} */ (server.address()).port;
 
+/** @param {string} value */
 function sha256Hex(value) {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+/** @template T @param {() => T | null | undefined | Promise<T | null | undefined>} predicate */
 async function waitFor(predicate, timeoutMs = 120_000, stepMs = 250) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -62,7 +71,9 @@ export async function runLiveVerification({
   const brainTokenFile = path.join(root, "brain.token");
   const proyectosFile = path.join(root, "proyectos.json");
 
+  /** @type {Awaited<ReturnType<typeof createApplication>> | null} */
   let app = null;
+  /** @type {Server | null} */
   let launcher = null;
   const repoRoot = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -144,6 +155,7 @@ export async function runLiveVerification({
       { mode: 0o600 },
     );
 
+    /** @type {Record<string, string>} */
     const lanzadorEnv = {
       ...process.env,
       SB_LANZADOR_PORT: "0",
@@ -157,7 +169,7 @@ export async function runLiveVerification({
     };
 
     launcher = await arrancar(lanzadorEnv);
-    const launcherUrl = `http://127.0.0.1:${launcher.address().port}`;
+    const launcherUrl = `http://127.0.0.1:${portOf(launcher)}`;
 
     app = await createApplication({
       vaultRoot,
@@ -168,13 +180,14 @@ export async function runLiveVerification({
     });
     app.server.listen(0, "127.0.0.1");
     await once(app.server, "listening");
-    let servicePort = app.server.address().port;
+    let servicePort = portOf(app.server);
     let baseApi = `http://127.0.0.1:${servicePort}/api/v1`;
     lanzadorEnv.SB_BRAIN_URL = baseApi;
     lanzadorEnv.AGENTES_BRAIN_URL = baseApi;
 
     const getApiHeaders = async () => {
       const csrfRes = await fetch(`${baseApi}/auth/csrf`);
+      /** @type {{ token: string }} */
       const { token } = await csrfRes.json();
       return {
         "content-type": "application/json",
@@ -189,6 +202,7 @@ export async function runLiveVerification({
 
     let apiHeaders = await getApiHeaders();
 
+    /** @type {RuntimeVerificationReport} */
     const report = {
       executedAt: new Date().toISOString(),
       commit: headCommit,
@@ -209,6 +223,7 @@ export async function runLiveVerification({
       errors: [],
     };
 
+    /** @type {{ agy?: { id: string }[] }} */
     const modelsRes = await fetch(`${baseApi}/agentes/modelos-lanzador`).then(
       (r) => r.json(),
     );
@@ -221,6 +236,7 @@ export async function runLiveVerification({
     };
 
     // Create & start WorkOrder to verify product question + bridged artifacts
+    /** @type {{ encargo: { id: string } }} */
     const woRes = await fetch(`${baseApi}/encargos`, {
       method: "POST",
       headers: apiHeaders,
@@ -267,7 +283,9 @@ export async function runLiveVerification({
     });
 
     const freeTextAnswer = "azul-cobalto-sintetico-901";
+    /** @type {Set<string>} */
     const answeredNative = new Set();
+    /** @type {ProductQuestionAnswer | null} */
     let productQuestionAnswered = null;
     const sseAbort = new AbortController();
     let lastSseSeq = 0;
@@ -276,6 +294,7 @@ export async function runLiveVerification({
     const monitorLoop = (async () => {
       while (!sseAbort.signal.aborted) {
         try {
+          /** @type {{ solicitudes?: RuntimeProductQuestion[] }} */
           const { solicitudes = [] } = await fetch(
             `${baseApi}/solicitudes?workOrderId=${workOrderId}&kind=question&status=pendiente`,
             { signal: sseAbort.signal },
@@ -291,6 +310,7 @@ export async function runLiveVerification({
                 freeText: freeTextAnswer,
               }),
             });
+            /** @type {{ solicitud?: RuntimeProductQuestion }} */
             const json = await resp.json().catch(() => ({}));
             if (resp.status !== 200) {
               report.errors.push(
@@ -313,6 +333,7 @@ export async function runLiveVerification({
       }
     })();
 
+    /** @param {string} sessionId */
     const watchConversationSse = (sessionId) =>
       (async () => {
         try {
@@ -331,6 +352,7 @@ export async function runLiveVerification({
                 .split("\n")
                 .find((l) => l.startsWith("data: "));
               if (!dataLine) continue;
+              /** @type {RuntimeConversationSnapshot} */
               const snap = JSON.parse(dataLine.slice(6));
               report.sseUpdates += 1;
               lastSseSeq = snap.seq ?? lastSseSeq;
@@ -360,6 +382,7 @@ export async function runLiveVerification({
                       }),
                     },
                   );
+                  /** @type {Partial<Pick<ConversationReceipt, "status" | "delivered">>} */
                   const ansJson = await ansRes.json().catch(() => ({}));
                   report.nativeApprovals.push({
                     requestId: req.id,
@@ -378,7 +401,9 @@ export async function runLiveVerification({
         }
       })();
 
+    /** @param {string} id */
     const getSession = async (id) => {
+      /** @type {LauncherSession[]} */
       const list = await fetch(`${baseApi}/agentes/sesiones`).then((r) =>
         r.json(),
       );
@@ -391,6 +416,7 @@ export async function runLiveVerification({
       await monitorLoop.catch(() => {});
     }
     const t1Start = Date.now();
+    /** @type {Pick<LauncherSession, "id"> | null} */
     const session1 = skillsOnly
       ? null
       : await fetch(`${baseApi}/agentes/sesiones`, {
@@ -422,6 +448,7 @@ export async function runLiveVerification({
       ? watchConversationSse(session1.id)
       : Promise.resolve();
 
+    /** @type {RuntimeTurn} */
     const t1Done = session1
       ? await waitFor(async () => {
           const s = await getSession(session1.id);
@@ -453,6 +480,7 @@ export async function runLiveVerification({
     if (session1 && t1Done.estado === "terminada" && t1Done.conversacionId) {
       // Wait briefly for Turn 1 artifact.published v1 on WorkOrder
       await waitFor(async () => {
+        /** @type {RuntimeWorkOrderDetail} */
         const det = await fetch(
           `${baseApi}/encargos/detalle?id=${workOrderId}&cursor=0`,
         ).then((r) => r.json());
@@ -566,6 +594,7 @@ export async function runLiveVerification({
           body: JSON.stringify({ reason: "Cierre antes de recarga API" }),
         },
       );
+      /** @type {{ closed: boolean }} */
       const shutJson = await shutRes.json();
       const shutSess = await getSession(session1.id);
       report.shutdown = {
@@ -589,19 +618,25 @@ export async function runLiveVerification({
       });
       app.server.listen(0, "127.0.0.1");
       await once(app.server, "listening");
-      servicePort = app.server.address().port;
+      servicePort = portOf(app.server);
       baseApi = `http://127.0.0.1:${servicePort}/api/v1`;
       lanzadorEnv.SB_BRAIN_URL = baseApi;
       lanzadorEnv.AGENTES_BRAIN_URL = baseApi;
       apiHeaders = await getApiHeaders();
 
+      /** @type {RuntimeWorkOrderDetail} */
       const detReload = await fetch(
         `${baseApi}/encargos/detalle?id=${workOrderId}&cursor=0`,
       ).then((r) => r.json());
-      const qReload = productQuestionAnswered
-        ? await fetch(
-            `${baseApi}/solicitudes/detalle?id=${productQuestionAnswered.id}`,
-          ).then((r) => r.json())
+      // Assigned by the SSE task; TypeScript cannot see writes from closures.
+      const answered = /** @type {ProductQuestionAnswer | null} */ (
+        productQuestionAnswered
+      );
+      /** @type {{ solicitud?: RuntimeProductQuestion } | null} */
+      const qReload = answered
+        ? await fetch(`${baseApi}/solicitudes/detalle?id=${answered.id}`).then(
+            (r) => r.json(),
+          )
         : null;
 
       const arts = detReload.snapshot.artifacts || [];
@@ -706,6 +741,7 @@ export async function runLiveVerification({
       const catProbeRes = await fetch(
         `${baseApi}/agentes/herramientas/catalogo?motor=agy&profileId=investigacion&probe=true`,
       );
+      /** @type {RuntimeCatalog} */
       const catProbe = await catProbeRes.json();
       const sbProbeEntry = (catProbe.connectors || []).find(
         (c) => c.id === "secondbrain",
@@ -730,10 +766,12 @@ export async function runLiveVerification({
           ].join("\n"),
         }),
       });
+      /** @type {Pick<LauncherSession, "id">} */
       const skillsSession = await skillsCreateRes.json();
       assert.equal(skillsCreateRes.status, 202, JSON.stringify(skillsSession));
 
       const skillsSseAbort = new AbortController();
+      /** @type {RuntimeConversationSnapshot | null} */
       let lastSkillsSnap = null;
       const skillsSseTask = (async () => {
         try {
@@ -752,6 +790,7 @@ export async function runLiveVerification({
                 .split("\n")
                 .find((l) => l.startsWith("data: "));
               if (!dataLine) continue;
+              /** @type {RuntimeConversationSnapshot} */
               const snap = JSON.parse(dataLine.slice(6));
               lastSkillsSnap = snap;
               for (const req of snap.requests || []) {
@@ -806,7 +845,10 @@ export async function runLiveVerification({
         sha256: p.sha256,
         source: p.evidence?.source || null,
       }));
-      const convSnap = lastSkillsSnap;
+      // Written by skillsSseTask; TypeScript cannot see writes from closures.
+      const convSnap = /** @type {RuntimeConversationSnapshot | null} */ (
+        lastSkillsSnap
+      );
 
       await fetch(
         `${launcherUrl}/sesiones/${skillsSession.id}/conversation/shutdown`,
@@ -873,9 +915,10 @@ export async function runLiveVerification({
   } finally {
     clearTimeout(watchdog);
     if (app) await app.close().catch(() => {});
-    if (launcher) {
-      launcher.closeAllConnections?.();
-      await new Promise((r) => launcher.close(r));
+    const server = launcher;
+    if (server) {
+      server.closeAllConnections?.();
+      await new Promise((r) => server.close(r));
     }
     await rm(root, {
       recursive: true,

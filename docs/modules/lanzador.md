@@ -12,28 +12,28 @@ npm --prefix lanzador test   # uses fake CLIs; never calls a provider
 
 ## Agents
 
-| Character | Engine | Protocol |
-| --- | --- | --- |
-| Ámbar | Claude Code | Claude Agent SDK |
-| Menta | Codex | `codex app-server` (JSON-RPC) |
-| Lira | Antigravity | Agent Client Protocol over stdio |
-| Marina | DeepSeek | Claude Agent SDK with separate configuration and API billing |
+| Character | Engine      | Protocol                                                     |
+| --------- | ----------- | ------------------------------------------------------------ |
+| Ámbar     | Claude Code | Claude Agent SDK                                             |
+| Menta     | Codex       | `codex app-server` (JSON-RPC)                                |
+| Lira      | Antigravity | Agent Client Protocol over stdio                             |
+| Marina    | DeepSeek    | Claude Agent SDK with separate configuration and API billing |
 
 ## Layout
 
-| File | Responsibility |
-| --- | --- |
-| `index.mjs` | Start-up, HTTP API (`/sesiones`, `/estado`, `/modelos`, `/uso`, `/capacidades`, `/espacios`…) |
-| `ejecucion.mjs` | Session lifecycle, turns, queues, limits |
-| `provider-adapters.mjs` | Capability contract per engine |
-| `provider-controllers.mjs` → `lib/providers/` | One controller per protocol: `codex`, `claude`, `acp`, plus elicitation and config helpers |
-| `provider-conversations.mjs` | Normalized conversation items, persisted atomically |
-| `checkpoints.mjs` | Working-tree snapshots in private Git refs before each turn; revert and diff |
-| `pr.mjs` | Branch, commit, push and `gh pr create` for a session's changes |
-| `equipos.mjs`, `limits.mjs` | Teams, manifests, process limits and resource queue |
-| `motores.mjs`, `modelos.mjs`, `uso.mjs` | Engine capabilities, model catalog, usage windows |
-| `cli.mjs` | `sb-hilo`: start and follow sessions from a terminal or cron |
-| `skills/` | Skills offered to agents (research, verification, document production…) |
+| File                                          | Responsibility                                                                                |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `index.mjs`                                   | Start-up, HTTP API (`/sesiones`, `/estado`, `/modelos`, `/uso`, `/capacidades`, `/espacios`…) |
+| `executor.mjs`                                | Session lifecycle, turns, queues, limits                                                      |
+| `provider-adapters.mjs`                       | Capability contract per engine                                                                |
+| `provider-controllers.mjs` → `lib/providers/` | One controller per protocol: `codex`, `claude`, `acp`, plus elicitation and config helpers    |
+| `provider-conversations.mjs`                  | Normalized conversation items, persisted atomically                                           |
+| `checkpoints.mjs`                             | Working-tree snapshots in private Git refs before each turn; revert and diff                  |
+| `pr.mjs`                                      | Branch, commit, push and `gh pr create` for a session's changes                               |
+| `teams.mjs`, `limits.mjs`                     | Teams, manifests, process limits and resource queue                                           |
+| `engines.mjs`, `models.mjs`, `usage.mjs`      | Engine capabilities, model catalog, usage windows                                             |
+| `cli.mjs`                                     | `sb-hilo`: start and follow sessions from a terminal or cron                                  |
+| `skills/`                                     | Skills offered to agents (research, verification, document production…)                       |
 
 ## Checkpoints, diffs and pull requests
 

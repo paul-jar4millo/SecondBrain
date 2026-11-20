@@ -1,3 +1,4 @@
+import { DomainError } from "./domain-error.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename } from "node:fs/promises";
 import {
@@ -6,6 +7,9 @@ import {
   writeJsonAtomically,
 } from "./lib/durable-store.mjs";
 import path from "node:path";
+
+/** @import { OperationFields, UserRequest, UserRequestInput, UserRequestJournalRecord, UserRequestReceipt, UserRequestStoreOptions } from "./user-request-types.d.ts" */
+/** @import { WorkEventInput } from "./work-order-types.d.ts" */
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,15 +37,10 @@ export const NATIVE_CALLBACK_STATUSES = new Set([
   "not_applicable",
 ]);
 
-export class UserRequestError extends Error {
-  constructor(message, status = 400, details = {}) {
-    super(message);
-    this.status = status;
-    Object.assign(this, details);
-  }
-}
+export class UserRequestError extends DomainError {}
 
 export class UserRequestConflictError extends UserRequestError {
+  /** @param {UserRequestReceipt} recibo */
   constructor(
     recibo,
     message = "La solicitud ya fue resuelta con otra decisión.",
@@ -50,20 +49,26 @@ export class UserRequestConflictError extends UserRequestError {
   }
 }
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 function canonicalJson(value) {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(",")}]`;
   }
   if (value && typeof value === "object") {
-    const keys = Object.keys(value).sort();
+    const record = /** @type {Record<string, unknown>} */ (value);
+    const keys = Object.keys(record).sort();
     return `{${keys
-      .filter((k) => value[k] !== undefined)
-      .map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`)
+      .filter((k) => record[k] !== undefined)
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(record[k])}`)
       .join(",")}}`;
   }
   return JSON.stringify(value);
 }
 
+/** @param {OperationFields} [operation] */
 export function computeOperationFingerprint({
   action = "",
   recipient = "",
@@ -90,6 +95,9 @@ export function computeOperationFingerprint({
  * Replays JSONL journal records and atomically strips an incomplete trailing
  * tail (or normalizes a missing final newline) before any future appends, while
  * surfacing genuine corruption located in the middle of the log.
+ * @template T
+ * @param {string} journalFile
+ * @param {(record: T) => void} onRecord
  */
 export async function replayAndRepairJournal(journalFile, onRecord) {
   let journalRaw;
@@ -153,6 +161,10 @@ export async function replayAndRepairJournal(journalFile, onRecord) {
   return { hadRecords: validLines.length > 0, repaired };
 }
 
+/**
+ * @param {string} dir
+ * @param {UserRequestStoreOptions} [options]
+ */
 export async function createUserRequestStore(
   dir,
   {
@@ -166,10 +178,15 @@ export async function createUserRequestStore(
   const journalFile = path.join(dir, "solicitudes-journal.jsonl");
   const snapshotFile = path.join(dir, "solicitudes-snapshots.json");
 
+  /** @type {Map<string, UserRequest>} */
   const requests = new Map();
+  /** @type {Map<string, string>} */
   const byCreateRequestId = new Map();
+  /** @type {Map<string, UserRequestReceipt>} */
   const receiptsByRequestId = new Map();
+  /** @type {Map<string, Set<(request: UserRequest) => void>>} */
   const waiters = new Map();
+  /** @type {Map<string, NodeJS.Timeout>} */
   const timers = new Map();
   let closed = false;
 
@@ -178,6 +195,7 @@ export async function createUserRequestStore(
     throw e;
   });
   if (snapRaw.trim()) {
+    /** @type {{ requests?: Record<string, UserRequest> }} */
     const parsed = JSON.parse(snapRaw);
     for (const [id, req] of Object.entries(parsed.requests ?? {})) {
       requests.set(id, req);
@@ -186,6 +204,7 @@ export async function createUserRequestStore(
 
   const { hadRecords, repaired } = await replayAndRepairJournal(
     journalFile,
+    /** @param {UserRequestJournalRecord} rec */
     (rec) => {
       if (rec.op === "request.put" && rec.request?.id) {
         requests.set(rec.request.id, rec.request);
@@ -206,8 +225,10 @@ export async function createUserRequestStore(
       requests: Object.fromEntries(requests),
     });
 
+  /** @param {UserRequestJournalRecord} rec */
   const appendJournal = (rec) => appendJsonLine(journalFile, rec);
 
+  /** @param {UserRequest} req */
   async function persistRequest(req) {
     requests.set(req.id, req);
     if (req.createRequestId) byCreateRequestId.set(req.createRequestId, req.id);
@@ -220,6 +241,7 @@ export async function createUserRequestStore(
 
   const serial = createSerialQueue();
 
+  /** @param {UserRequest} req */
   function resolveWaiters(req) {
     const set = waiters.get(req.id);
     if (!set) return;
@@ -227,6 +249,7 @@ export async function createUserRequestStore(
     waiters.delete(req.id);
   }
 
+  /** @param {string} id */
   function clearTimer(id) {
     const t = timers.get(id);
     if (t) {
@@ -235,6 +258,7 @@ export async function createUserRequestStore(
     }
   }
 
+  /** @param {UserRequest} req */
   function scheduleExpiry(req) {
     clearTimer(req.id);
     if (req.status !== "pendiente" || typeof req.expiresAtMs !== "number") {
@@ -317,11 +341,16 @@ export async function createUserRequestStore(
     await writeSnapshotAtomically();
   }
 
+  /**
+   * @param {string | undefined | null} workOrderId
+   * @param {WorkEventInput} payload
+   */
   async function emitEventSafe(workOrderId, payload) {
     if (!workOrderId) return;
     await onEvent(workOrderId, payload).catch(() => {});
   }
 
+  /** @param {UserRequest} req */
   function toPublicSummary(req) {
     return {
       id: req.id,
@@ -363,6 +392,7 @@ export async function createUserRequestStore(
   }
 
   return {
+    /** @param {{ workOrderId?: string, kind?: string, status?: string }} [filter] */
     list({ workOrderId, kind, status } = {}) {
       const items = [];
       for (const req of requests.values()) {
@@ -374,11 +404,13 @@ export async function createUserRequestStore(
       return items;
     },
 
+    /** @param {string | null | undefined} id */
     get(id) {
-      const req = requests.get(id);
+      const req = id ? requests.get(id) : undefined;
       return req ? toPublicSummary(req) : null;
     },
 
+    /** @param {UserRequestInput} input */
     createRequest(input) {
       return serial(async () => {
         if (closed) throw new UserRequestError("Almacén cerrado.", 503);
@@ -438,7 +470,12 @@ export async function createUserRequestStore(
           kind === "approval" ? computeOperationFingerprint(opFields) : null;
 
         if (createRequestId && byCreateRequestId.has(createRequestId)) {
-          const existing = requests.get(byCreateRequestId.get(createRequestId));
+          // byCreateRequestId only maps to ids stored in requests.
+          const existing = /** @type {UserRequest} */ (
+            requests.get(
+              /** @type {string} */ (byCreateRequestId.get(createRequestId)),
+            )
+          );
           const sameContext =
             existing.kind === kind &&
             (input.id ? input.id === existing.id : true) &&
@@ -465,11 +502,12 @@ export async function createUserRequestStore(
           };
         }
         const requestedId = input.id || null;
-        if (requestedId && requests.has(requestedId)) {
+        const taken = requestedId ? requests.get(requestedId) : undefined;
+        if (taken) {
           throw new UserRequestError(
             "El identificador de solicitud ya existe; no se puede sobrescribir otra solicitud.",
             409,
-            { solicitud: toPublicSummary(requests.get(requestedId)) },
+            { solicitud: toPublicSummary(taken) },
           );
         }
         const nowMs = clock();
@@ -493,6 +531,7 @@ export async function createUserRequestStore(
               ? "open"
               : "not_applicable";
 
+        /** @type {UserRequest} */
         const req = {
           payloadVersion: USER_REQUEST_PAYLOAD_VERSION,
           id: input.id || randomUUID(),
@@ -564,6 +603,7 @@ export async function createUserRequestStore(
       });
     },
 
+    /** @param {{ sessionId?: string | null, nativeTurnId?: string | null, reason?: string }} turn */
     markTurnClosed({ sessionId, nativeTurnId, reason = "closed_by_turn" }) {
       return serial(async () => {
         if (!["closed_by_turn", "interrupted", "expired"].includes(reason)) {
@@ -616,6 +656,16 @@ export async function createUserRequestStore(
       });
     },
 
+    /**
+     * @param {string} id
+     * @param {{
+     *   requestId?: string, option?: string, freeText?: string,
+     *   approve?: boolean, by?: string, origin?: string,
+     *   expectedRevision?: number, expectedNativeTurnId?: string,
+     *   action?: string, recipient?: string, contentHash?: string,
+     *   changes?: unknown, cost?: unknown, scope?: unknown,
+     * }} [answer]
+     */
     respond(
       id,
       {
@@ -783,6 +833,7 @@ export async function createUserRequestStore(
           }
 
           const finalStatus = approve ? "confirmada" : "rechazada";
+          /** @type {UserRequestReceipt} */
           const receipt = {
             requestId,
             userRequestId: req.id,
@@ -870,6 +921,7 @@ export async function createUserRequestStore(
             ? "entregada"
             : "respuesta_recibida";
 
+        /** @type {UserRequestReceipt} */
         const receipt = {
           requestId,
           userRequestId: req.id,
@@ -924,9 +976,14 @@ export async function createUserRequestStore(
       });
     },
 
+    /**
+     * @param {string} id
+     * @param {{ status?: string, note?: string | null }} [state]
+     */
     updateDeliveryState(id, { status, note } = {}) {
       return serial(async () => {
         if (
+          !status ||
           ![
             "entregando",
             "entregada",
@@ -957,6 +1014,10 @@ export async function createUserRequestStore(
       });
     },
 
+    /**
+     * @param {string} id
+     * @param {OperationFields} [opParams]
+     */
     verifyApprovalBeforeExecute(id, opParams = {}) {
       return serial(async () => {
         const req = requests.get(id);
@@ -1011,6 +1072,10 @@ export async function createUserRequestStore(
       });
     },
 
+    /**
+     * @param {string} id
+     * @returns {Promise<ReturnType<typeof toPublicSummary> | null>}
+     */
     async waitForResponse(id, { timeoutMs = 240_000 } = {}) {
       const current = requests.get(id);
       if (!current) {
@@ -1024,7 +1089,9 @@ export async function createUserRequestStore(
         return toPublicSummary(current);
       }
       return new Promise((resolve) => {
+        /** @type {NodeJS.Timeout | undefined} */
         let timer;
+        /** @param {UserRequest} updated */
         const onDone = (updated) => {
           clearTimeout(timer);
           resolve(toPublicSummary(updated));

@@ -17,6 +17,10 @@ of each module you touch.
   `ops/` packages and operates the system. CI/CD ships code, never knowledge.
 - Language: the UI is Spanish by default with English in
   `dashboard/src/i18n/`; identifiers, comments and docs are English.
+  New file names and identifiers must be English ([ADR 0007](docs/adr/0007-english-identifiers.md));
+  HTTP routes, MCP tool names, env vars and stored data keep their names.
+  `ops/tests/naming-convention.test.mjs` enforces it against
+  `ops/naming-legacy.json`, which may only shrink.
 - Commits follow Conventional Commits ([CONTRIBUTING](CONTRIBUTING.md)).
   Enable the hook with `git config core.hooksPath .githooks`.
 - Commands from the root: `npm run setup`, `npm run dev`, `npm test`,

@@ -1,4 +1,7 @@
-// @ts-check
+/**
+ * @param {Pick<import("./session-types.d.ts").LauncherSession, "id" | "motor" | "modelo" | "conversacionId">} sesion
+ * @param {string} brief
+ */
 export function comandoRemoto(sesion, brief) {
   if (sesion.motor === "claude")
     return {

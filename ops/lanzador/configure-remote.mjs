@@ -5,6 +5,20 @@ const command =
   "/opt/node/bin/node " +
   (process.env.SB_REMOTE_CODE_ROOT || "/opt/secondbrain/current") +
   "/lanzador/remote-hook.mjs";
+
+/**
+ * @typedef {{ type: "command", command: string }} CommandHook
+ * @typedef {{
+ *   hooks?: Record<string, unknown[]>,
+ *   "secondbrain-observer"?: Record<string, CommandHook[]>,
+ *   trustedWorkspaces?: string[],
+ * }} RemoteSettings
+ */
+
+/**
+ * @param {string} file
+ * @param {(data: RemoteSettings) => void} modify
+ */
 async function update(file, modify) {
   await mkdir(path.dirname(file), { recursive: true });
   let data;

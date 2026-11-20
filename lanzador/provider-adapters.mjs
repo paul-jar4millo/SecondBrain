@@ -1,4 +1,3 @@
-// @ts-check
 import {
   brainServer,
   CONTROLLER_FACTORIES,
@@ -21,6 +20,7 @@ export {
   validateRequestedSchema,
 };
 
+/** @param {Parameters<ReturnType<typeof createCodexController>["runTurn"]>[0]} ctx */
 export async function runCodex(ctx) {
   const controller = createCodexController();
   const normalizedCtx =
@@ -35,6 +35,10 @@ export async function runCodex(ctx) {
 }
 runCodex.createController = () => createCodexController();
 
+/**
+ * @param {Parameters<ReturnType<typeof createClaudeController>["runTurn"]>[0]} ctx
+ * @param {Parameters<typeof createClaudeController>[0]} [queryOverride]
+ */
 export async function runClaude(ctx, queryOverride = null) {
   const controller = createClaudeController(queryOverride);
   try {
@@ -43,9 +47,11 @@ export async function runClaude(ctx, queryOverride = null) {
     await controller.shutdown("Fin de turno Claude");
   }
 }
+/** @param {Parameters<typeof createClaudeController>[0]} [queryOverride] */
 runClaude.createController = (queryOverride = null) =>
   createClaudeController(queryOverride);
 
+/** @param {Parameters<ReturnType<typeof createAcpController>["runTurn"]>[0]} ctx */
 export async function runAcp(ctx) {
   const controller = createAcpController();
   try {

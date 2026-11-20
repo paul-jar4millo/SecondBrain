@@ -10,21 +10,21 @@ VAULT_ROOT=/tmp/vault npm run dev  # API on :5080 plus the Vite dev server
 
 ## Layout
 
-| File | Responsibility |
-| --- | --- |
-| `index.mjs` | Server factory, request pipeline (auth, CSRF, rate limits, body limits) and handlers |
-| `routes.mjs` | Route table: method, path, public / room access, body schema |
-| `auth.mjs` | Owner account (scrypt), sessions, TOTP, CSRF, agent credentials |
-| `mcp-remoto.mjs` | OAuth 2.1 authorization server and Streamable HTTP MCP endpoint |
-| `vault.mjs`, `vault-*.mjs` | Reading, parsing, validation, formatting, mutations, tasks, ledger, Git history |
-| `journal.mjs`, `history.mjs` | Write-ahead journal and per-note history |
-| `finance*.mjs` | Finance domain: accounts, cards, cash-flow, idempotent operations, imports |
-| `aprobaciones.mjs` | Approvals with idempotent receipts |
-| `work-orders.mjs`, `user-requests.mjs`, `effects-executor.mjs` | Work orders, persistent questions, effects with external consequences |
-| `shared-files.mjs` | Briefcase storage, quotas, expiry and trash |
-| `lanzador.mjs` | Client for the agent runner |
-| `change-feed.mjs` | SSE change notifications |
-| `lib/durable-store.mjs` | Atomic JSON writes, JSON-lines append, serial queues |
+| File                                                           | Responsibility                                                                       |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `index.mjs`                                                    | Server factory, request pipeline (auth, CSRF, rate limits, body limits) and handlers |
+| `routes.mjs`                                                   | Route table: method, path, public / room access, body schema                         |
+| `auth.mjs`                                                     | Owner account (scrypt), sessions, TOTP, CSRF, agent credentials                      |
+| `remote-mcp.mjs`                                               | OAuth 2.1 authorization server and Streamable HTTP MCP endpoint                      |
+| `vault.mjs`, `vault-*.mjs`                                     | Reading, parsing, validation, formatting, mutations, tasks, ledger, Git history      |
+| `journal.mjs`, `history.mjs`                                   | Write-ahead journal and per-note history                                             |
+| `finance*.mjs`                                                 | Finance domain: accounts, cards, cash-flow, idempotent operations, imports           |
+| `approvals.mjs`                                                | Approvals with idempotent receipts                                                   |
+| `work-orders.mjs`, `user-requests.mjs`, `effects-executor.mjs` | Work orders, persistent questions, effects with external consequences                |
+| `shared-files.mjs`                                             | Briefcase storage, quotas, expiry and trash                                          |
+| `launcher-client.mjs`                                          | Client for the agent runner                                                          |
+| `change-feed.mjs`                                              | SSE change notifications                                                             |
+| `lib/durable-store.mjs`                                        | Atomic JSON writes, JSON-lines append, serial queues                                 |
 
 ## Write path
 
