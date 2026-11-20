@@ -2,6 +2,7 @@ import { throttled } from "../core/throttle";
 import { t } from "../core/i18n";
 import { RemindersDialog } from "./RemindersDialog";
 import { visibleReminders } from "../core/reminders";
+import { fetchBackupAlert, type BackupAlert } from "../core/maintenance";
 import {
   lazy,
   Suspense,
@@ -67,6 +68,7 @@ export function Workspace() {
     undo?: () => void;
   } | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
+  const [backup, setBackup] = useState<BackupAlert | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const [agentTarget, setAgentTarget] = useState<AgentTarget | null>(null);
@@ -132,6 +134,25 @@ export function Workspace() {
       navigate(startView.current, { replace: true });
   }, [navigate]);
   const notify = useCallback((message: string) => setToast({ message }), []);
+  useEffect(() => {
+    // The off-host backup runs on another machine; a failure there is only
+    // noticed if the app shows it.
+    if (isDemo) return;
+    let active = true;
+    const check = throttled(() => {
+      if (document.hidden) return;
+      void fetchBackupAlert().then((alert) => active && setBackup(alert));
+    }, 60_000);
+    const tick = setInterval(check, 30 * 60_000);
+    document.addEventListener("visibilitychange", check);
+    check();
+    return () => {
+      active = false;
+      clearInterval(tick);
+      check.cancel();
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, []);
   useEffect(() => {
     // Agents at work announce changes every second or two; the timer only
     // covers a lost event stream.
@@ -290,14 +311,18 @@ export function Workspace() {
             <div className="world-actions">
               <button
                 aria-label={
-                  reminders.some((x) => x.status === "unread")
-                    ? t("actions.remindersUnread")
-                    : t("actions.reminders")
+                  backup
+                    ? t("actions.remindersAlert")
+                    : reminders.some((x) => x.status === "unread")
+                      ? t("actions.remindersUnread")
+                      : t("actions.reminders")
                 }
                 onClick={() => setNotifications(true)}
               >
                 <HudGlyph name="avisos" size={22} />
-                {reminders.some((x) => x.status === "unread") && <i />}
+                {(backup || reminders.some((x) => x.status === "unread")) && (
+                  <i />
+                )}
               </button>
               <button
                 aria-label={t("actions.search") + " · " + shortcutLabel}
@@ -427,6 +452,7 @@ export function Workspace() {
         {notifications && (
           <RemindersDialog
             reminders={reminders}
+            backup={backup}
             onClose={() => setNotifications(false)}
           />
         )}

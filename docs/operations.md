@@ -16,6 +16,12 @@ curl -fsS http://127.0.0.1:8080/api/v1/health
 field: a missing, failed or older-than-26-hours backup marks maintenance as
 degraded, and so does a runner still on an older revision.
 
+The dashboard reads the same field every 30 minutes and shows a failed,
+overdue or unreadable backup in the reminders panel (the bell gets a dot). A
+backup that was never set up is not flagged. The Windows scheduled task always
+ends with result 0 because it runs headless through `conhost`, so rely on the
+dashboard or the health endpoint, not on the task's last result.
+
 ## Backups
 
 | What | How | When |
