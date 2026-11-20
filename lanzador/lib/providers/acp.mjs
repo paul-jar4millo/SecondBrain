@@ -245,9 +245,11 @@ export function createAcpController() {
         },
         /**
          * @param {string} method
-         * @param {AcpNotification} p
+         * @param {unknown} params
          */
-        notify(method, p) {
+        notify(method, params) {
+          // The RPC layer passes untyped params; this is the shape the provider sends.
+          const p = /** @type {AcpNotification} */ (params);
           if (method === "session/update") {
             if (!p?.sessionId || !sessionId || p.sessionId === sessionId) {
               if (
@@ -383,11 +385,13 @@ export function createAcpController() {
         },
         /**
          * @param {string} method
-         * @param {AcpPermissionRequest} p
+         * @param {unknown} params
          * @param {RpcId} id
          * @param {RpcRequestMetadata} [rpcMeta]
          */
-        async request(method, p, id, rpcMeta = {}) {
+        async request(method, params, id, rpcMeta = {}) {
+          // The RPC layer passes untyped params; this is the shape the provider sends.
+          const p = /** @type {AcpPermissionRequest} */ (params);
           const turn = activeTurn;
           if (
             !turn ||

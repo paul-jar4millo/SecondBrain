@@ -175,7 +175,8 @@ function crearAcumulador() {
       items.set(item.id, item);
       cambiados.add(item.id);
       if (items.size > MAX_ITEMS) {
-        const viejo = items.keys().next().value;
+        // Over the limit the map is never empty, so the oldest key exists.
+        const viejo = /** @type {string} */ (items.keys().next().value);
         items.delete(viejo);
         cambiados.delete(viejo);
       }

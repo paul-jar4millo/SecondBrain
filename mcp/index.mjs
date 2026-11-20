@@ -398,7 +398,7 @@ export function createBrainMcp({
         },
       },
       // The SDK uses a conditional callback type. Shape is always a raw schema here.
-      /** @type {ToolCallback<Shape>} */ (handle),
+      /** @type {ToolCallback<Shape>} */ (/** @type {unknown} */ (handle)),
     );
   }
   /** @param {string} p */

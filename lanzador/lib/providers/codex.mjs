@@ -255,9 +255,11 @@ export function createCodexController() {
         },
         /**
          * @param {string} method
-         * @param {CodexNotification} p
+         * @param {unknown} params
          */
-        notify(method, p) {
+        notify(method, params) {
+          // The RPC layer passes untyped params; this is the shape the provider sends.
+          const p = /** @type {CodexNotification} */ (params);
           const turn = activeTurn;
           if (!acceptTurnEvent(turn, p)) return;
           if (method === "thread/started" && p.thread?.id) {
@@ -414,12 +416,14 @@ export function createCodexController() {
         },
         /**
          * @param {string} method
-         * @param {CodexRequest} p
+         * @param {unknown} params
          * @param {RpcId} id
          * @param {RpcRequestMetadata} [rpcMeta]
          * @returns {Promise<CodexResponse>}
          */
-        async request(method, p, id, rpcMeta = {}) {
+        async request(method, params, id, rpcMeta = {}) {
+          // The RPC layer passes untyped params; this is the shape the provider sends.
+          const p = /** @type {CodexRequest} */ (params);
           const turn = activeTurn;
           if (!acceptTurnEvent(turn, p)) {
             throw Object.assign(

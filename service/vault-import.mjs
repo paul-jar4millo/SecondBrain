@@ -3,17 +3,20 @@ import { validate, accountIndex } from "./vault-validation.mjs";
 /**
  * @this {import("./vault.mjs").Vault}
  * @param {(import("./vault-types.d.ts").VaultItem | { id: string, kind: "notification", externalId?: string })[]} items
+ * @returns {Promise<{ imported: number }>}
  */
 export async function importItems(items) {
-  return this.exclusive(async () => {
+  // A named alias: assigning this.x would make TypeScript read a constructor.
+  const vault = this;
+  return vault.exclusive(async () => {
     try {
-      return await this.transaction(async () => {
+      return await vault.transaction(async () => {
         if (!Array.isArray(items) || items.length > 20000)
           throw new Failure("Lote inválido.");
-        const current = await this.snapshot();
-        this.batchSnapshot = current;
-        this.pendingPaths = new Set();
-        this.indexBatch = [];
+        const current = await vault.snapshot();
+        vault.batchSnapshot = current;
+        vault.pendingPaths = new Set();
+        vault.indexBatch = [];
         const seen = new Set(current.items.map((x) => x.id));
         const external = new Set(
           current.items.map((x) => x.externalId).filter(Boolean),
@@ -36,7 +39,7 @@ export async function importItems(items) {
             (a.kind === "account" ? 0 : a.kind === "project" ? 1 : 2) -
             (b.kind === "account" ? 0 : b.kind === "project" ? 1 : 2),
         )) {
-          await this.apply({
+          await vault.apply({
             mutationId: stableId("import:" + item.id),
             baseVersion: 0,
             entity: item,
@@ -45,15 +48,15 @@ export async function importItems(items) {
           if (count % 50 === 0)
             await new Promise((resolve) => setImmediate(resolve));
         }
-        const indexIds = this.indexBatch;
-        this.indexBatch = null;
-        await this.index(indexIds);
+        const indexIds = vault.indexBatch;
+        vault.indexBatch = null;
+        await vault.index(indexIds);
         return { imported: count };
       });
     } finally {
-      this.batchSnapshot = null;
-      this.pendingPaths = null;
-      this.indexBatch = null;
+      vault.batchSnapshot = null;
+      vault.pendingPaths = null;
+      vault.indexBatch = null;
     }
   });
 }

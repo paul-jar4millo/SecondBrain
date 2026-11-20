@@ -9,11 +9,12 @@
     "allowJs": true,
     "checkJs": true,
     "noEmit": true,
-    "strict": false,
-    "noImplicitAny": true,
+    "strict": true,
+    // JS files can only annotate catch variables as any or unknown, so this
+    // would mean an any cast on every catch; errors are narrowed where used.
+    "useUnknownInCatchVariables": false,
     "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "strictNullChecks": true
+    "resolveJsonModule": true
   },
   "include": [
     "service/*.mjs",
