@@ -34,7 +34,7 @@ const linePercent = (file) => {
 
 // Minimum line coverage per module. Raise a floor when coverage improves; never
 // lower it. Baseline 2026-11-19 (v0.1.2), raised after the type work.
-const floors = { service: 87, mcp: 41, lanzador: 68, dashboard: 40 };
+const floors = { service: 87, mcp: 41, launcher: 68, dashboard: 40 };
 /** @type {string[]} */
 const failures = [];
 /** @param {keyof typeof floors} module */
@@ -45,7 +45,7 @@ const check = (module) => {
     failures.push(`${module} ${percent}% < ${floors[module]}%`);
 };
 
-for (const module of /** @type {const} */ (["service", "mcp", "lanzador"])) {
+for (const module of /** @type {const} */ (["service", "mcp", "launcher"])) {
   const dir = path.join(root, module);
   const out = path.join(root, "coverage", module);
   mkdirSync(out, { recursive: true });

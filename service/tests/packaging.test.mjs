@@ -21,7 +21,7 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
     await mkdir(path.dirname(path.join(source, file)), { recursive: true });
     await writeFile(path.join(source, file), text);
   };
-  for (const module of ["service", "mcp", "lanzador"]) {
+  for (const module of ["service", "mcp", "launcher"]) {
     await put(`${module}/package.json`, '{"private":true}');
     await put(`${module}/package-lock.json`, "{}");
     await put(`${module}/index.mjs`, "export const synthetic = true;");
@@ -34,17 +34,18 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
   await put("service/http/context.mjs", "export const context = true;");
   await put("service/http/routes/vault.mjs", "export const routes = true;");
   await put("service/http/route-types.d.ts", "export {};");
-  await put("lanzador/execution/state.mjs", "export const state = true;");
+  await put("launcher/execution/state.mjs", "export const state = true;");
   await put("dashboard/dist/index.html", "<main>synthetic</main>");
   await put("assets/reference-bank/references.json", "{}");
   await put("assets/reference-bank/auth.json", "secret");
   await put("vault/Home.md", "private");
   await put("ops/compat/index.mjs", "// launcher");
-  await put("lanzador/skills/equipo-cuatro-fases.md", "# Guía sintética");
-  await put("lanzador/skills/no-publicar.env", "secret");
-  await put("lanzador/skills/resumen-matutino.md", "# Resumen");
-  await put("ops/lanzador/install.sh", "#!/bin/sh");
+  await put("launcher/skills/equipo-cuatro-fases.md", "# Guía sintética");
+  await put("launcher/skills/no-publicar.env", "secret");
+  await put("launcher/skills/resumen-matutino.md", "# Resumen");
+  await put("ops/launcher/install.sh", "#!/bin/sh");
   const target = path.join(temp, "release");
+  // The release keeps the launcher in lanzador/: host units and sb-hilo use that path.
   await packageRelease(target, { sourceRoot: source });
   assert.equal(
     await readFile(path.join(target, "dashboard/dist/index.html"), "utf8"),

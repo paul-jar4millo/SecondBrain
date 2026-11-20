@@ -19,14 +19,14 @@
   "include": [
     "service/*.mjs",
     "mcp/*.mjs",
-    "lanzador/*.mjs",
+    "launcher/*.mjs",
     "ops/*.mjs",
     "ops/deploy/*.mjs",
     "ops/homelab/*.mjs",
-    "lanzador/lib/**/*.mjs",
-    "lanzador/execution/*.mjs",
+    "launcher/lib/**/*.mjs",
+    "launcher/execution/*.mjs",
     "service/lib/*.mjs",
     "service/http/**/*.mjs",
-    "ops/lanzador/*.mjs"
+    "ops/launcher/*.mjs"
   ]
 }

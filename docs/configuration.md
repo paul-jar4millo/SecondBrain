@@ -47,7 +47,7 @@ the systemd units in `ops/lxc/plantillas/` and by host-only files under
 | `SB_AGY_ACP_BIN`, `SB_AGY_ACP_ARGS`         | `agy`, `["acp"]`   | Antigravity ACP command (operator only)         |
 
 Session and team limits (active sessions, members, depth) are read by
-`lanzador/limits.mjs`; see [ADR 0005](adr/0005-team-manifests.md).
+`launcher/limits.mjs`; see [ADR 0005](adr/0005-team-manifests.md).
 
 ## dashboard (build time)
 

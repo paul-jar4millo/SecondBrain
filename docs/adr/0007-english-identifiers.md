@@ -31,14 +31,19 @@ Chosen option 3.
   (`ops/naming.mjs`). Existing names are listed in `ops/naming-legacy.json`;
   the list can only shrink, and the test fails when an entry no longer exists.
 
-The backend module files were renamed in the same change (for example
-`ejecucion.mjs` → `executor.mjs`, `sesiones.mjs` → `sessions.mjs`,
-`service/sala.mjs` → `service/room.mjs`). Exported identifiers, the dashboard
-`sala`/`mundo` features and the `lanzador/` folder are renamed later, each in
-its own change.
+The renaming landed in three changes: backend module files (for example
+`ejecucion.mjs` → `executor.mjs`), then exported identifiers and the
+dashboard `sala`/`mundo` features (→ `room`/`world`), and finally the
+`lanzador/` folder → `launcher/` (and `ops/lanzador` → `ops/launcher`).
+The legacy list is empty.
+
+The release package keeps the launcher in `lanzador/` and its host files in
+`ops/lanzador/` (`ops/package-release.mjs`, `RELEASE_MODULES`): systemd
+units, `sb-hilo`, remote hooks and the deploy helper installed on the hosts
+use those paths. Moving them needs a host migration and is a separate decision.
 
 ### Consequences
 
 - Good: one language per layer; the check stops new mixed names.
-- Bad: the rename touches many imports at once, and the legacy list stays
-  until the remaining renames land.
+- Bad: the rename touched many imports at once, and the release layout
+  still uses `lanzador/` for host compatibility.

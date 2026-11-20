@@ -7,7 +7,7 @@ token. The service never runs a model. Rationale:
 [ADR 0004](../adr/0004-provider-adapters.md).
 
 ```sh
-npm --prefix lanzador test   # uses fake CLIs; never calls a provider
+npm --prefix launcher test   # uses fake CLIs; never calls a provider
 ```
 
 ## Agents

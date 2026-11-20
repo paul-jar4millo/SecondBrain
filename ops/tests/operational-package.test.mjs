@@ -14,17 +14,17 @@ test("empaqueta recursos de operación sin configuración privada local", async 
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, content);
   };
-  for (const module of ["service", "mcp", "lanzador"])
+  for (const module of ["service", "mcp", "launcher"])
     await put(`${module}/package.json`, '{"private":true}');
   for (const file of [
     "dashboard/dist/index.html",
     "ops/compat/index.mjs",
-    "ops/lanzador/install.sh",
-    "lanzador/skills/equipo-cuatro-fases.md",
-    "lanzador/skills/resumen-matutino.md",
-    "lanzador/skills/personal-context/SKILL.md",
-    "lanzador/skills/personal-context/notas-locales.txt",
-    "lanzador/skills/sin-skill/README.md",
+    "ops/launcher/install.sh",
+    "launcher/skills/equipo-cuatro-fases.md",
+    "launcher/skills/resumen-matutino.md",
+    "launcher/skills/personal-context/SKILL.md",
+    "launcher/skills/personal-context/notas-locales.txt",
+    "launcher/skills/sin-skill/README.md",
     "dashboard/ops/deploy-release.sh",
     "ops/backup/backup.sh",
     "ops/backup/secondbrain-backup.timer",
