@@ -12,3 +12,4 @@ record is never rewritten after it is accepted; a later record supersedes it.
 | [0005](0005-team-manifests.md)                      | Agent teams are bounded by an approved manifest                   | Accepted |
 | [0006](0006-conventional-commits.md)                | Conventional Commits enforced locally and in CI                   | Accepted |
 | [0007](0007-english-identifiers.md)                 | English identifiers, Spanish product                              | Accepted |
+| [0008](0008-npm-workspaces.md)                      | npm workspaces with per-module release lockfiles                  | Accepted |

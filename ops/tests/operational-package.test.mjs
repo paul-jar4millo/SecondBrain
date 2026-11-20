@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, readdir, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  readdir,
+  readFile,
+  rm,
+} from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { packageRelease } from "../package-release.mjs";
@@ -16,6 +23,21 @@ test("empaqueta recursos de operación sin configuración privada local", async 
   };
   for (const module of ["service", "mcp", "launcher"])
     await put(`${module}/package.json`, '{"private":true}');
+  // One root lockfile (npm workspaces); the release gets one slice per module.
+  await put(
+    "package-lock.json",
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { workspaces: ["service", "mcp", "launcher"] },
+        service: { name: "@x/service", dependencies: { shared: "1.0.0" } },
+        mcp: { name: "@x/mcp" },
+        launcher: { name: "@x/launcher", dependencies: { pty: "2.0.0" } },
+        "node_modules/shared": { version: "1.0.0" },
+        "node_modules/pty": { version: "2.0.0" },
+      },
+    }),
+  );
   for (const file of [
     "dashboard/dist/index.html",
     "ops/compat/index.mjs",
@@ -48,6 +70,14 @@ test("empaqueta recursos de operación sin configuración privada local", async 
     await readdir(path.join(target, "lanzador/skills/personal-context")),
     ["SKILL.md"],
   );
+  const lanzadorLock = JSON.parse(
+    await readFile(path.join(target, "lanzador/package-lock.json"), "utf8"),
+  );
+  assert.equal(lanzadorLock.name, "@x/launcher");
+  assert.deepEqual(Object.keys(lanzadorLock.packages), [
+    "",
+    "node_modules/pty",
+  ]);
   assert.ok(
     (await readdir(path.join(target, "ops/deploy"))).includes(
       "deploy-release.sh",

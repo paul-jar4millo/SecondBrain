@@ -40,12 +40,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            dashboard/package-lock.json
-            service/package-lock.json
-            mcp/package-lock.json
-            launcher/package-lock.json
+          cache-dependency-path: package-lock.json
       # Browser suites only for pull requests that touch the UI or the service,
       # and for manual runs. Decided with git, without calling the GitHub API.
       - name: Do the browser suites need to run?
@@ -164,7 +159,7 @@ jobs:
         run: |
           failed=""
           for package in dashboard service mcp launcher; do
-            if ! npm --prefix "$package" audit --omit=dev --audit-level=high; then
+            if ! npm audit --workspace "$package" --omit=dev --audit-level=high; then
               failed="$failed $package"
             fi
           done
@@ -173,7 +168,7 @@ jobs:
           fi
       - name: Development dependencies (informational)
         run: |
-          npm --prefix dashboard audit --audit-level=high \
+          npm audit --workspace dashboard --audit-level=high \
             || echo "::notice title=Dev audit::The dashboard has advisories in development dependencies; they do not ship."
 
   # Software WebGL on shared machines: four groups, each retried once. Reports
@@ -204,12 +199,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            dashboard/package-lock.json
-            service/package-lock.json
-            mcp/package-lock.json
-            launcher/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm run setup
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -221,7 +211,7 @@ jobs:
           if command -v google-chrome >/dev/null; then
             echo "BROWSER_EXECUTABLE=$(command -v google-chrome)" >> "$GITHUB_ENV"
           else
-            npx --prefix dashboard playwright install --with-deps chromium
+            npm exec --workspace dashboard -- playwright install --with-deps chromium
           fi
       - name: Verify ${{ matrix.group }}
         working-directory: dashboard
