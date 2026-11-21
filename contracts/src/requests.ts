@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { RequestId, ThreadId, Timestamp, TurnId } from "./ids.ts";
+import { ReviewFinding } from "./items.ts";
 
 /** Where an answer came from (the `origin` field of user requests). */
 export const RequestOrigin = z.enum(["app", "discord", "push", "agent"]);
@@ -49,6 +50,14 @@ export const AgentHandoff = z.object({
   openItems: z.array(z.string().min(1).max(500)).max(50).default([]),
 });
 export type AgentHandoff = z.infer<typeof AgentHandoff>;
+
+/** thread_report_review: the verdict of a review stage. */
+export const AgentReview = z.object({
+  verdict: z.enum(["approved", "changes-requested", "comment"]),
+  summary: z.string().min(1).max(20_000),
+  findings: z.array(ReviewFinding).max(100).default([]),
+});
+export type AgentReview = z.infer<typeof AgentReview>;
 
 export const RequestStatus = z.enum([
   "open",

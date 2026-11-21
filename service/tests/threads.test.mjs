@@ -75,6 +75,8 @@ async function fakeLauncher(t) {
       return res.end('id: 4\ndata: {"type":"event"}\n\n');
     }
     if (url === "/inbox") return json(200, { entries: [] });
+    if (url === `/threads/${THREAD}/review`)
+      return json(201, { recorded: true, round: 1, verdict: data.verdict });
     if (url === `/threads/${THREAD}/handoff`)
       return json(202, { accepted: true, toStage: data.toStage });
     if (url === "/flows") return json(200, { flows: [{ id: "single" }] });
@@ -186,6 +188,27 @@ test("threads are relayed to the launcher with a credential per thread", async (
     body: JSON.stringify({ toStage: "implement", narrative: "Plan listo" }),
   });
   assert.equal(handoff.status, 202);
+  const review = await fetch(`${base}/threads/agent/review`, {
+    method: "POST",
+    headers: agent,
+    body: JSON.stringify({
+      verdict: "changes-requested",
+      summary: "Falta un caso",
+      findings: [{ severity: "major", text: "caso vacío", line: 3 }],
+    }),
+  });
+  assert.equal(review.status, 201);
+  assert.equal((await review.json()).verdict, "changes-requested");
+  assert.equal(
+    (
+      await fetch(`${base}/threads/agent/review`, {
+        method: "POST",
+        headers: agent,
+        body: JSON.stringify({ verdict: "maybe", summary: "x" }),
+      })
+    ).status,
+    400,
+  );
   assert.deepEqual(await handoff.json(), {
     accepted: true,
     toStage: "implement",

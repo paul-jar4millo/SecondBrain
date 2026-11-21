@@ -108,7 +108,11 @@ export function stagePreamble(thread: Thread): string {
   ];
   if (stage.readOnly)
     lines.push("En esta etapa no modificas archivos: solo lees y analizas.");
-  if (targets.length)
+  if (stage.role === "review")
+    lines.push(
+      `Revisa el trabajo de la rama (git diff contra la base, tests si hace falta) y reporta tu veredicto con thread_report_review: approved, changes-requested con hallazgos concretos, o comment. Esta es la ronda ${thread.counters.reviewRounds + 1} de ${thread.limits.maxReviewRounds}. Si pides cambios, el thread vuelve a la etapa anterior al terminar tu turno.`,
+    );
+  else if (targets.length)
     lines.push(
       `Cuando termines tu parte, llama a la herramienta thread_handoff con toStage (${targets.join(" o ")}), una narrativa de lo que hiciste y decidiste, y los pendientes en openItems. El traspaso ocurre al terminar tu turno. Si te falta información, pregúntale al dueño con thread_ask_user.`,
     );

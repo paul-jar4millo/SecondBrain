@@ -252,6 +252,12 @@ export const threadRoutes = (ctx, req) => {
         solicitud: toLegacyRequest(result.request),
       });
     },
+    "POST /threads/agent/review": async () =>
+      send(
+        response,
+        201,
+        await threads.review(agentThread(), await body(request)),
+      ),
     "POST /threads/agent/handoff": async () =>
       send(
         response,

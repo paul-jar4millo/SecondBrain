@@ -855,3 +855,124 @@ test("a thread without a multi-stage flow cannot hand off", async (t) => {
   assert.match(error.message, /no tiene un flujo/);
   assert.equal(env.store.getThread(thread.id).stageIndex, 0);
 });
+
+/** Plan → implement → review with a reviewer whose verdicts come in order. */
+async function reviewFlow(t, /** @type {string[]} */ verdicts) {
+  /** @type {any} */
+  let env;
+  const errors = /** @type {string[]} */ ([]);
+  let reviews = 0;
+  env = await setup(t, async (/** @type {any} */ ctx) => {
+    const thread = env.store.getThread(ctx.session.id);
+    const stage = thread.flow.stages[thread.stageIndex].key;
+    if (stage === "plan") {
+      try {
+        env.engine.reportReview(ctx.session.id, {
+          verdict: "approved",
+          summary: "x",
+        });
+      } catch (/** @type {any} */ e) {
+        errors.push(e.message);
+      }
+      env.engine.handoff(ctx.session.id, {
+        toStage: "implement",
+        narrative: "plan",
+      });
+    } else if (stage === "implement")
+      env.engine.handoff(ctx.session.id, {
+        toStage: "review",
+        narrative: "hecho",
+      });
+    else {
+      const verdict = verdicts[reviews++] ?? "approved";
+      env.engine.reportReview(ctx.session.id, {
+        verdict,
+        summary: `veredicto ${reviews}`,
+        findings:
+          verdict === "changes-requested"
+            ? [
+                {
+                  file: "a.js",
+                  line: 3,
+                  severity: "major",
+                  text: "falta el caso vacío",
+                },
+              ]
+            : [],
+      });
+      try {
+        env.engine.reportReview(ctx.session.id, {
+          verdict,
+          summary: "otra vez",
+        });
+      } catch (/** @type {any} */ e) {
+        errors.push(e.message);
+      }
+    }
+  });
+  const thread = await env.engine.create({
+    kind: "scratch",
+    prompt: "Arregla el parser",
+    agent: AGENT,
+    flowTemplateId: "plan-implement-review",
+  });
+  return { env, thread, errors };
+}
+
+test("review sends changes back to the implementer and approval waits for the owner", async (t) => {
+  const { env, thread, errors } = await reviewFlow(t, [
+    "changes-requested",
+    "approved",
+  ]);
+  await waitFor(
+    () => env.store.getThread(thread.id).status === "ready-for-review",
+  );
+  await env.engine.idle(thread.id);
+  const turns = env.log.turns;
+  assert.equal(turns.length, 5);
+  assert.match(turns[2].prompt, /thread_report_review/);
+  assert.match(turns[2].prompt, /ronda 1 de 3/);
+  assert.match(turns[3].prompt, /etapa 2\/3 «Implementar»/);
+  assert.match(turns[3].prompt, /Revisión 1 de 3: pide cambios/);
+  assert.match(turns[3].prompt, /- major: a\.js:3 — falta el caso vacío/);
+  assert.match(turns[4].prompt, /ronda 2 de 3/);
+  const after = env.store.getThread(thread.id);
+  assert.equal(after.stageIndex, 2);
+  assert.equal(after.counters.reviewRounds, 2);
+  const items = env.engine.snapshot(thread.id).items;
+  assert.deepEqual(
+    items
+      .filter((/** @type {any} */ i) => i.kind === "review")
+      .map((/** @type {any} */ i) => [i.round, i.verdict]),
+    [
+      [1, "changes-requested"],
+      [2, "approved"],
+    ],
+  );
+  assert.match(errors[0], /Solo la etapa de revisión/);
+  assert.match(errors[1], /Ya reportaste/);
+});
+
+test("the third request for changes asks the owner to decide", async (t) => {
+  const { env, thread } = await reviewFlow(t, [
+    "changes-requested",
+    "changes-requested",
+    "changes-requested",
+  ]);
+  await waitFor(
+    () => env.store.getThread(thread.id).status === "needs-decision",
+  );
+  await env.engine.idle(thread.id);
+  assert.equal(env.log.turns.length, 7);
+  const after = env.store.getThread(thread.id);
+  assert.equal(after.stageIndex, 2);
+  assert.equal(after.counters.reviewRounds, 3);
+  assert.ok(
+    env.engine
+      .snapshot(thread.id)
+      .items.some(
+        (/** @type {any} */ i) =>
+          i.kind === "notice" && i.code === "review-limit",
+      ),
+  );
+});
