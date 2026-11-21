@@ -6,7 +6,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { acquireInstance } from "../service/instance.mjs";
+import { acquireInstance } from "../contracts/src/node/instance.mjs";
 import { createModelCatalog } from "./models.mjs";
 import { openWorkspaces } from "./workspaces.mjs";
 import { createUsage } from "./usage.mjs";
@@ -21,7 +21,7 @@ import {
   canonicalWorkspaceUpdate,
   legacyLauncherPaths,
   legacyWorkspaces,
-} from "../service/launcher-wire.mjs";
+} from "../contracts/src/node/launcher-wire.mjs";
 
 /** @import { LauncherRequestBody, LauncherServerOptions } from "./launcher-server-types.d.ts" */
 

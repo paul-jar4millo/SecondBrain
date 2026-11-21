@@ -4,7 +4,7 @@ import { body, send } from "../io.mjs";
 import {
   canonicalWorkspaceUpdate,
   legacyWorkspaces,
-} from "../../launcher-wire.mjs";
+} from "../../../contracts/src/node/launcher-wire.mjs";
 /** @import { RouteModule } from "../route-types.d.ts" */
 
 /** @type {RouteModule} */
