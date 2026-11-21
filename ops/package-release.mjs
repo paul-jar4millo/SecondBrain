@@ -216,7 +216,7 @@ export async function packageRelease(
           entry.isFile() &&
           (/\.(?:mjs|py|sh|service|timer|conf)$/.test(entry.name) ||
             (directory === "homelab" &&
-              ["pc-wake", "pc-status", "CLAUDE.md"].includes(entry.name)))
+              ["pc-wake", "pc-status", "agent-context.md"].includes(entry.name)))
         )
           await cp(
             path.join(source, entry.name),

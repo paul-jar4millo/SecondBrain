@@ -158,7 +158,7 @@ EOF
   paso "Contexto de homelab de sb-agente"
   d=/srv/sb-agent/projects/sb-agente
   install -d -m 700 -o sb-agente -g sb-agente "$d" "$d/.claude"
-  install -o sb-agente -g sb-agente -m 600 "$aqui/operational/ops/homelab/CLAUDE.md" "$d/CLAUDE.md"
+  install -o sb-agente -g sb-agente -m 600 "$aqui/operational/ops/homelab/agent-context.md" "$d/CLAUDE.md"
   printf '%s\n' '{"permissions":{"allow":["Bash(pc-wake)","Bash(pc-status)"]}}' >"$d/.claude/settings.json"
   chown sb-agente:sb-agente "$d/.claude/settings.json"
   chmod 600 "$d/.claude/settings.json"

@@ -49,5 +49,7 @@ coverage/
 # Personal configuration (copy the *.example files)
 /.mcp.json
 /ops/lxc/lxc.env
-.claude/settings.local.json
+/.claude/
+/.impeccable/
+CLAUDE.md
 dist-demo/
