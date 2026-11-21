@@ -39,6 +39,11 @@ const ONGOING = [
 ];
 const PROJECTS = "/etc/sb-agente/proyectos.json";
 const SETTINGS = "/var/lib/sb-agente/.gemini/antigravity-cli/settings.json";
+// Claude keys workspace trust by absolute path (CLAUDE_CONFIG_DIR per account).
+const CLAUDE_CONFIGS = [
+  "/var/lib/sb-agente/claude/.claude.json",
+  "/var/lib/sb-agente/deepseek/.claude.json",
+];
 
 async function metadata(file) {
   try {
@@ -234,6 +239,17 @@ async function rewriteHostState(at, host, reverse) {
         ...new Set(settings.trustedWorkspaces.map(remap)),
       ];
   });
+  // Old keys stay: the legacy paths remain as aliases during the release.
+  for (const file of CLAUDE_CONFIGS)
+    await rewriteConfiguration(at(file), (config) => {
+      const projects = config.projects;
+      if (!projects || typeof projects !== "object") return;
+      for (const key of Object.keys(projects)) {
+        const next = remapHostPath(key, reverse);
+        if (next !== key && !Object.hasOwn(projects, next))
+          projects[next] = structuredClone(projects[key]);
+      }
+    });
 
   const database = at(HOST_DATA_PATHS[0][reverse ? 0 : 1] + "/threads.sqlite");
   const dataPath = HOST_DATA_PATHS[0][reverse ? 0 : 1];
@@ -305,6 +321,20 @@ function systemHost() {
           timeout: 930_000,
           env: { ...process.env, SB_DEPLOY_WAIT_MS: "900000" },
         },
+      ),
+    // Regenerates every managed unit and script for the layout the marker selects.
+    configure: () =>
+      run(
+        process.execPath,
+        [
+          fileURLToPath(new URL("../deploy/configure.mjs", import.meta.url)),
+          "--release",
+          fileURLToPath(new URL("../..", import.meta.url)),
+          "--parameters",
+          "/etc/secondbrain/parameters.json",
+          "--skip-helper",
+        ],
+        { timeout: 120_000 },
       ),
     repairWorktrees: (repo, directories) =>
       run(
@@ -469,6 +499,7 @@ export async function migrateHostLayout({
   journal.phase = "starting";
   await atomicWrite(stateFile, JSON.stringify(journal));
 
+  await host.configure();
   await host.run("daemon-reload");
   for (const pair of units) {
     const target = pair[reverse ? 0 : 1];
@@ -484,7 +515,8 @@ export async function migrateHostLayout({
 
 if (
   process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  // Operators call it through /opt/secondbrain/current, a symlink.
+  (await realpath(process.argv[1])) === fileURLToPath(import.meta.url)
 ) {
   try {
     const args = process.argv.slice(2);
