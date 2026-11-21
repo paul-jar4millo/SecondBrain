@@ -30,6 +30,7 @@
     "launcher/threads/*.mjs",
     "service/lib/*.mjs",
     "service/http/**/*.mjs",
-    "ops/launcher/*.mjs"
+    "ops/launcher/*.mjs",
+    "contracts/src/node/*.mjs"
   ]
 }

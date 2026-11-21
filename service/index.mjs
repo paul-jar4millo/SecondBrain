@@ -3,7 +3,7 @@ import { routePolicy } from "./routes.mjs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { acquireInstance } from "./instance.mjs";
+import { acquireInstance } from "../contracts/src/node/instance.mjs";
 import { actorContext, Failure } from "./vault.mjs";
 import { createContext } from "./http/context.mjs";
 import { prepareResponse, sendError } from "./http/middleware.mjs";

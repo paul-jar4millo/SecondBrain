@@ -202,3 +202,48 @@ test("contracts may only depend on zod", async (t) => {
     /left-pad/,
   );
 });
+
+// The native host package has no service/ (it runs in the image): a launcher
+// import of ../service/ passed CI and broke the v0.5.1 deploy.
+test("every relative import in the native host package resolves inside it", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "sb-native-imports-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const repo = path.resolve(import.meta.dirname, "../..");
+  const target = path.join(dir, "release");
+  await packageRelease(target, { nativeHost: true, sourceRoot: repo });
+  const missing = [];
+  const pattern =
+    /(?:\bfrom\s+|\bimport\s*\(\s*|^\s*import\s+)["'](\.{1,2}\/[^"']+)["']/gm;
+  for (const entry of await readdir(target, {
+    recursive: true,
+    withFileTypes: true,
+  })) {
+    const file = path.join(entry.parentPath, entry.name);
+    if (
+      !entry.isFile() ||
+      !/\.(mjs|ts)$/.test(entry.name) ||
+      entry.name.endsWith(".d.ts") ||
+      file.split(path.sep).includes("node_modules")
+    )
+      continue;
+    // Type-only imports (JSDoc and `import type`) are erased at runtime.
+    const text = (await readFile(file, "utf8"))
+      .split("\n")
+      .filter(
+        (line) =>
+          !/@import|@typedef|@type\b|@param|@returns|^\s*\*|^\s*import\s+type\b|^\s*}\s*from\s+["'][^"']+\.d\.ts["']/.test(
+            line,
+          ),
+      )
+      .join("\n");
+    for (const [, specifier] of text.matchAll(pattern)) {
+      const resolved = path.resolve(path.dirname(file), specifier);
+      try {
+        await readFile(resolved);
+      } catch {
+        missing.push(path.relative(target, file) + " -> " + specifier);
+      }
+    }
+  }
+  assert.deepEqual(missing, []);
+});
