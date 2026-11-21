@@ -66,8 +66,19 @@ outbox of what needs the owner in `notifications.json` (the last 200): an
 open request, a thread that needs a decision, is ready for review or failed,
 and a hand-off between stages. `GET /notifications` returns the newest with
 the unread count; `POST /notifications/seen` (`upTo`) marks them seen. The
-app shows the count on Threads and marks it seen while Threads is open; web
-push and Discord will read the same outbox.
+app shows the count on Threads and marks it seen while Threads is open;
+Discord will read the same outbox.
+
+Web push (phase C2, `push.mjs`): every notice also goes to the browsers the
+owner subscribed in Settings. VAPID (RFC 8292) and the aes128gcm payload
+(RFC 8291) use `node:crypto`; the key pair is created on first start in
+`DATA_DIR/push/vapid.json` (mode 0600) and kept with the subscriptions
+(at most 10). `GET /push/key`, `POST /push/subscriptions` (https endpoints
+only) and `POST /push/subscriptions/remove` are owner-only. The payload
+carries the thread title, the notice and a local link; the push service only
+sees it encrypted. A 404 or 410 from the push service drops the
+subscription. The service worker shows the notice and a click focuses the
+app on that thread.
 
 `POST /threads` takes an optional `flowTemplateId` and `stageAgents` (agent
 per stage key). The thread freezes the template's stages when it is created;
