@@ -130,8 +130,16 @@ test("normalises rate limits from Claude and Codex", () => {
       resetsAt: 1795246800,
       rateLimitType: "five_hour",
       unifiedWindows: {
-        five_hour: { utilization: 0.51, resetsAt: 1795246800, status: "allowed" },
-        seven_day: { utilization: 0.22, resetsAt: 1795705200, status: "allowed" },
+        five_hour: {
+          utilization: 0.51,
+          resetsAt: 1795246800,
+          status: "allowed",
+        },
+        seven_day: {
+          utilization: 0.22,
+          resetsAt: 1795705200,
+          status: "allowed",
+        },
       },
     }).map((w) => [w.window, w.usedPercent]),
     [
