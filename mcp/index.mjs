@@ -69,6 +69,9 @@ export function isToolAllowedForOperations(name, opsSet) {
       "thread_ask_user",
       "thread_handoff",
       "thread_report_review",
+      "thread_request_subtask",
+      "thread_subtask_status",
+      "thread_integrate_subtask",
     ].includes(name)
   ) {
     return opsSet.has("user.ask");
@@ -666,6 +669,46 @@ export function createBrainMcp({
         .describe("Hallazgos concretos, con archivo y línea si aplica."),
     },
     (args) => api("/threads/agent/review", args),
+    false,
+  );
+  tool(
+    "thread_request_subtask",
+    `Pide a ${owner} aprobar una sub-tarea: un thread hijo con su propio worktree, que parte del último commit de tu rama (haz commit antes de pedirla). No bloquea; la respuesta te llega como un mensaje nuevo o la ves con thread_subtask_status.`,
+    {
+      title: z.string().min(1).max(200),
+      prompt: z
+        .string()
+        .min(1)
+        .max(100_000)
+        .describe("Encargo completo para el agente de la sub-tarea."),
+      agent: z
+        .object({
+          engine: z.enum(["claude", "codex", "agy", "deepseek"]),
+          model: z.string().min(1).optional(),
+          effort: z.string().min(1).optional(),
+        })
+        .optional()
+        .describe("Agente de la sub-tarea; por defecto, el tuyo."),
+      reason: z
+        .string()
+        .max(5_000)
+        .optional()
+        .describe("Por qué conviene separarla."),
+    },
+    (args) => api("/threads/agent/subtask", args),
+    false,
+  );
+  tool(
+    "thread_subtask_status",
+    "Lista las sub-tareas de tu thread: estado, si están trabajando, su último mensaje y sus cambios.",
+    {},
+    () => api("/threads/agent/subtasks"),
+  );
+  tool(
+    "thread_integrate_subtask",
+    "Integra en tu rama una sub-tarea que terminó: hace commit de sus cambios, la fusiona sin tocar archivos si hay conflictos (te los devuelve) y cierra su worktree. Tu copia de trabajo no debe tener cambios en los mismos archivos.",
+    { id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/) },
+    (args) => api("/threads/agent/subtasks/integrate", args, 280_000),
     false,
   );
   return server;
