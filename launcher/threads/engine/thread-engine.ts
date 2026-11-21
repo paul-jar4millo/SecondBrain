@@ -2,6 +2,7 @@
 // thread (running turn, queued messages, provider controller, open provider
 // requests) and writes every change to the event store.
 import {
+  AgentHandoff,
   AgentQuestion,
   AnswerRequest,
   CloseThread,
@@ -36,7 +37,13 @@ import {
 import type { Scheduler, Slot } from "./scheduler.ts";
 import type { ThreadWorkspaces } from "./workspace.ts";
 import { CloseError, commitTitle, type Closing } from "./closing.ts";
-import { flowTemplate, freezeFlow, isReadOnly } from "./flows.ts";
+import { currentStage, flowTemplate, freezeFlow, isReadOnly } from "./flows.ts";
+import {
+  briefMessage,
+  collectBrief,
+  resolveHandoff,
+  stagePreamble,
+} from "./handoff.ts";
 
 export interface ProviderController {
   isAlive(): boolean;
@@ -137,6 +144,15 @@ interface QueuedMessage {
   text: string;
   attachments: Attachment[];
   agent?: AgentRef;
+  /** First message of a stage: the agent reads where it stands. */
+  stageStart?: boolean;
+}
+
+interface PendingHandoff {
+  turnId: string;
+  index: number;
+  narrative: string;
+  openItems: string[];
 }
 
 interface Live {
@@ -147,6 +163,7 @@ interface Live {
   pending: Map<string, PendingRequest>;
   lastSeq: number;
   loop: Promise<void> | null;
+  handoff: PendingHandoff | null;
 }
 
 export type DeltaListener = (message: StreamMessage) => void;
@@ -181,6 +198,7 @@ export function createThreadEngine(deps: EngineDeps) {
         pending: new Map(),
         lastSeq: store.lastSeq(threadId),
         loop: null,
+        handoff: null,
       };
       lives.set(threadId, state);
     }
@@ -264,7 +282,16 @@ export function createThreadEngine(deps: EngineDeps) {
       effort: agent.effort ?? null,
       cwd: cwdOf(thread),
       readOnly: isReadOnly(thread),
+      stage: currentStage(thread)?.key ?? null,
     });
+
+  /** Each stage keeps its own provider conversation. */
+  const conversationKey = (thread: Thread, agent: AgentRef) => {
+    const stage = currentStage(thread);
+    return stage && (thread.flow?.stages.length ?? 0) > 1
+      ? `${stage.key}:${agent.engine}`
+      : agent.engine;
+  };
 
   const scheduleIdleShutdown = (threadId: string) => {
     const state = live(threadId);
@@ -487,15 +514,17 @@ export function createThreadEngine(deps: EngineDeps) {
       const controller = await controllerFor(threadId, thread, agent);
       if (turn.abort.signal.aborted) throw new Error("Interrumpido");
       const nativeIds = store.meta(threadId).nativeIds ?? {};
+      const conversation = conversationKey(thread, agent);
+      const preamble = message.stageStart ? stagePreamble(thread) : "";
       let sequence = 0;
       const ctx: Record<string, unknown> = {
         ...base,
         session: {
           ...(base.session as Record<string, unknown>),
-          conversacionId: nativeIds[agent.engine] ?? null,
+          conversacionId: nativeIds[conversation] ?? null,
         },
         turnId,
-        prompt: message.text,
+        prompt: preamble ? `${preamble}\n\n${message.text}` : message.text,
         attachments: message.attachments,
         nextId: () => ++sequence,
         onAbort: (fn: () => void) => turn.aborters.push(fn),
@@ -504,8 +533,8 @@ export function createThreadEngine(deps: EngineDeps) {
         },
         invalidateConnection: () => undefined,
         nativeId: (id: string) => {
-          if (nativeIds[agent.engine] === id) return;
-          nativeIds[agent.engine] = id;
+          if (nativeIds[conversation] === id) return;
+          nativeIds[conversation] = id;
           store.setMeta(threadId, { nativeIds: { ...nativeIds } });
         },
         message: (id: string, text: string) => mapper.message(id, text),
@@ -565,8 +594,67 @@ export function createThreadEngine(deps: EngineDeps) {
     ]);
     state.turn = null;
     slot.release();
+    const handoff = state.handoff;
+    state.handoff = null;
+    if (handoff?.turnId === turnId) {
+      if (outcome === "completed")
+        await applyHandoff(threadId, handoff).catch((cause: Error) =>
+          notice(threadId, "error", "handoff-failed", cause.message),
+        );
+      else
+        notice(
+          threadId,
+          "warning",
+          "handoff-dropped",
+          "El turno no terminó bien; el traspaso no se hizo.",
+        );
+    }
     finishStatus(threadId);
     scheduleIdleShutdown(threadId);
+  }
+
+  /** Moves the thread to the next stage once the handing turn ended. */
+  async function applyHandoff(threadId: string, handoff: PendingHandoff) {
+    const thread = requireThread(threadId);
+    const target = thread.flow?.stages[handoff.index];
+    if (!target || BUSY_STATUSES.has(thread.status)) return;
+    const items = store.snapshot(threadId)?.items ?? [];
+    const lastHandoff = items.findLast((item) => item.kind === "handoff");
+    const stageTurns = new Set(
+      store
+        .turns(threadId)
+        .filter(
+          (turn) =>
+            turn.stageIndex === thread.stageIndex &&
+            turn.startedSeq > (lastHandoff?.seq ?? 0),
+        )
+        .map((turn) => turn.id),
+    );
+    const brief = collectBrief(
+      items.filter((item) => item.turnId && stageTurns.has(item.turnId)),
+      await engine.diff(threadId).catch(() => []),
+    );
+    appendItem(threadId, null, {
+      kind: "handoff",
+      handoffId: newId("handoff"),
+      fromStage: thread.stageIndex,
+      toStage: handoff.index,
+      narrative: handoff.narrative,
+      openItems: handoff.openItems,
+      brief,
+    });
+    update(threadId, { stageIndex: handoff.index, agent: target.agent });
+    live(threadId).queue.unshift({
+      text: briefMessage({
+        thread,
+        from: thread.stageIndex,
+        narrative: handoff.narrative,
+        openItems: handoff.openItems,
+        brief,
+      }),
+      attachments: [],
+      stageStart: true,
+    });
   }
 
   /** Runs queued messages one turn at a time. */
@@ -766,6 +854,7 @@ export function createThreadEngine(deps: EngineDeps) {
       live(id).queue.push({
         text: command.prompt,
         attachments: command.attachments,
+        stageStart: true,
       });
       void (async () => {
         if (thread.status === "setting-up")
@@ -1103,6 +1192,39 @@ export function createThreadEngine(deps: EngineDeps) {
       state.turn?.mapper?.requestItem(request.id);
       if (!state.turn) setStatus(threadId, "waiting-user");
       return store.getRequest(request.id) as UserRequest;
+    },
+
+    /** thread_handoff: recorded now, applied when the agent's turn ends. */
+    handoff(threadId: string, input: unknown) {
+      const parsed = AgentHandoff.safeParse(input);
+      if (!parsed.success)
+        throw new EngineError(
+          "invalid",
+          parsed.error.issues[0]?.message ?? "Datos inválidos.",
+        );
+      const thread = requireThread(threadId);
+      if (BUSY_STATUSES.has(thread.status))
+        throw new EngineError("invalid-state", "El thread ya está cerrado.");
+      const state = live(threadId);
+      if (!state.turn?.id)
+        throw new EngineError(
+          "invalid-state",
+          "El traspaso solo se pide durante tu turno.",
+        );
+      const target = resolveHandoff(thread, parsed.data.toStage);
+      if ("error" in target) throw new EngineError("invalid", target.error);
+      state.handoff = {
+        turnId: state.turn.id,
+        index: target.index,
+        narrative: parsed.data.narrative,
+        openItems: parsed.data.openItems,
+      };
+      const stage = thread.flow?.stages[target.index];
+      return {
+        accepted: true,
+        toStage: parsed.data.toStage,
+        message: `Traspaso a «${stage?.name}» registrado; ocurre al terminar tu turno. Termina tu respuesta ahora.`,
+      };
     },
 
     request(threadId: string, requestId: string): UserRequest {
