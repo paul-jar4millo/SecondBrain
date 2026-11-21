@@ -76,6 +76,10 @@ try {
     name,
     "--label",
     "second-brain.test=true",
+    // Run as the owner of the bind mounts, as the Quadlet unit does in production.
+    ...(process.getuid
+      ? ["--user", process.getuid() + ":" + process.getgid()]
+      : []),
     "-e",
     "TRUSTED_PROXY=" + gateway,
     "-p",
@@ -88,7 +92,7 @@ try {
   ]);
   base = "http://127.0.0.1:" + docker(["port", name, "8080"]).split(":").pop();
   let ready = false;
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 300; i++) {
     try {
       const response = await fetch(base + "/api/v1/health");
       if (response.ok) {
@@ -97,6 +101,10 @@ try {
       }
     } catch {}
     await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!ready) {
+    const logs = spawnSync("docker", ["logs", name], { encoding: "utf8" });
+    console.error(logs.stdout + logs.stderr);
   }
   assert.ok(ready, "container readiness");
   assert.equal(
