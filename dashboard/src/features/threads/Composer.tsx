@@ -208,6 +208,7 @@ export function Composer({
               type="button"
               className="button"
               disabled={busy || !text.trim()}
+              aria-label="Redirigir"
               title="Entra en el turno actual (Ctrl+Enter)"
               onClick={() => void send("steer")}
             >

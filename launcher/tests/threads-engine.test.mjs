@@ -330,8 +330,9 @@ test("questions wait for the owner; plain approvals follow the autonomy", async 
   assert.equal(env.store.getRequest(request.id).origin, "discord");
   assert.equal(env.store.getThread(thread.id).status, "idle");
   assert.deepEqual(env.store.inbox(), []);
+  // An automatic approval is not news: the tool call already shows.
   assert.ok(
-    env.store
+    !env.store
       .items(thread.id)
       .some((i) => i.kind === "notice" && i.code === "auto-approved"),
   );

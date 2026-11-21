@@ -295,8 +295,12 @@ try {
         .getByRole("button", { name: "Cambios", exact: true })
         .first()
         .click();
-    // Close by PR.
+    // Close by PR (the dialog proposes local integration first).
     await page.getByRole("button", { name: "Cerrar thread" }).click();
+    assert.ok(
+      await page.getByRole("radio", { name: "Integrar en local" }).isChecked(),
+    );
+    await page.getByRole("radio", { name: "Abrir un PR" }).check();
     await page.getByRole("button", { name: "Abrir PR" }).click();
     await page
       .getByRole("button", { name: "Abrir PR" })

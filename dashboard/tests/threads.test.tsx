@@ -19,6 +19,8 @@ import type {
 } from "../src/features/threads/thread-types";
 // Static, so loading the timeline does not count against the test timeout.
 import { Timeline } from "../src/features/threads/Timeline";
+import { MessageItem, toolLabel } from "../src/features/threads/items";
+import { plainTitle } from "../src/features/threads/dialogs";
 
 const fixture = vi.hoisted(() => ({ answer: vi.fn() }));
 vi.mock("../src/features/threads/thread-api", () => ({
@@ -265,5 +267,57 @@ describe("thread timeline", () => {
       optionId: "o2",
     });
     await waitFor(() => expect(onAnswered).toHaveBeenCalled());
+  });
+});
+
+describe("thread texts", () => {
+  it("names tools and hand-offs for people", () => {
+    expect(toolLabel("mcp__secondbrain__thread_report_review")).toBe(
+      "Reporta la revisión",
+    );
+    expect(toolLabel("Bash")).toBe("Comando");
+    expect(toolLabel("lookup", "github")).toBe("github: lookup");
+    render(
+      <MessageItem
+        stages={["Planificar", "Implementar", "Revisar"]}
+        item={
+          {
+            id: "itm_handoff001",
+            threadId: "thr_abc1234567",
+            turnId: null,
+            seq: 9,
+            status: "completed",
+            agent: null,
+            createdAt: AT,
+            updatedAt: AT,
+            kind: "handoff",
+            fromStage: 0,
+            toStage: 1,
+            narrative: "Plan listo.",
+            openItems: [],
+            brief: {
+              diffstat: [{ path: "a.js", additions: 2, deletions: 0 }],
+              commands: [{ command: "npm test", exitCode: 0 }],
+              failedTests: [],
+              errors: [],
+              files: ["a.js"],
+            },
+          } as unknown as Item
+        }
+      />,
+    );
+    expect(screen.getByText("Traspaso: Planificar → Implementar")).toBeTruthy();
+    expect(screen.getByText("1 archivo · 1 comando")).toBeTruthy();
+  });
+
+  it("makes commit titles out of Markdown prompts", () => {
+    expect(plainTitle("Crea `principal.txt` con la línea **padre**")).toBe(
+      "Crea principal.txt con la línea padre",
+    );
+    expect(
+      plainTitle(
+        "Crea un archivo con una línea muy larga que no cabe en el título del commit de ninguna manera",
+      ),
+    ).toBe("Crea un archivo con una línea muy larga que no cabe en el…");
   });
 });
