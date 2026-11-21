@@ -14,8 +14,8 @@ interface ProviderUsage {
   contextoActualizado?: string | null;
 }
 const WINDOWS = [
-  ["5h", "5 horas"],
-  ["semanal", "Semanal"],
+  ["5h", "5 horas", 5 * 3_600_000],
+  ["semanal", "Semanal", 7 * 86_400_000],
 ] as const;
 const READ_EVERY = 60_000;
 // Marina pays per token through an API: she has no plan windows to show.
@@ -60,17 +60,23 @@ export function UsageBars({
     };
   }, [measured]);
   const current = usage[engine];
-  const staleClaude =
-    engine === "claude" &&
-    !!current?.actualizado &&
-    Date.now() - Date.parse(current.actualizado) > 3 * 60_000;
-  const rows = WINDOWS.flatMap(([id, label]) => {
-    if (staleClaude) return [];
+  // Readings come from the last turn or status line. One still holds while
+  // its window can be running, and says when it was taken; a reading older
+  // than the window itself has certainly reset and is not shown.
+  const age = current?.actualizado
+    ? Date.now() - Date.parse(current.actualizado)
+    : 0;
+  let expired = false;
+  const rows = WINDOWS.flatMap(([id, label, span]) => {
     const window = current?.ventanas?.[id];
-    return window && typeof window.usado === "number"
-      ? [{ id, label, window, left: Math.max(0, 100 - window.usado) }]
-      : [];
+    if (!window || typeof window.usado !== "number") return [];
+    if (age > span) {
+      expired = true;
+      return [];
+    }
+    return [{ id, label, window, left: Math.max(0, 100 - window.usado) }];
   });
+  const stale = age > 15 * 60_000;
   const measuredContext =
     current?.contextoActualizado &&
     Date.now() - Date.parse(current.contextoActualizado) < 3 * 60_000
@@ -116,11 +122,17 @@ export function UsageBars({
           <i style={{ width: `${contextPercent}%` }} />
         </i>
       </div>
-      {staleClaude && (
+      {stale && (rows.length > 0 || expired) && (
         <div className="usage-bar">
           <span>
-            <b>Plan Claude</b> sin lectura reciente{" "}
-            <small>· última {time(current!.actualizado!, true)}</small>
+            {rows.length > 0 ? (
+              <small>Lectura de {time(current!.actualizado!, true)}</small>
+            ) : (
+              <>
+                <b>Plan</b> sin lectura reciente{" "}
+                <small>· última {time(current!.actualizado!, true)}</small>
+              </>
+            )}
           </span>
         </div>
       )}

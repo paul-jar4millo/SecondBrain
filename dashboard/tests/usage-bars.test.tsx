@@ -40,7 +40,7 @@ it("muestra contexto sin inventar cuota del plan para DeepSeek", () => {
   expect(container.textContent).not.toContain("5 horas");
 });
 
-it("muestra contexto medido y oculta un porcentaje de Claude desactualizado", async () => {
+it("muestra contexto medido y oculta una ventana que ya reinició", async () => {
   fixture.api.mockResolvedValue({
     claude: {
       actualizado: "2020-01-01T00:00:00Z",
@@ -53,4 +53,16 @@ it("muestra contexto medido y oculta un porcentaje de Claude desactualizado", as
   expect(screen.getByText(/320 mil \/ 400 mil/)).toBeTruthy();
   expect(await screen.findByText(/sin lectura reciente/)).toBeTruthy();
   expect(screen.queryByText(/quedan 5 %/)).toBeNull();
+});
+
+it("muestra una lectura de hace un rato con su hora", async () => {
+  fixture.api.mockResolvedValue({
+    claude: {
+      actualizado: new Date(Date.now() - 40 * 60_000).toISOString(),
+      ventanas: { "5h": { usado: 95 } },
+    },
+  });
+  render(<UsageBars motor="claude" />);
+  expect(await screen.findByText(/quedan 5 %/)).toBeTruthy();
+  expect(screen.getByText(/Lectura de/)).toBeTruthy();
 });

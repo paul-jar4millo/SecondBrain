@@ -47,6 +47,7 @@ import {
   stagePreamble,
 } from "./handoff.ts";
 import { isReviewStage, reviewDecision } from "./review.ts";
+import { createUsageTracker } from "./usage-tracker.ts";
 
 export interface ProviderController {
   isAlive(): boolean;
@@ -494,13 +495,7 @@ export function createThreadEngine(deps: EngineDeps) {
             afterSeq: state.lastSeq,
           }),
       },
-      onRateLimits: (windows) =>
-        store.recordUsage({
-          engine: agent.engine,
-          at: now(),
-          source: "provider-event",
-          windows,
-        }),
+      onRateLimits: (windows) => usage.record(agent.engine, windows),
     });
     turn.mapper = mapper;
     let outcome: "completed" | "interrupted" | "failed" = "completed";
@@ -762,7 +757,12 @@ export function createThreadEngine(deps: EngineDeps) {
       setStatus(threadId, "idle");
   }
 
+  const usage = createUsageTracker({ store, now });
+
   const engine = {
+    /** Latest plan limits seen in this engine's provider events. */
+    usage: usage.latest,
+
     async create(input: unknown): Promise<Thread> {
       const { capabilityToken, threadId, ...fields } = (input ?? {}) as Record<
         string,
