@@ -1,6 +1,7 @@
 // The thread engine: commands in, events out. Owns the live state of each
 // thread (running turn, queued messages, provider controller, open provider
 // requests) and writes every change to the event store.
+import { existsSync } from "node:fs";
 import {
   AgentHandoff,
   AgentQuestion,
@@ -17,6 +18,7 @@ import {
   type DeliveryMode,
   type FileDiff,
   type RequestAnswer,
+  type RequestOrigin,
   type Item,
   type NewThreadEvent,
   type StreamMessage,
@@ -102,6 +104,8 @@ export interface EngineDeps {
   controllers: Readonly<Record<string, () => ProviderController>>;
   now?: () => string;
   idleControllerMs?: number;
+  /** Silence after which a running turn gets a "no signs" notice. */
+  stallNoticeMs?: number;
   defaultMaxTurns?: number;
   closing?: Closing;
 }
@@ -162,6 +166,8 @@ interface PendingHandoff {
 interface Live {
   turn: RunningTurn | null;
   queue: QueuedMessage[];
+  /** Queued messages a stop left undelivered; they go with the next one. */
+  held: QueuedMessage[];
   controller: { instance: ProviderController; signature: string } | null;
   idleTimer: NodeJS.Timeout | null;
   pending: Map<string, PendingRequest>;
@@ -186,6 +192,7 @@ export function createThreadEngine(deps: EngineDeps) {
     closing,
     now = () => new Date().toISOString(),
     idleControllerMs = 10 * 60_000,
+    stallNoticeMs = 5 * 60_000,
     defaultMaxTurns = 40,
   } = deps;
   const lives = new Map<string, Live>();
@@ -198,6 +205,7 @@ export function createThreadEngine(deps: EngineDeps) {
       state = {
         turn: null,
         queue: [],
+        held: [],
         controller: null,
         idleTimer: null,
         pending: new Map(),
@@ -292,6 +300,14 @@ export function createThreadEngine(deps: EngineDeps) {
     });
 
   /** Each stage keeps its own provider conversation. */
+  /** The owner's first message: the task every stage works toward. */
+  const originalTask = (threadId: string) => {
+    const first = store
+      .snapshot(threadId)
+      ?.items.find((item) => item.kind === "user_message");
+    return first?.kind === "user_message" ? first.text : "";
+  };
+
   const conversationKey = (thread: Thread, agent: AgentRef) => {
     const stage = currentStage(thread);
     return stage && (thread.flow?.stages.length ?? 0) > 1
@@ -477,6 +493,7 @@ export function createThreadEngine(deps: EngineDeps) {
     ]);
     thread = requireThread(threadId);
     const cwd = cwdOf(thread);
+    let lastActivity = Date.now();
     const mapper = createEventMapper({
       threadId,
       turnId,
@@ -484,8 +501,12 @@ export function createThreadEngine(deps: EngineDeps) {
       now,
       newItemId: () => newId("item"),
       sink: {
-        persist: (event) => append(threadId, [event])[0] as ThreadEvent,
-        delta: (itemId, field, delta) =>
+        persist: (event) => {
+          lastActivity = Date.now();
+          return append(threadId, [event])[0] as ThreadEvent;
+        },
+        delta: (itemId, field, delta) => {
+          lastActivity = Date.now();
           publishDelta({
             type: "item.delta",
             threadId,
@@ -493,11 +514,33 @@ export function createThreadEngine(deps: EngineDeps) {
             field,
             delta,
             afterSeq: state.lastSeq,
-          }),
+          });
+        },
       },
       onRateLimits: (windows) => usage.record(agent.engine, windows),
     });
     turn.mapper = mapper;
+    // A provider that goes silent leaves the thread "working" forever; say
+    // so, once, while nobody is being asked anything.
+    let stallNoticed = false;
+    const watchdog = setInterval(
+      () => {
+        if (
+          stallNoticed ||
+          state.pending.size > 0 ||
+          Date.now() - lastActivity < stallNoticeMs
+        )
+          return;
+        stallNoticed = true;
+        mapper.notice(
+          "warning",
+          "turn-stalled",
+          `El agente lleva ${Math.round(stallNoticeMs / 60_000)} min sin dar señales. Puede seguir pensando; si no avanza, pulsa Detener.`,
+        );
+      },
+      Math.min(60_000, stallNoticeMs),
+    );
+    watchdog.unref?.();
     let outcome: "completed" | "interrupted" | "failed" = "completed";
     let error: string | undefined;
     const beforeTree = thread.repo
@@ -515,7 +558,9 @@ export function createThreadEngine(deps: EngineDeps) {
       if (turn.abort.signal.aborted) throw new Error("Interrumpido");
       const nativeIds = store.meta(threadId).nativeIds ?? {};
       const conversation = conversationKey(thread, agent);
-      const preamble = message.stageStart ? stagePreamble(thread) : "";
+      const preamble = message.stageStart
+        ? stagePreamble(thread, originalTask(threadId))
+        : "";
       let sequence = 0;
       const ctx: Record<string, unknown> = {
         ...base,
@@ -573,6 +618,7 @@ export function createThreadEngine(deps: EngineDeps) {
       outcome = turn.abort.signal.aborted ? "interrupted" : "failed";
       error = cause instanceof Error ? cause.message : String(cause);
     }
+    clearInterval(watchdog);
     cancelPending(threadId, "cancelled", "El turno terminó", turnId);
     if (outcome === "failed")
       mapper.notice("error", "turn-failed", error ?? "El turno falló.");
@@ -680,6 +726,7 @@ export function createThreadEngine(deps: EngineDeps) {
           const thread = store.getThread(threadId);
           if (!thread || BUSY_STATUSES.has(thread.status)) {
             state.queue.length = 0;
+            state.held.length = 0;
             break;
           }
           if (
@@ -758,6 +805,70 @@ export function createThreadEngine(deps: EngineDeps) {
   }
 
   const usage = createUsageTracker({ store, now });
+
+  const answeringSubtasks = new Set<string>();
+
+  /** Approves (creating the child thread) or rejects a subtask request. */
+  async function settleSubtask(
+    threadId: string,
+    requestId: string,
+    request: UserRequest & { subtask: NonNullable<UserRequest["subtask"]> },
+    answer: { answer: RequestAnswer; origin: RequestOrigin },
+    childId: unknown,
+    capabilityToken: unknown,
+  ): Promise<UserRequest> {
+    const parsed = { data: answer };
+    const parent = requireThread(threadId);
+    const draft = request.subtask;
+    let text: string;
+    if (parsed.data.answer.approved) {
+      if (BUSY_STATUSES.has(parent.status) || !parent.repo)
+        throw new EngineError("invalid-state", "El thread ya está cerrado.");
+      const child = await engine.create({
+        kind: "repo",
+        repoPath: parent.repo.path,
+        baseBranch: parent.repo.branch,
+        title: draft.title,
+        prompt: draft.prompt,
+        agent: draft.agent,
+        autonomy: parent.autonomy === "read-only" ? "ask" : parent.autonomy,
+        parentId: threadId,
+        ...(childId !== undefined ? { threadId: childId } : {}),
+        ...(capabilityToken !== undefined ? { capabilityToken } : {}),
+      });
+      const current = requireThread(threadId);
+      update(threadId, {
+        counters: {
+          ...current.counters,
+          subtasks: current.counters.subtasks + 1,
+        },
+      });
+      text = `Sub-tarea «${draft.title}» aprobada: thread ${child.id}, rama ${child.repo?.branch}. Consulta su avance con thread_subtask_status e intégrala en tu rama con thread_integrate_subtask cuando termine.`;
+    } else
+      text = `Sub-tarea «${draft.title}» rechazada por el dueño.${parsed.data.answer.text ? ` ${parsed.data.answer.text}` : ""}`;
+    append(threadId, [
+      {
+        type: "request.resolved",
+        threadId,
+        at: now(),
+        requestId,
+        status: "answered",
+        answer: parsed.data.answer,
+        origin: parsed.data.origin,
+      },
+    ]);
+    // The agent learns the answer in its next turn, even if one is running.
+    const state = live(threadId);
+    appendItem(threadId, null, {
+      kind: "user_message",
+      text,
+      delivery: state.turn ? "queue" : "send",
+      attachments: [],
+    });
+    state.queue.push({ text, attachments: [] });
+    void kick(threadId);
+    return store.getRequest(requestId) as UserRequest;
+  }
 
   const engine = {
     /** Latest plan limits seen in this engine's provider events. */
@@ -933,13 +1044,24 @@ export function createThreadEngine(deps: EngineDeps) {
         },
       );
       if (delivery !== "steer") {
-        state.queue.push({ text, attachments, ...(agent ? { agent } : {}) });
+        const held = state.held.splice(0);
+        state.queue.push({
+          text: [...held.map((m) => m.text), text].join("\n\n"),
+          attachments: [...held.flatMap((m) => m.attachments), ...attachments],
+          ...(agent ? { agent } : {}),
+          ...(held.some((m) => m.stageStart) ? { stageStart: true } : {}),
+        });
         if (thread.status === "needs-decision")
+          // The owner chose to go on: more turns and one more review round.
           update(threadId, {
             status: "idle",
             limits: {
               ...thread.limits,
               maxTurns: thread.counters.turns + defaultMaxTurns,
+              maxReviewRounds: Math.max(
+                thread.limits.maxReviewRounds,
+                thread.counters.reviewRounds + 1,
+              ),
             },
           });
         void kick(threadId);
@@ -950,7 +1072,18 @@ export function createThreadEngine(deps: EngineDeps) {
     interrupt(threadId: string) {
       requireThread(threadId);
       const state = live(threadId);
-      state.queue.length = 0;
+      const waiting = state.queue.splice(0);
+      if (waiting.length) {
+        state.held.push(...waiting);
+        notice(
+          threadId,
+          "info",
+          "queue-held",
+          waiting.length === 1
+            ? "El mensaje en cola se enviará junto con tu próximo mensaje."
+            : `Los ${waiting.length} mensajes en cola se enviarán junto con tu próximo mensaje.`,
+        );
+      }
       const turn = state.turn;
       if (!turn) return false;
       turn.abort.abort();
@@ -1094,6 +1227,7 @@ export function createThreadEngine(deps: EngineDeps) {
           "El cierre con git no está disponible.",
         );
       state.queue.length = 0;
+      state.held.length = 0;
       const previous = thread.status;
       setStatus(threadId, "closing");
       const repo = thread.repo;
@@ -1161,6 +1295,7 @@ export function createThreadEngine(deps: EngineDeps) {
           "Detén el turno en curso antes de archivar el thread.",
         );
       live(threadId).queue.length = 0;
+      live(threadId).held.length = 0;
       await stopController(threadId);
       if (thread.repo)
         await workspaces
@@ -1302,60 +1437,27 @@ export function createThreadEngine(deps: EngineDeps) {
       const request = store.getRequest(requestId);
       if (!request || request.threadId !== threadId || !request.subtask)
         throw new EngineError("not-found", "Solicitud no encontrada.");
-      if (request.status !== "open")
-        throw new EngineError("conflict", "La solicitud ya fue respondida.");
+      if (request.status !== "open" || answeringSubtasks.has(requestId))
+        throw new EngineError("conflict", "Esa sub-tarea ya se respondió.");
       if (parsed.data.answer.approved === undefined)
         throw new EngineError("invalid", "Aprueba o rechaza la sub-tarea.");
-      const parent = requireThread(threadId);
-      const draft = request.subtask;
-      let text: string;
-      if (parsed.data.answer.approved) {
-        if (BUSY_STATUSES.has(parent.status) || !parent.repo)
-          throw new EngineError("invalid-state", "El thread ya está cerrado.");
-        const child = await engine.create({
-          kind: "repo",
-          repoPath: parent.repo.path,
-          baseBranch: parent.repo.branch,
-          title: draft.title,
-          prompt: draft.prompt,
-          agent: draft.agent,
-          autonomy: parent.autonomy === "read-only" ? "ask" : parent.autonomy,
-          parentId: threadId,
-          ...(childId !== undefined ? { threadId: childId } : {}),
-          ...(capabilityToken !== undefined ? { capabilityToken } : {}),
-        });
-        const current = requireThread(threadId);
-        update(threadId, {
-          counters: {
-            ...current.counters,
-            subtasks: current.counters.subtasks + 1,
-          },
-        });
-        text = `Sub-tarea «${draft.title}» aprobada: thread ${child.id}, rama ${child.repo?.branch}. Consulta su avance con thread_subtask_status e intégrala en tu rama con thread_integrate_subtask cuando termine.`;
-      } else
-        text = `Sub-tarea «${draft.title}» rechazada por el dueño.${parsed.data.answer.text ? ` ${parsed.data.answer.text}` : ""}`;
-      append(threadId, [
-        {
-          type: "request.resolved",
+      // Creating the child takes a while; a second click must not create
+      // another one meanwhile.
+      answeringSubtasks.add(requestId);
+      try {
+        return await settleSubtask(
           threadId,
-          at: now(),
           requestId,
-          status: "answered",
-          answer: parsed.data.answer,
-          origin: parsed.data.origin,
-        },
-      ]);
-      // The agent learns the answer in its next turn, even if one is running.
-      const state = live(threadId);
-      appendItem(threadId, null, {
-        kind: "user_message",
-        text,
-        delivery: state.turn ? "queue" : "send",
-        attachments: [],
-      });
-      state.queue.push({ text, attachments: [] });
-      void kick(threadId);
-      return store.getRequest(requestId) as UserRequest;
+          request as UserRequest & {
+            subtask: NonNullable<UserRequest["subtask"]>;
+          },
+          parsed.data,
+          childId,
+          capabilityToken,
+        );
+      } finally {
+        answeringSubtasks.delete(requestId);
+      }
     },
 
     /** thread_subtask_status: the parent's children and where they stand. */
@@ -1449,10 +1551,19 @@ export function createThreadEngine(deps: EngineDeps) {
           "conflict",
           "Ya reportaste la revisión de este turno.",
         );
-      const round = thread.counters.reviewRounds + 1;
-      update(threadId, {
-        counters: { ...thread.counters, reviewRounds: round },
-      });
+      // `round` numbers the reviews; the limit counts only the times the
+      // reviewer sent the work back.
+      const round =
+        (store.snapshot(threadId)?.items ?? []).filter(
+          (item) => item.kind === "review",
+        ).length + 1;
+      if (parsed.data.verdict === "changes-requested")
+        update(threadId, {
+          counters: {
+            ...thread.counters,
+            reviewRounds: thread.counters.reviewRounds + 1,
+          },
+        });
       appendItem(threadId, turnId, {
         kind: "review",
         reviewId: newId("review"),
@@ -1530,7 +1641,8 @@ export function createThreadEngine(deps: EngineDeps) {
     async diff(threadId: string): Promise<FileDiff[]> {
       const thread = requireThread(threadId);
       const base = store.meta(threadId).baseCommit;
-      if (!thread.repo || !base) return [];
+      // A closed thread may have no worktree left: nothing to show.
+      if (!thread.repo || !base || !existsSync(thread.repo.worktree)) return [];
       const current = await snapshotTree(git, thread.repo.worktree);
       return diffTrees(git, thread.repo.worktree, base, current);
     },
@@ -1540,7 +1652,12 @@ export function createThreadEngine(deps: EngineDeps) {
       const checkpoint = store.checkpoint(turnId);
       if (!checkpoint || checkpoint.threadId !== threadId)
         throw new EngineError("not-found", "Turno no encontrado.");
-      if (!thread.repo || !checkpoint.beforeTree) return [];
+      if (
+        !thread.repo ||
+        !checkpoint.beforeTree ||
+        (!checkpoint.afterTree && !existsSync(thread.repo.worktree))
+      )
+        return [];
       const after =
         checkpoint.afterTree ?? (await snapshotTree(git, thread.repo.worktree));
       return diffTrees(git, thread.repo.worktree, checkpoint.beforeTree, after);

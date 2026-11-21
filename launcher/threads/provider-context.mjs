@@ -28,7 +28,9 @@ export const scopeIdOf = (/** @type {string} */ threadId) =>
   threadId.replace(/_/g, "-");
 
 /**
- * Read-only stages (reviews) cannot write files or run shell commands.
+ * Read-only stages (plans, reviews) cannot write files nor use git; they may
+ * still run commands that read, such as tests (each provider keeps those from
+ * writing: Codex with its sandbox, Claude with readOnlyCommand).
  * @param {ToolProfile} profile
  * @param {boolean} readOnly
  * @returns {ToolProfile}
@@ -37,8 +39,7 @@ export function profileFor(profile, readOnly) {
   const copy = structuredClone(profile);
   if (readOnly)
     copy.allowedOperations = copy.allowedOperations.filter(
-      (/** @type {string} */ op) =>
-        !["file.write", "shell.test", "git.local"].includes(op),
+      (/** @type {string} */ op) => !["file.write", "git.local"].includes(op),
     );
   return copy;
 }

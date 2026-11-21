@@ -35,10 +35,12 @@ export function reviewDecision(
   if (review.verdict === "approved") return { status: "ready-for-review" };
   if (review.verdict === "comment") return {};
   const max = thread.limits.maxReviewRounds;
-  if (review.round >= max)
+  // The thread counts the change requests, this one included.
+  const changes = thread.counters.reviewRounds;
+  if (changes >= max)
     return {
       status: "needs-decision",
-      notice: `La revisión pidió cambios ${review.round} ${review.round === 1 ? "vez" : "veces"}, el máximo del flujo. Decide si sigues, cierras o descartas.`,
+      notice: `La revisión pidió cambios ${changes} ${changes === 1 ? "vez" : "veces"} (máximo ${max}). Decide si sigues, cierras o descartas.`,
     };
   const target = handoffTargets(thread)
     .map((key) => thread.flow?.stages.findIndex((s) => s.key === key) ?? -1)
@@ -52,7 +54,7 @@ export function reviewDecision(
   return {
     handoff: {
       index: target,
-      narrative: `Revisión ${review.round} de ${max}: pide cambios.\n\n${review.summary}`,
+      narrative: `Revisión ${review.round}: pide cambios (${changes} de ${max}).\n\n${review.summary}`,
       openItems: review.findings.map(findingText),
     },
   };

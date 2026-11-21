@@ -47,6 +47,11 @@ A thread is one task:
   items; streamed text and command output are ephemeral deltas.
 - `engine/scheduler.ts`: `SB_MAX_ACTIVOS` slots, owner turns first; a
   waiting turn shows "Esperando capacidad".
+- A stop keeps the queued messages and sends them with the owner's next one.
+  A turn with no provider activity for five minutes gets a notice, once.
+- Later stages of a flow get the owner's original task in their preamble. A
+  review counts only change requests against `maxReviewRounds`; going on
+  from "needs decision" grants one more round.
 - `child-env.mjs`, `provider-context.mjs`: the agent's environment (no
   supervisor tokens, external write secrets only when the profile allows
   them) and its per-thread `sbcap_` credential file.

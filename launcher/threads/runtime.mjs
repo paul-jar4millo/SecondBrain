@@ -21,6 +21,7 @@ import { openStore } from "./store/event-log.ts";
  *   toolCatalog?: { getProfile(id: string): any } | null,
  *   controllers?: Record<string, () => import("./engine/thread-engine.ts").ProviderController>,
  *   context?: import("./engine/thread-engine.ts").AgentContextFactory,
+ *   stallNoticeMs?: number,
  * }} options
  */
 export function openThreads({
@@ -33,6 +34,7 @@ export function openThreads({
   toolCatalog = null,
   controllers = /** @type {any} */ (CONTROLLER_FACTORIES),
   context,
+  stallNoticeMs,
 }) {
   const store = openStore(path.join(dataDir, "threads.sqlite"));
   const engine = createThreadEngine({
@@ -54,6 +56,7 @@ export function openThreads({
         tokenDir: path.join(dataDir, "threads", "tokens"),
       }),
     controllers,
+    ...(stallNoticeMs ? { stallNoticeMs } : {}),
     ...(gh ? { closing: createClosing({ git, gh }) } : {}),
   });
   engine.recover();

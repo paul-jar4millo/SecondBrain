@@ -9,6 +9,7 @@ import { createCodexController } from "../lib/providers/codex.mjs";
 import { createStreamFakeProcess } from "./helpers/provider-fakes.mjs";
 import {
   claudeRateLimit,
+  claudeRateLimits,
   codexRateLimits,
   diffStats,
   isoTime,
@@ -122,6 +123,31 @@ test("normalises rate limits from Claude and Codex", () => {
   assert.equal(claudeRateLimit({ status: "rejected" })?.usedPercent, 100);
   assert.equal(claudeRateLimit({ status: "allowed" })?.usedPercent, null);
   assert.equal(claudeRateLimit(undefined), null);
+  // What the CLI really sends: utilization only inside unifiedWindows.
+  assert.deepEqual(
+    claudeRateLimits({
+      status: "allowed",
+      resetsAt: 1795246800,
+      rateLimitType: "five_hour",
+      unifiedWindows: {
+        five_hour: {
+          utilization: 0.51,
+          resetsAt: 1795246800,
+          status: "allowed",
+        },
+        seven_day: {
+          utilization: 0.22,
+          resetsAt: 1795705200,
+          status: "allowed",
+        },
+      },
+    }).map((w) => [w.window, w.usedPercent]),
+    [
+      ["five_hour", 51],
+      ["seven_day", 22],
+    ],
+  );
+  assert.deepEqual(claudeRateLimits(undefined), []);
   assert.deepEqual(
     codexRateLimits({
       rateLimits: {

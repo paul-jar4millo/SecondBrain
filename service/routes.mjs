@@ -473,9 +473,15 @@ for (const [key, body] of /** @type {Array<[string, z.ZodType]>} */ ([
   ],
   ["GET /agents/projects", object],
   ["GET /agents/models", object],
-  ["GET /agents/usage", object],
 ]))
   ROUTES.set(key, { public: false, room: false, body, query: anyQuery });
+// Thread agents read plan usage (agent_usage) with their own credential.
+ROUTES.set("GET /agents/usage", {
+  public: false,
+  room: true,
+  body: object,
+  query: anyQuery,
+});
 // Changes and PR draft of one session: a user session and a UUID, nothing else.
 // Long-lived SSE of one harness: only a user session, and the id must be a UUID.
 for (const [

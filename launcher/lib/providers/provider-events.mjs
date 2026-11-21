@@ -189,6 +189,27 @@ export function claudeRateLimit(info) {
 }
 
 /**
+ * Every window of a Claude rate_limit_event. The CLI reports the utilization
+ * of each window under `unifiedWindows`; the top level only names the one
+ * that decides the status and often has no utilization.
+ * @param {{ status?: string, resetsAt?: number, rateLimitType?: string, utilization?: number, unifiedWindows?: Record<string, { status?: string, resetsAt?: number, utilization?: number }> } | undefined} info
+ * @returns {ProviderRateLimitWindow[]}
+ */
+export function claudeRateLimits(info) {
+  if (!info) return [];
+  const unified = info.unifiedWindows;
+  const windows =
+    unified && typeof unified === "object"
+      ? Object.entries(unified).map(([rateLimitType, window]) =>
+          claudeRateLimit({ ...window, rateLimitType }),
+        )
+      : [claudeRateLimit(info)];
+  return windows.filter(
+    /** @returns {w is ProviderRateLimitWindow} */ (w) => w !== null,
+  );
+}
+
+/**
  * Codex account/rateLimits/updated → windows.
  * @param {unknown} payload
  * @returns {ProviderRateLimitWindow[]}

@@ -70,6 +70,25 @@ export function profileDisallowsAction(ctx, category) {
   return false;
 }
 
+const READ_COMMAND =
+  /^(git (status|diff|log|show|blame|grep|ls-files|rev-parse|branch)|ls|cat|head|tail|wc|rg|grep|find|tree|pwd|file|stat|node --test|npm (test|run (test|lint|typecheck|check))|npx (vitest run|tsc --noEmit|eslint)|pnpm (test|lint)|pytest|go (test|vet)|cargo (test|check|clippy))(?=\s|$)/;
+
+/**
+ * Whether a shell command only reads (or runs tests) and may run in a
+ * read-only stage. Chained or redirected commands never qualify.
+ * @param {unknown} command
+ */
+export function readOnlyCommand(command) {
+  if (typeof command !== "string") return false;
+  const trimmed = command.trim();
+  if (!trimmed || /[;&|<>`\n]|\$\(/.test(trimmed)) return false;
+  if (/^find\b.*\s-(delete|exec|execdir|ok|okdir|fprint|fls)\b/.test(trimmed))
+    return false;
+  if (/^git branch\b.*\s-[dDmMcC]\b/.test(trimmed)) return false;
+  if (/\s--output\b/.test(trimmed)) return false;
+  return READ_COMMAND.test(trimmed);
+}
+
 /** @param {unknown} value */
 export const text = (value) =>
   typeof value === "string" ? value : JSON.stringify(value ?? "");

@@ -97,6 +97,7 @@ async function setup(t, script, options = {}) {
     maxActive: options.maxActive ?? 2,
     controllers,
     context,
+    ...(options.stallNoticeMs ? { stallNoticeMs: options.stallNoticeMs } : {}),
   });
   t.after(async () => {
     await threads.close();
@@ -364,6 +365,63 @@ test("interrupt stops the turn and cancels its open requests", async (t) => {
   assert.equal(env.store.getRequest(request.id).status, "cancelled");
   assert.equal(env.store.turns(thread.id)[0].outcome, "interrupted");
   assert.equal(env.engine.interrupt(thread.id), false);
+});
+
+test("a stop keeps queued messages for the owner's next message", async (t) => {
+  const env = await setup(t, async (_ctx, n, aborted) => {
+    if (n === 1) await waitFor(aborted);
+  });
+  const thread = await env.engine.create({
+    kind: "scratch",
+    prompt: "primero",
+    agent: AGENT,
+  });
+  await waitFor(() => env.log.turns.length === 1);
+  await env.engine.send(thread.id, { text: "en cola", mode: "queue" });
+  assert.equal(env.engine.interrupt(thread.id), true);
+  await env.engine.idle(thread.id);
+  // Nothing runs on its own after a stop.
+  assert.equal(env.log.turns.length, 1);
+  assert.ok(
+    env.engine
+      .snapshot(thread.id)
+      .items.some(
+        (/** @type {any} */ i) =>
+          i.kind === "notice" && i.code === "queue-held",
+      ),
+  );
+  await env.engine.send(thread.id, { text: "sigue", mode: "send" });
+  await waitFor(() => env.log.turns.length === 2);
+  await env.engine.idle(thread.id);
+  assert.match(env.log.turns[1].prompt, /^en cola\n\nsigue$/);
+});
+
+test("a silent turn says so once", async (t) => {
+  const release = gate();
+  const env = await setup(
+    t,
+    async () => {
+      await release.promise;
+    },
+    { stallNoticeMs: 50 },
+  );
+  const thread = await env.engine.create({
+    kind: "scratch",
+    prompt: "piensa",
+    agent: AGENT,
+  });
+  const stalled = () =>
+    env.engine
+      .snapshot(thread.id)
+      .items.filter(
+        (/** @type {any} */ i) =>
+          i.kind === "notice" && i.code === "turn-stalled",
+      );
+  await waitFor(() => stalled().length === 1);
+  await new Promise((r) => setTimeout(r, 150));
+  release.open();
+  await env.engine.idle(thread.id);
+  assert.equal(stalled().length, 1);
 });
 
 test("turns wait for capacity and the thread says so", async (t) => {
@@ -934,14 +992,19 @@ test("review sends changes back to the implementer and approval waits for the ow
   const turns = env.log.turns;
   assert.equal(turns.length, 5);
   assert.match(turns[2].prompt, /thread_report_review/);
-  assert.match(turns[2].prompt, /ronda 1 de 3/);
+  assert.match(turns[2].prompt, /pidió cambios 0 de un máximo de 3/);
+  assert.match(
+    turns[2].prompt,
+    /La tarea original del dueño:\n> Arregla el parser/,
+  );
   assert.match(turns[3].prompt, /etapa 2\/3 «Implementar»/);
-  assert.match(turns[3].prompt, /Revisión 1 de 3: pide cambios/);
+  assert.match(turns[3].prompt, /Revisión 1: pide cambios \(1 de 3\)/);
   assert.match(turns[3].prompt, /- major: a\.js:3 — falta el caso vacío/);
-  assert.match(turns[4].prompt, /ronda 2 de 3/);
+  assert.match(turns[4].prompt, /pidió cambios 1 de un máximo de 3/);
   const after = env.store.getThread(thread.id);
   assert.equal(after.stageIndex, 2);
-  assert.equal(after.counters.reviewRounds, 2);
+  // Only the request for changes counts against the limit.
+  assert.equal(after.counters.reviewRounds, 1);
   const items = env.engine.snapshot(thread.id).items;
   assert.deepEqual(
     items
@@ -1023,11 +1086,29 @@ test("an approved subtask works on a child branch and integrates into the parent
       }),
     /answerSubtask/,
   );
-  const answered = await env.engine.answerSubtask(parent.id, docs.id, {
-    answer: { approved: true },
-    origin: "app",
-    childId: "thr_childsubtask01",
+  // A double click: the second answer arrives while the child is created.
+  const [answered, twice] = await Promise.allSettled([
+    env.engine.answerSubtask(parent.id, docs.id, {
+      answer: { approved: true },
+      origin: "app",
+      childId: "thr_childsubtask01",
+    }),
+    env.engine.answerSubtask(parent.id, docs.id, {
+      answer: { approved: true },
+      origin: "app",
+      childId: "thr_childsubtask02",
+    }),
+  ]).then(([a, b]) => {
+    assert.equal(a.status, "fulfilled");
+    assert.equal(b.status, "rejected");
+    assert.match(
+      String(/** @type {any} */ (b).reason?.message),
+      /ya se respondió/,
+    );
+    return [/** @type {any} */ (a).value, b];
   });
+  assert.ok(twice);
+  assert.equal(env.store.getThread("thr_childsubtask02"), null);
   assert.equal(answered.status, "answered");
   const child = env.store.getThread("thr_childsubtask01");
   assert.equal(child.parentId, parent.id);

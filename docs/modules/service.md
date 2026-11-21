@@ -62,11 +62,13 @@ cannot use them.
 `POST /threads` takes an optional `flowTemplateId` and `stageAgents` (agent
 per stage key). The thread freezes the template's stages when it is created;
 the first stage picks the agent, and a read-only stage runs its turns without
-writes. DeepSeek is refused for any stage unless `SB_ALLOW_BILLED_DEEPSEEK=1`.
+writes (it may still read and run tests). DeepSeek is refused for any stage
+unless `SB_ALLOW_BILLED_DEEPSEEK=1`.
 
 Each thread gets its own `sbcap_` credential (profile `ejecucion`, narrowed
-by operator policy), bound to the thread id; closing without a PR or
-archiving revokes it. With that credential the agent asks the owner through
+by operator policy), bound to the thread id and to the agent identity of every
+stage of its flow; closing without a PR or archiving revokes it. Approving a
+subtask that was already answered returns 409. With that credential the agent asks the owner through
 `POST /threads/agent/ask` (MCP `thread_ask_user`), and the existing
 `usuario_*` tools are routed to the thread: `/requests/ask`,
 `/requests/detail` and `/requests/wait` accept `req_…` ids. An
