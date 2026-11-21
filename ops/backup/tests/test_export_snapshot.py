@@ -57,7 +57,7 @@ class ExportTests(unittest.TestCase):
         return archive
 
     def test_keeps_knowledge_and_ignored_work_but_excludes_chats_and_tools(self):
-        source = self.fixture({'./srv/secondbrain/vault/Home.md': b'knowledge', './srv/secondbrain/vault/node_modules/knowledge.md': b'authored knowledge', './var/lib/secondbrain/shared/index.json': b'{}', './srv/sb-agente/proyectos/example/ignored.bin': b'work', './var/lib/sb-agente/estado/lanzador/workspaces/one/entrega/final.zip': b'final', './var/lib/sb-agente/estado/lanzador/workspaces/one/.tools/bin/download': b'cache', './var/lib/sb-agente/estado/lanzador/sesiones.json': b'chat', './var/lib/sb-agente/codex/thread_history_1.sqlite': b'chat'})
+        source = self.fixture({'./srv/secondbrain/vault/Home.md': b'knowledge', './srv/secondbrain/vault/node_modules/knowledge.md': b'authored knowledge', './var/lib/secondbrain/shared/index.json': b'{}', './srv/sb-agent/projects/example/ignored.bin': b'work', './var/lib/sb-agent/state/launcher/workspaces/one/entrega/final.zip': b'final', './var/lib/sb-agent/state/launcher/workspaces/one/.tools/bin/download': b'cache', './var/lib/sb-agent/state/launcher/sesiones.json': b'chat', './var/lib/sb-agente/codex/thread_history_1.sqlite': b'chat'})
         result = subprocess.run([sys.executable, str(SCRIPT), str(source)], capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         with tarfile.open(fileobj=io.BytesIO(result.stdout), mode='r:') as archive:

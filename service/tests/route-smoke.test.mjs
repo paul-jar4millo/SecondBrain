@@ -10,7 +10,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApplication } from "../index.mjs";
 import { ROUTES } from "../routes.mjs";
-import { legacyPaths } from "../http/legacy-paths.mjs";
 
 const PRE_DISPATCH = [
   "Ruta de API no encontrada.",
@@ -94,17 +93,7 @@ test("every declared route reaches its handler", async () => {
   assert.deepEqual(blocked, [], "routes that never reached a handler");
 });
 
-test("every old HTTP path still points to a route with a canonical policy", () => {
-  const canonical = new Set(
-    Array.from(ROUTES.keys(), (key) => key.split(" ")[1]),
-  );
-  for (const [alias, target] of legacyPaths) {
-    assert.ok(canonical.has(target), target);
-    assert.ok(!canonical.has(alias), alias);
-  }
-});
-
-test("service aliases can be retired while the canonical API stays available", async (t) => {
+test("the Spanish API paths are retired and the canonical API answers", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "sb-routes-retired-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(path.join(root, "00-Inbox"));
@@ -113,7 +102,6 @@ test("service aliases can be retired while the canonical API stays available", a
     vaultRoot: root,
     dataDirectory: path.join(root, ".data"),
     auth: false,
-    legacyHttpRoutes: false,
   });
   t.after(() => app.close());
   await new Promise((resolve) => app.server.listen(0, "127.0.0.1", resolve));
@@ -121,9 +109,13 @@ test("service aliases can be retired while the canonical API stays available", a
     "http://127.0.0.1:" +
     /** @type {import("node:net").AddressInfo} */ (app.server.address()).port +
     "/api/v1";
-  const old = await fetch(base + "/aprobaciones");
-  assert.equal(old.status, 404);
-  assert.equal(old.headers.get("deprecation"), null);
+  for (const old of [
+    "/aprobaciones",
+    "/sala",
+    "/solicitudes",
+    "/mundo/overview",
+  ])
+    assert.equal((await fetch(base + old)).status, 404, old);
   const current = await fetch(base + "/approvals");
   assert.equal(current.status, 200);
   assert.deepEqual(await current.json(), []);

@@ -7,7 +7,7 @@ ConditionPathExists=/etc/secondbrain/aviso.env
 Type=oneshot
 # Read by systemd as root before dropping privileges, so it can stay 0600 root.
 EnvironmentFile=-/etc/secondbrain/aviso.env
-ExecStart=/bin/sh /opt/secondbrain/current/ops/aviso/enviar-aviso.sh %i
+ExecStart=/bin/sh /opt/secondbrain/current/ops/notify/send-notice.sh %i
 TimeoutStartSec=30
 DynamicUser=yes
 UMask=0077

@@ -3,13 +3,12 @@ import path from "node:path";
 
 // Operational project/repository links are independent from the knowledge vault.
 /**
- * @param {{ archivo: string, proyectos: Record<string, string>, workspaces: string, legacyHttpRoutes?: boolean }} options
+ * @param {{ archivo: string, proyectos: Record<string, string>, workspaces: string }} options
  */
 export async function openWorkspaces({
   archivo: file,
   proyectos: projects,
   workspaces,
-  legacyHttpRoutes = true,
 }) {
   /** @type {string[]} */
   const repositories = [];
@@ -22,8 +21,8 @@ export async function openWorkspaces({
   const repositoryPaths = Object.fromEntries(
     repositories.map((name) => [name, projects[name]]),
   );
-  // In the compatibility release an older launcher or repo-link script
-  // may update vinculos without knowing about links. Both remain readable.
+  // Files written before v0.6 keep the links under "vinculos"; the next write
+  // stores them as "links" only.
   const { revision, links, vinculos, ...extra } = await readFile(file, "utf8")
     .then(JSON.parse)
     .catch((error) => {
@@ -67,7 +66,6 @@ export async function openWorkspaces({
         const stored = {
           ...extra,
           ...next,
-          ...(legacyHttpRoutes ? { vinculos: next.links } : {}),
         };
         await writeFile(file + ".tmp", JSON.stringify(stored), {
           mode: 0o600,

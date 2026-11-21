@@ -5,7 +5,7 @@
 # NOT backed up (by design): anything named "shared" (the Maletín), anything named "secrets",
 # the vault's .git (the private SecondBrain-Vault repository has it), node_modules, dist,
 # artifacts, tooling, .cache and .workspace-archive; also everything outside VAULT_ROOT and
-# DATA_DIR: /var/lib/sb-agente (agent logins, history, hook tokens), /srv/sb-agente/proyectos
+# DATA_DIR: /var/lib/sb-agente (agent logins, history, hook tokens), /srv/sb-agent/projects
 # and /etc/sb-agente.
 set -eu
 : "${VAULT_ROOT:?Define la ruta física del vault}"

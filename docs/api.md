@@ -8,20 +8,15 @@ body. Unknown routes return `404`; invalid bodies return `400`.
 
 ## English API paths
 
-The route tables list the canonical paths for Phase 1.5. In the transition
-release, a legacy path forwards to the same handler, validation and
-authorization policy as its successor and sends a `Deprecation` response
-header. Integrations should send new requests to the English paths.
+Since v0.6.0 the service and the launcher answer only the English paths in
+these tables; the Spanish paths of the v0.5 compatibility release return
+`404`.
 
-After the transition release, set `SB_LEGACY_HTTP_ROUTES=off` on the service
-and launcher together to retire all old HTTP paths. Roll both processes
-back together if a client still needs the old paths.
-
-For `/agents/workspaces`, the canonical response carries `revision`,
-`links`, `repositories` and `repositoryPaths`. The write body contains
-`id`, `repository` (name or `null`) and `revision`. Legacy responses
-keep `vinculos` and `repositorios`. The on-disk registry still reads old
-links and writes both keys during the compatibility release for rollback.
+For `/agents/workspaces`, the response carries `revision`, `links`,
+`repositories` and `repositoryPaths`. The write body contains `id`,
+`repository` (name or `null`) and `revision`. The launcher still reads
+registry files written with the old `vinculos` key and stores `links` on
+the next write.
 
 ## Authentication
 

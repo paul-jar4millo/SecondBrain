@@ -386,6 +386,24 @@ export async function migrateHostLayout({
       moves,
     };
   }
+  if (mode === "retire-aliases") {
+    // Releases from v0.6 use only the English names; the legacy ones were
+    // symlinks kept for the compatibility release. Data is never touched.
+    if (!installed || state)
+      throw new Error("Apply the host migration before retiring its aliases");
+    const removed = [];
+    for (const [old, next] of [
+      ...HOST_DATA_PATHS,
+      ...HOST_COMMANDS,
+      ...HOST_UNITS.map(([a, b]) => [UNITS + a, UNITS + b]),
+    ])
+      if (await matchesAlias(at(old), at(next))) {
+        await unlink(at(old));
+        removed.push(old);
+      }
+    if (removed.length) await host.run("daemon-reload");
+    return { changed: removed.length > 0, removed };
+  }
   if (mode !== "apply" && !reverse) throw new Error("Unknown migration mode");
   if (!state && installed === !reverse) return { changed: false };
 
@@ -525,13 +543,18 @@ if (
         ? "apply"
         : args[0] === "--rollback"
           ? "rollback"
-          : "plan";
+          : args[0] === "--retire-aliases"
+            ? "retire-aliases"
+            : "plan";
     if (
       args.length > 1 ||
-      (args.length && !["--apply", "--rollback", "--dry-run"].includes(args[0]))
+      (args.length &&
+        !["--apply", "--rollback", "--retire-aliases", "--dry-run"].includes(
+          args[0],
+        ))
     )
       throw new Error(
-        "Usage: node migrate-host-layout.mjs [--dry-run|--apply|--rollback]",
+        "Usage: node migrate-host-layout.mjs [--dry-run|--apply|--rollback|--retire-aliases]",
       );
     if (mode !== "plan" && process.getuid?.() !== 0)
       throw new Error("This operation requires root");

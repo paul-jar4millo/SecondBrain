@@ -5,7 +5,7 @@ After=network-online.target
 [Service]
 User=sb-agente
 Group=sb-agente
-WorkingDirectory=/srv/sb-agente/proyectos/sb-agente
+WorkingDirectory=/srv/sb-agent/projects/sb-agente
 EnvironmentFile=/var/lib/sb-agente/agentes.env
 Environment=HOME=/var/lib/sb-agente
 Environment=PATH=/opt/sb-agente/cli/current/bin:/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:/var/lib/sb-agente/.local/bin
@@ -24,7 +24,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=yes
 InaccessiblePaths=/srv/secondbrain/vault /var/lib/secondbrain
-ReadWritePaths=/srv/sb-agente /var/lib/sb-agente
+ReadWritePaths=/srv/sb-agent /var/lib/sb-agente /var/lib/sb-agent
 ProtectProc=invisible
 ProtectKernelTunables=true
 ProtectKernelModules=true

@@ -122,18 +122,18 @@ export async function configure({
       0o755,
     ],
     [
-      "ops/lxc/plantillas/secondbrain.service",
+      "ops/lxc/templates/secondbrain.service",
       "/etc/systemd/system/secondbrain.service",
       0o644,
     ],
-    ["ops/lxc/plantillas/nftables.conf", "/etc/nftables.conf", 0o644],
+    ["ops/lxc/templates/nftables.conf", "/etc/nftables.conf", 0o644],
     ...[
-      "secondbrain-lanzador.service",
+      "secondbrain-launcher.service",
       "claude-sb-agente.service",
-      "resumen-matutino.service",
-      "resumen-matutino.timer",
+      "morning-summary.service",
+      "morning-summary.timer",
     ].map((name) => [
-      "ops/lanzador/" + name,
+      "ops/launcher/" + name,
       "/etc/systemd/system/" + name,
       0o644,
     ]),
@@ -144,21 +144,13 @@ export async function configure({
       (name) => ["ops/backup/" + name, "/etc/systemd/system/" + name, 0o644],
     ),
     [
-      "ops/aviso/secondbrain-aviso@.service",
-      "/etc/systemd/system/secondbrain-aviso@.service",
+      "ops/notify/secondbrain-notify@.service",
+      "/etc/systemd/system/secondbrain-notify@.service",
       0o644,
     ],
-    ["ops/homelab/prender-pc", "/usr/local/bin/prender-pc", 0o755],
-    ["ops/homelab/estado-pc", "/usr/local/bin/estado-pc", 0o755],
+    ["ops/homelab/pc-wake", "/usr/local/bin/pc-wake", 0o755],
+    ["ops/homelab/pc-status", "/usr/local/bin/pc-status", 0o755],
   ];
-  const marker = await safeDestination(root, "/etc/secondbrain/english-layout");
-  const english = await lstat(marker)
-    .then((file) => file.isFile())
-    .catch((error) => {
-      if (error.code === "ENOENT") return false;
-      throw error;
-    });
-  const names = english ? await import("../migration/host-layout.mjs") : null;
   const files = await Promise.all(
     mapping
       .filter(
@@ -177,22 +169,7 @@ export async function configure({
             /^WorkingDirectory=.*$/m,
             "WorkingDirectory=" + p.remoteWorkdir,
           );
-        const basename = target.split("/").at(-1);
-        const renderedTarget =
-          names && target.startsWith("/etc/systemd/system/") && basename
-            ? target.slice(0, -basename.length) + names.hostUnitName(basename)
-            : target;
-        return {
-          target:
-            names?.HOST_COMMANDS.find(([from]) => from === target)?.[1] ??
-            renderedTarget,
-          mode,
-          // The deploy helper handles both layouts itself and must stay verbatim.
-          content:
-            names && target !== "/usr/local/sbin/secondbrain-deploy"
-              ? names.hostUnitText(content)
-              : content,
-        };
+        return { target, mode, content };
       }),
   );
   files.push({

@@ -27,10 +27,10 @@ const isSource = (name) =>
   name.endsWith(".mjs") || (name.endsWith(".ts") && !name.endsWith(".d.ts"));
 
 /**
- * Shared schemas (ADR 0011). contracts/ sits next to lanzador/ and service/,
+ * Shared schemas (ADR 0011). contracts/ sits next to launcher/ and service/,
  * so their relative imports resolve. Zod has no dependencies and is copied as
  * plain files into contracts/node_modules: the deploy helper on the host only
- * installs service, mcp and lanzador and rejects symlinks in the archive.
+ * installs service, mcp and launcher and rejects symlinks in the archive.
  * @param {string} root
  * @param {string} target
  */
@@ -190,15 +190,15 @@ export async function packageRelease(
       path.join(target, "launcher/skills", entry.name, "SKILL.md"),
     );
   }
-  await cp(path.join(root, "ops/launcher"), path.join(target, "ops/lanzador"), {
+  await cp(path.join(root, "ops/launcher"), path.join(target, "ops/launcher"), {
     recursive: true,
   });
   for (const directory of [
     "deploy",
     "backup",
-    "aviso",
+    "notify",
     "homelab",
-    "lxc/plantillas",
+    "lxc/templates",
   ]) {
     const source = path.join(root, "ops", directory);
     if (
@@ -216,7 +216,7 @@ export async function packageRelease(
           entry.isFile() &&
           (/\.(?:mjs|py|sh|service|timer|conf)$/.test(entry.name) ||
             (directory === "homelab" &&
-              ["prender-pc", "estado-pc", "CLAUDE.md"].includes(entry.name)))
+              ["pc-wake", "pc-status", "CLAUDE.md"].includes(entry.name)))
         )
           await cp(
             path.join(source, entry.name),
@@ -261,21 +261,11 @@ export async function packageRelease(
       if (error.code !== "ENOENT") throw error;
     });
   }
-  for (const [source, output] of [
-    ["launcher/resumen-matutino.sh", "launcher/morning-summary.sh"],
-    ["aviso/enviar-aviso.sh", "aviso/send-notice.sh"],
-  ]) {
-    const targetFile = path.join(target, "ops", output);
-    await mkdir(path.dirname(targetFile), { recursive: true });
-    await cp(path.join(root, "ops", source), targetFile).catch((error) => {
-      if (error.code !== "ENOENT") throw error;
-    });
-  }
   // Stable entry points for existing units and MCP clients.
   await mkdir(path.join(target, "server"));
   for (const [entry, module, method] of [
     ["index", "service/index", "startService"],
-    ["lanzador", "launcher/index", "arrancar"],
+    ["launcher", "launcher/index", "arrancar"],
     ["mcp", "mcp/index", "startMcp"],
   ]) {
     if (nativeHost && entry === "index") continue;

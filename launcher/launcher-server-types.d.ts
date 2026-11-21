@@ -21,7 +21,6 @@ export interface LauncherServerOptions {
   proyectos?: Record<string, string>;
   espacios?: WorkspaceRegistry;
   controlHash: string;
-  legacyHttpRoutes?: boolean;
   registrar?: (line: string) => void;
 }
 

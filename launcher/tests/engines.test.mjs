@@ -34,7 +34,7 @@ test("prepara los cuatro motores headless sin imponer modelo ni herramientas", (
     "--json",
     "--dangerously-bypass-approvals-and-sandbox",
     "-c",
-    'mcp_servers.secondbrain.env_vars=["SB_BRAIN_TOKEN_FILE","SB_BRAIN_URL","SB_AGENT","SB_AGENTE","SB_SESSION_ID"]',
+    'mcp_servers.secondbrain.env_vars=["SB_BRAIN_TOKEN_FILE","SB_BRAIN_URL","SB_AGENT","SB_SESSION_ID"]',
     "x",
   ]);
   assert.ok(!codex.includes("model_auto_compact_token_limit=350000"));

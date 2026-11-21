@@ -19,7 +19,7 @@ export const thread: Thread = {
   autonomy: "auto-worktree",
   agent: { engine: "codex", model: "gpt-5", effort: "medium" },
   repo: {
-    path: "/srv/sb-agente/proyectos/SecondBrain",
+    path: "/srv/sb-agent/projects/SecondBrain",
     baseBranch: "main",
     branch: "sb/fix-inbox-badge",
     worktree: "/srv/sb-agente/worktrees/thr_abcdef123456",

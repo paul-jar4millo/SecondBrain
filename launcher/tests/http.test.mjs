@@ -54,16 +54,11 @@ async function serve(t, options = {}) {
 
 test("only the control credential opens the launcher", async (t) => {
   const { call } = await serve(t);
-  assert.equal((await call("/proyectos", { token: "otra" })).status, 401);
-  const canonical = await call("/projects");
-  assert.equal(canonical.status, 200);
-  assert.equal(canonical.headers.get("Deprecation"), null);
-  assert.deepEqual(await canonical.json(), ["demo"]);
-  const projects = await call("/proyectos");
-  assert.match(projects.headers.get("Deprecation") ?? "", /^@[0-9]+$/);
+  assert.equal((await call("/projects", { token: "otra" })).status, 401);
+  const projects = await call("/projects");
   assert.equal(projects.status, 200);
   assert.deepEqual(await projects.json(), ["demo"]);
-  assert.deepEqual(await (await call("/estado")).json(), { ok: true });
+  assert.deepEqual(await (await call("/status")).json(), { ok: true });
 });
 
 test("the session-era routes are gone", async (t) => {
@@ -86,17 +81,15 @@ test("workspace links go through and bodies are bounded", async (t) => {
   const canonical = await (await call("/workspaces")).json();
   assert.deepEqual(canonical.repositories, ["demo"]);
   assert.deepEqual(canonical.links, {});
-  const listed = await (await call("/espacios")).json();
-  assert.deepEqual(listed.repositorios, ["demo"]);
-  const linked = await call("/espacios", {
-    body: { id: "p1", repositorio: "demo", revision: 0 },
+  const linked = await call("/workspaces", {
+    body: { id: "p1", repository: "demo", revision: 0 },
   });
   assert.equal(linked.status, 200);
   assert.deepEqual(links, [{ id: "p1", repository: "demo", revision: 0 }]);
-  assert.equal((await call("/espacios", { raw: "{" })).status, 400);
-  assert.equal((await call("/espacios", { raw: "[]" })).status, 400);
+  assert.equal((await call("/workspaces", { raw: "{" })).status, 400);
+  assert.equal((await call("/workspaces", { raw: "[]" })).status, 400);
   assert.equal(
-    (await call("/espacios", { body: { x: "a".repeat(600_000) } })).status,
+    (await call("/workspaces", { body: { x: "a".repeat(600_000) } })).status,
     413,
   );
 });
@@ -117,8 +110,8 @@ test("an unexpected failure answers 500 without echoing the request", async (t) 
     },
     registrar: (line) => lines.push(line),
   });
-  const response = await call("/espacios", {
-    body: { id: "secreto-123", repositorio: null, revision: 0 },
+  const response = await call("/workspaces", {
+    body: { id: "secreto-123", repository: null, revision: 0 },
   });
   assert.equal(response.status, 500);
   assert.doesNotMatch(await response.text(), /secreto/);
@@ -126,8 +119,8 @@ test("an unexpected failure answers 500 without echoing the request", async (t) 
   assert.doesNotMatch(lines[0], /secreto-123/);
 });
 
-test("retiring aliases leaves the canonical launcher routes active", async (t) => {
-  const { call } = await serve(t, { legacyHttpRoutes: false });
-  assert.equal((await call("/estado")).status, 404);
-  assert.equal((await call("/status")).status, 200);
+test("the Spanish launcher routes are retired", async (t) => {
+  const { call } = await serve(t);
+  for (const path of ["/estado", "/proyectos", "/espacios", "/uso"])
+    assert.equal((await call(path)).status, 404, path);
 });

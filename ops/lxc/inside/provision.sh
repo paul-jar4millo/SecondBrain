@@ -2,10 +2,10 @@
 # Dentro del LXC, como root. Deja SecondBrain listo a partir de un Debian 13 limpio.
 # Idempotente: cada etapa se puede repetir. No pide ni imprime secretos de terceros.
 #
-#   aprovisionar.sh base            paquetes, Node, usuarios, unidades, nftables, CLIs
-#   aprovisionar.sh vault           clona el vault (o crea uno mínimo si REPO_VAULT está vacío)
-#   aprovisionar.sh desplegar SHA   activa release.tar.gz con el helper e instala el lanzador
-#   aprovisionar.sh runner          registra el runner de GitHub; lee el token de registro por stdin
+#   provision.sh base            paquetes, Node, usuarios, unidades, nftables, CLIs
+#   provision.sh vault           clona el vault (o crea uno mínimo si REPO_VAULT está vacío)
+#   provision.sh desplegar SHA   activa release.tar.gz con el helper e instala el lanzador
+#   provision.sh runner          registra el runner de GitHub; lee el token de registro por stdin
 set -euo pipefail
 aqui=$(cd -- "$(dirname -- "$0")/.." && pwd)
 # shellcheck source=/dev/null
@@ -22,7 +22,7 @@ ssh_vault="/usr/bin/ssh -F /dev/null -i $clave_vault -o UserKnownHostsFile=$serv
 paso() { printf '\n== %s\n' "$*"; }
 como() { local u=$1; shift; runuser -u "$u" -- "$@"; }
 como_agente() { runuser -u sb-agente -- env -C "$agente" HOME="$agente" PATH="/opt/sb-agente/cli/current/bin:/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:$agente/.local/bin" "$@"; }
-plantilla() { sed -e "s|@PROXY_IP@|$PROXY_IP|g" "$aqui/plantillas/$1"; }
+plantilla() { sed -e "s|@PROXY_IP@|$PROXY_IP|g" "$aqui/templates/$1"; }
 
 base() {
   paso "Paquetes del sistema"
@@ -53,10 +53,10 @@ base() {
   install -d -m 750 -o root -g secondbrain /var/lib/secondbrain-ops
   install -d -m 700 -o secondbrain -g secondbrain /srv/secondbrain
   install -d -m 700 -o sb-agente -g sb-agente "$agente" "$agente/claude" "$agente/deepseek" \
-    "$agente/codex" "$agente/estado" "$agente/.local" "$agente/.local/bin" "$agente/.gemini" "$agente/.gemini/config"
-  install -d -m 750 -o sb-agente -g sb-agente /srv/sb-agente /srv/sb-agente/proyectos
-  install -d -m 700 -o sb-agente -g sb-agente /srv/sb-agente/proyectos/general
-  install -d -m 700 -o sb-agente -g sb-agente /srv/sb-agente/proyectos/SecondBrain /srv/sb-agente/proyectos/sb-agente /srv/sb-agente/entregables
+    "$agente/codex" "$agente/.local" "$agente/.local/bin" "$agente/.gemini" "$agente/.gemini/config"
+  install -d -m 750 -o sb-agente -g sb-agente /srv/sb-agent /srv/sb-agent/projects
+  install -d -m 700 -o sb-agente -g sb-agente /srv/sb-agent/projects/general
+  install -d -m 700 -o sb-agente -g sb-agente /srv/sb-agent/projects/SecondBrain /srv/sb-agent/projects/sb-agente /srv/sb-agent/deliverables
   install -d -m 755 /opt/secondbrain /opt/secondbrain/releases /opt/sb-agente /etc/secondbrain
   install -d -m 755 -o sb-runner -g sb-runner /var/lib/sb-runner/incoming
   [[ -f $agente/agentes.env ]] || install -m 600 -o sb-agente -g sb-agente /dev/null "$agente/agentes.env"
@@ -83,7 +83,7 @@ base() {
   tar -xzf "$aqui/release.tar.gz" --no-same-owner -C "$aqui/operational"
   PROXY_IP="$PROXY_IP" GATEWAY="$GATEWAY" AGENTE_UID="$(id -u sb-agente)" \
     PC_IP="${PC_IP:?Set PC_IP in lxc.env}" PC_MAC="${PC_MAC:?Set PC_MAC in lxc.env}" PC_BROADCAST="${PC_BROADCAST:?Set PC_BROADCAST in lxc.env}" \
-    REMOTE_WORKDIR="${REMOTE_WORKDIR:-/srv/sb-agente/proyectos/sb-agente}" \
+    REMOTE_WORKDIR="${REMOTE_WORKDIR:-/srv/sb-agent/projects/sb-agente}" \
     node -e 'const f=require("fs"),e=process.env;f.writeFileSync("/etc/secondbrain/parameters.json",JSON.stringify({proxy:e.PROXY_IP,gateway:e.GATEWAY,agentUid:Number(e.AGENTE_UID),pc:e.PC_IP,mac:e.PC_MAC,broadcast:e.PC_BROADCAST,remoteWorkdir:e.REMOTE_WORKDIR},null,2),{mode:0o600})'
   node "$aqui/operational/ops/deploy/configure.mjs" --release "$aqui/operational" --parameters /etc/secondbrain/parameters.json
   printf 'PROXY_IP=%q\nGATEWAY=%q\nAGENTE_UID=%q\n' "$PROXY_IP" "$GATEWAY" "$(id -u sb-agente)" >/etc/secondbrain/ops.env
@@ -122,7 +122,7 @@ EOF
 
   paso "Configuración de los motores (MCP secondbrain)"
   local settings='{}'
-  local mcp='{"type":"stdio","command":"/opt/node/bin/node","args":["/opt/secondbrain/current/server/mcp.mjs"],"env":{"SB_BRAIN_TOKEN_FILE":"${SB_BRAIN_TOKEN_FILE}","SB_BRAIN_URL":"${SB_BRAIN_URL}","SB_AGENTE":"${SB_AGENTE}","SB_SESSION_ID":"${SB_SESSION_ID}"}}'
+  local mcp='{"type":"stdio","command":"/opt/node/bin/node","args":["/opt/secondbrain/current/server/mcp.mjs"],"env":{"SB_BRAIN_TOKEN_FILE":"${SB_BRAIN_TOKEN_FILE}","SB_BRAIN_URL":"${SB_BRAIN_URL}","SB_AGENT":"${SB_AGENT}","SB_SESSION_ID":"${SB_SESSION_ID}"}}'
   for dir in claude deepseek; do
     printf '%s\n' "$settings" >"$agente/$dir/settings.json"
     chown sb-agente:sb-agente "$agente/$dir/settings.json"
@@ -144,7 +144,7 @@ EOF
       "args": ["/opt/secondbrain/current/server/mcp.mjs"],
       "disabled": false,
       "env": {
-        "SB_AGENTE": "lira",
+        "SB_AGENT": "lira",
         "SB_BRAIN_URL": "http://127.0.0.1:8080/api/v1",
         "SB_BRAIN_TOKEN_FILE": "$agente/brain-token"
       }
@@ -156,14 +156,14 @@ EOF
   chmod 600 "$agente/codex/config.toml" "$agente/.gemini/config/mcp_config.json"
 
   paso "Contexto de homelab de sb-agente"
-  d=/srv/sb-agente/proyectos/sb-agente
+  d=/srv/sb-agent/projects/sb-agente
   install -d -m 700 -o sb-agente -g sb-agente "$d" "$d/.claude"
   install -o sb-agente -g sb-agente -m 600 "$aqui/operational/ops/homelab/CLAUDE.md" "$d/CLAUDE.md"
-  printf '%s\n' '{"permissions":{"allow":["Bash(prender-pc)","Bash(estado-pc)"]}}' >"$d/.claude/settings.json"
+  printf '%s\n' '{"permissions":{"allow":["Bash(pc-wake)","Bash(pc-status)"]}}' >"$d/.claude/settings.json"
   chown sb-agente:sb-agente "$d/.claude/settings.json"
   chmod 600 "$d/.claude/settings.json"
   # Prepare credentials and units before the first release without starting models.
-  SB_RELEASE="$aqui/operational" SB_ACTIVATE=0 SB_ENABLE_AUTOMATIONS=0 bash "$aqui/operational/ops/lanzador/install.sh"
+  SB_RELEASE="$aqui/operational" SB_ACTIVATE=0 SB_ENABLE_AUTOMATIONS=0 bash "$aqui/operational/ops/launcher/install.sh"
   node "$aqui/operational/ops/deploy/configure.mjs" --release "$aqui/operational" --parameters /etc/secondbrain/parameters.json
   systemctl daemon-reload
   systemctl restart systemd-journald
@@ -183,7 +183,7 @@ vault() {
   elif [[ -z $REPO_VAULT ]]; then
     paso "Vault mínimo de prueba (REPO_VAULT vacío)"
     install -d -m 700 -o secondbrain -g secondbrain "$vault" "$vault/00-Inbox"
-    printf '# Home\n\nVault de prueba creado por aprovisionar.sh.\n' >"$vault/Home.md"
+    printf '# Home\n\nVault de prueba creado por provision.sh.\n' >"$vault/Home.md"
     chown secondbrain:secondbrain "$vault/Home.md"
     como secondbrain git -C "$vault" init -q -b main
   else
@@ -192,7 +192,7 @@ vault() {
   fi
   como secondbrain git -C "$vault" config user.name SecondBrain
   como secondbrain git -C "$vault" config user.email secondbrain@localhost
-  if [[ -n $REPO_VAULT && ${ENABLE_AUTOMATIONS:-${ACTIVAR_AUTOMATIZACIONES:-0}} == 1 ]]; then
+  if [[ -n $REPO_VAULT && ${ENABLE_AUTOMATIONS:-${ENABLE_AUTOMATIONS:-0}} == 1 ]]; then
     systemctl enable --now secondbrain-vault-push.timer >/dev/null
   else
     systemctl disable --now secondbrain-vault-push.timer >/dev/null 2>&1 || true
@@ -204,7 +204,7 @@ vault() {
 desplegar() {
   local sha=${1:?Falta el SHA de la release}
   [[ $sha =~ ^[a-f0-9]{40}$ ]] || { echo "SHA inválido" >&2; exit 2; }
-  test -f "$vault/Home.md" || { echo "Primero: aprovisionar.sh vault" >&2; exit 1; }
+  test -f "$vault/Home.md" || { echo "Primero: provision.sh vault" >&2; exit 1; }
   paso "Activando la release $sha"
   if [[ $(cat /opt/secondbrain/current/REVISION 2>/dev/null) != "$sha" ]]; then
     install -d -o sb-runner -g sb-runner "/var/lib/sb-runner/incoming/$sha"
@@ -213,7 +213,7 @@ desplegar() {
     rm -rf -- "/var/lib/sb-runner/incoming/$sha"
   fi
   paso "Lanzador"
-  SB_ENABLE_AUTOMATIONS="${ENABLE_AUTOMATIONS:-${ACTIVAR_AUTOMATIZACIONES:-0}}" bash /opt/secondbrain/current/ops/lanzador/install.sh
+  SB_ENABLE_AUTOMATIONS="${ENABLE_AUTOMATIONS:-${ENABLE_AUTOMATIONS:-0}}" bash /opt/secondbrain/current/ops/launcher/install.sh
   node /opt/secondbrain/current/ops/deploy/configure.mjs --release /opt/secondbrain/current --parameters /etc/secondbrain/parameters.json
   systemctl daemon-reload
 }
