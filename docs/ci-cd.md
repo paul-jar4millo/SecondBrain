@@ -1,6 +1,8 @@
 # CI/CD
 
-Three workflows live in `.github/workflows/`. All third-party actions are
+Four workflows live in `.github/workflows/`: `ci.yml`, `deploy.yml`,
+`pages.yml` and `agent-cli-contract.yml`
+([ADR 0016](adr/0016-pinned-agent-clis.md)). All third-party actions are
 pinned to a full commit SHA, workflows default to `contents: read`, and the
 self-hosted runner never executes code from pull requests.
 
@@ -33,16 +35,19 @@ flowchart LR
 
 ## `ci.yml` — verification
 
-| Job              | What it does                                                                                                                                                                                                                                                                | Blocks merge |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| `verify`         | `npm run lint`, `format:check`, `typecheck`; ShellCheck on all shell scripts; `npm run coverage` (node test runner + Vitest with V8 coverage) and the operations tests; builds the dashboard and packages a release; writes a coverage summary to the job page              | Yes          |
-| `commits`        | Validates every commit subject with `ops/check-commit.mjs`                                                                                                                                                                                                                  | Yes          |
-| `audit`          | `npm audit --omit=dev` per module, leaving a visible warning on high-severity advisories; dev dependencies are informational; also runs weekly                                                                                                                              | No (warns)   |
-| `browser`        | Playwright suites in four groups (refuge, approvals, project dashboards, tools and Threads) with software WebGL, each retried once; runs for pull requests that touch `dashboard/`, `service/`, `launcher/`, `contracts/` or the CI workflow, for manual runs and weekly; uploads screenshots on failure | No (reports) |
-| `browser-report` | On the weekly run only: when a browser suite fails, opens the issue "Weekly browser suites failing" or comments on the open one                                                                                                                                             | No           |
+| Job              | What it does                                                                                                                                                                                                                                                                                             | Blocks merge                        |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `verify`         | `npm run lint`, `format:check`, `typecheck`; ShellCheck on all shell scripts; `npm run coverage` (node test runner + Vitest with V8 coverage) and the operations tests; builds the dashboard and packages a release; writes a coverage summary to the job page                                           | Yes                                 |
+| `commits`        | Validates every commit subject with `ops/check-commit.mjs`                                                                                                                                                                                                                                               | Yes                                 |
+| `container`      | Builds the service image from `dashboard/Dockerfile` and smoke-tests it (`dashboard/ops/smoke-container.mjs`)                                                                                                                                                                                            | No (reports)                        |
+| `audit`          | `npm audit --omit=dev` per module, leaving a visible warning on high-severity advisories; dev dependencies are informational; also runs weekly                                                                                                                                                           | Required, but stays green and warns |
+| `browser`        | Playwright suites in four groups (refuge, approvals, project dashboards, tools and Threads) with software WebGL, each retried once; runs for pull requests that touch `dashboard/`, `service/`, `launcher/`, `contracts/` or the CI workflow, for manual runs and weekly; uploads screenshots on failure | No (reports)                        |
+| `browser-report` | On the weekly run only: when a browser suite fails, opens the issue "Weekly browser suites failing" or comments on the open one                                                                                                                                                                          | No                                  |
 
-Which checks gate a merge is decided by the branch protection rules; the
-recommended set is `verify` and `commits`.
+The `protect-main` ruleset requires a pull request and the `verify`,
+`commits` and `audit` checks; force pushes and deletion are blocked. The
+`protect-release-tags` ruleset stops release tags from being moved or
+deleted.
 
 ### Coverage floors
 

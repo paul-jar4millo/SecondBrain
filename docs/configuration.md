@@ -38,16 +38,19 @@ the systemd units in `ops/lxc/templates/` and by host-only files under
 
 ## launcher
 
-| Variable                            | Default            | Purpose                                         |
-| ----------------------------------- | ------------------ | ----------------------------------------------- |
-| `SB_LAUNCHER_PORT`                  | `8092`             | Loopback control port                           |
-| `SB_LAUNCHER_DATA_DIR`              | required, absolute | Sessions, conversations, checkpoints            |
-| `SB_CONTROL_HASH_FILE`              | required           | Hash of the control token                       |
-| `SB_PROJECTS_FILE`                 | required           | JSON catalog of repositories agents may work on |
-| `SB_AGY_ACP_BIN`, `SB_AGY_ACP_ARGS` | `agy`, `["acp"]`   | Antigravity ACP command (operator only)         |
+| Variable                            | Default            | Purpose                                                            |
+| ----------------------------------- | ------------------ | ------------------------------------------------------------------ |
+| `SB_LAUNCHER_PORT`                  | `8092`             | Loopback control port                                              |
+| `SB_LAUNCHER_DATA_DIR`              | required, absolute | `threads.sqlite` and per-thread state                              |
+| `SB_CONTROL_HASH_FILE`              | required           | Hash of the control token                                          |
+| `SB_PROJECTS_FILE`                  | required           | JSON catalog of repositories agents may work on                    |
+| `SB_AGY_ACP_BIN`, `SB_AGY_ACP_ARGS` | `agy`, `["acp"]`   | Antigravity ACP command (operator only)                            |
+| `SB_MAX_ACTIVOS`                    | `6` (max 16)       | Concurrent thread turns (scheduler slots)                          |
+| `SB_RETENCION_DIAS`                 | `90` (max 365)     | Validated at start-up but not used since threads replaced sessions |
+| `SB_SESSION_SCOPES`                 | off                | `1` runs each turn in its own `systemd-run` scope                  |
 
-Session and team limits (active sessions, members, depth) are read by
-`launcher/limits.mjs`; see [ADR 0005](adr/0005-team-manifests.md).
+Limits are read by `launcher/limits.mjs`. The two Spanish variable names are
+older than the naming check and are scheduled to be renamed.
 
 ## dashboard (build time)
 

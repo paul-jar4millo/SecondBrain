@@ -1,6 +1,6 @@
 # 0005 · Agent teams are bounded by an approved manifest
 
-- Status: accepted
+- Status: superseded by [ADR 0010](0010-threads-replace-sessions.md) (work orders removed; spending and process limits stay)
 - Date: 2026-11-19
 
 ## Context and problem statement

@@ -1,6 +1,6 @@
 # 0003 · Agents run in isolated sessions under a separate user
 
-- Status: accepted
+- Status: accepted; session model superseded by [ADR 0010](0010-threads-replace-sessions.md) (isolation stays)
 - Date: 2026-11-10
 
 ## Context and problem statement

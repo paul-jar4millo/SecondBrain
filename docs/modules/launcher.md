@@ -30,7 +30,6 @@ npm --prefix launcher test   # uses fake CLIs; never calls a provider
 | `provider-controllers.mjs` → `lib/providers/` | One controller per protocol: `codex`, `claude`, `acp`, plus elicitation and config helpers                                  |
 | `engines.mjs`, `models.mjs`, `usage.mjs`      | Engine capabilities, model catalog, usage windows (provider events first, then the CLI readings)                            |
 | `tool-catalog.mjs`, `limits.mjs`              | Tool profiles and skills, process limits                                                                                    |
-| `version-registry.mjs`                        | Deploy marker read by the host helper; the thread launcher ignores the old session index                                    |
 | `skills/`                                     | Skills offered to agents (research, verification, document production…)                                                     |
 
 ## Threads
@@ -52,7 +51,7 @@ A thread is one task:
 - Later stages of a flow get the owner's original task in their preamble. A
   review counts only change requests against `maxReviewRounds`; going on
   from "needs decision" grants one more round.
-- `child-env.mjs`, `provider-context.mjs`: the agent's environment (no
+- `threads/child-env.mjs`, `threads/provider-context.mjs`: the agent's environment (no
   supervisor tokens, external write secrets only when the profile allows
   them) and its per-thread `sbcap_` credential file.
 - Autonomy `auto-worktree` approves plain command and file approvals inside

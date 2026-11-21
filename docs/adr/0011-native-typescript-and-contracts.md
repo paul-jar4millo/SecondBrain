@@ -42,7 +42,7 @@ Chosen option 2.
   `contracts/node_modules/zod` as plain files, so any deploy helper works
   without installing `contracts`.
 
-Spike (LXC 204, Node 24.22.2): a `.mjs` entry importing a `.ts` file that
+Spike (production LXC, Node 24.22.2): a `.mjs` entry importing a `.ts` file that
 imports `../../contracts/src/index.ts` and Zod runs without flags; a
 workspace symlink also works because Node resolves the real path. A `.ts`
 file physically inside `node_modules` fails with

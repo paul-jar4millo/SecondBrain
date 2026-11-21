@@ -49,13 +49,13 @@ Chosen option 3.
 - Old operational data is deleted without backup, after the owner confirms
   the list on the host.
 
-Steering, verified with the Claude Agent SDK 0.3.326 on LXC 204: a message
+Steering, verified with the Claude Agent SDK 0.3.326 on the production LXC: a message
 pushed to the input queue during a tool-using turn is taken at the next tool
 boundary (one result, and the model follows the new message); during a
 text-only turn it is answered after the current result. The UI labels steer
 as "applies at the next step". Codex and ACP steer through their own RPC.
 
-Worktree cost on LXC 204: `git worktree add -b` ≈ 50 ms, removal ≈ 160 ms;
+Worktree cost on the production LXC: `git worktree add -b` ≈ 50 ms, removal ≈ 160 ms;
 `npm ci --prefer-offline` with the shared cache ≈ 3.3 s and ≈ 270 MB for the
 dashboard. Setup runs only when a lockfile exists, and archiving deletes the
 worktree.
