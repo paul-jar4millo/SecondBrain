@@ -280,6 +280,7 @@ export async function createContext(options) {
       case "POST /requests/wait":
       case "POST /threads/agent/ask":
       case "POST /threads/agent/handoff":
+      case "POST /threads/agent/review":
       case "GET /threads/agent/request":
         requireAny("user.ask");
         return cap;

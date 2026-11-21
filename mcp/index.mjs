@@ -68,6 +68,7 @@ export function isToolAllowedForOperations(name, opsSet) {
       "usuario_esperar_respuesta",
       "thread_ask_user",
       "thread_handoff",
+      "thread_report_review",
     ].includes(name)
   ) {
     return opsSet.has("user.ask");
@@ -639,6 +640,32 @@ export function createBrainMcp({
         .describe("Pendientes concretos para la etapa siguiente."),
     },
     (args) => api("/threads/agent/handoff", args),
+    false,
+  );
+  tool(
+    "thread_report_review",
+    "Reporta el veredicto de la etapa de revisión de tu thread: approved (listo para el dueño), changes-requested (vuelve a implementación con tus hallazgos) o comment. Una vez por turno; se aplica cuando tu turno termina.",
+    {
+      verdict: z.enum(["approved", "changes-requested", "comment"]),
+      summary: z
+        .string()
+        .min(1)
+        .max(20_000)
+        .describe("Resumen de la revisión."),
+      findings: z
+        .array(
+          z.object({
+            file: z.string().max(500).optional(),
+            line: z.number().int().min(1).optional(),
+            severity: z.enum(["blocker", "major", "minor", "nit"]),
+            text: z.string().min(1).max(2000),
+          }),
+        )
+        .max(100)
+        .optional()
+        .describe("Hallazgos concretos, con archivo y línea si aplica."),
+    },
+    (args) => api("/threads/agent/review", args),
     false,
   );
   return server;

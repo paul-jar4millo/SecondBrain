@@ -4,6 +4,7 @@
 import {
   AgentHandoff,
   AgentQuestion,
+  AgentReview,
   AnswerRequest,
   CloseThread,
   CreateThread,
@@ -44,6 +45,7 @@ import {
   resolveHandoff,
   stagePreamble,
 } from "./handoff.ts";
+import { isReviewStage, reviewDecision } from "./review.ts";
 
 export interface ProviderController {
   isAlive(): boolean;
@@ -164,6 +166,7 @@ interface Live {
   lastSeq: number;
   loop: Promise<void> | null;
   handoff: PendingHandoff | null;
+  review: (AgentReview & { turnId: string; round: number }) | null;
 }
 
 export type DeltaListener = (message: StreamMessage) => void;
@@ -199,6 +202,7 @@ export function createThreadEngine(deps: EngineDeps) {
         lastSeq: store.lastSeq(threadId),
         loop: null,
         handoff: null,
+        review: null,
       };
       lives.set(threadId, state);
     }
@@ -594,8 +598,19 @@ export function createThreadEngine(deps: EngineDeps) {
     ]);
     state.turn = null;
     slot.release();
-    const handoff = state.handoff;
+    let handoff = state.handoff;
     state.handoff = null;
+    const review = state.review?.turnId === turnId ? state.review : null;
+    state.review = null;
+    let reviewStatus: Thread["status"] | undefined;
+    if (review && outcome === "completed") {
+      // The verdict decides where the thread goes, over any hand-off.
+      const decision = reviewDecision(requireThread(threadId), review);
+      handoff = decision.handoff ? { turnId, ...decision.handoff } : null;
+      reviewStatus = decision.status;
+      if (decision.notice)
+        notice(threadId, "warning", "review-limit", decision.notice);
+    }
     if (handoff?.turnId === turnId) {
       if (outcome === "completed")
         await applyHandoff(threadId, handoff).catch((cause: Error) =>
@@ -610,6 +625,8 @@ export function createThreadEngine(deps: EngineDeps) {
         );
     }
     finishStatus(threadId);
+    if (reviewStatus && requireThread(threadId).status === "idle")
+      setStatus(threadId, reviewStatus);
     scheduleIdleShutdown(threadId);
   }
 
@@ -1192,6 +1209,56 @@ export function createThreadEngine(deps: EngineDeps) {
       state.turn?.mapper?.requestItem(request.id);
       if (!state.turn) setStatus(threadId, "waiting-user");
       return store.getRequest(request.id) as UserRequest;
+    },
+
+    /** thread_report_review: the verdict of the review stage's turn. */
+    reportReview(threadId: string, input: unknown) {
+      const parsed = AgentReview.safeParse(input);
+      if (!parsed.success)
+        throw new EngineError(
+          "invalid",
+          parsed.error.issues[0]?.message ?? "Datos inválidos.",
+        );
+      const thread = requireThread(threadId);
+      if (BUSY_STATUSES.has(thread.status))
+        throw new EngineError("invalid-state", "El thread ya está cerrado.");
+      const state = live(threadId);
+      const turnId = state.turn?.id;
+      if (!turnId)
+        throw new EngineError(
+          "invalid-state",
+          "La revisión solo se reporta durante tu turno.",
+        );
+      if (!isReviewStage(thread))
+        throw new EngineError(
+          "invalid",
+          "Solo la etapa de revisión reporta revisiones.",
+        );
+      if (state.review?.turnId === turnId)
+        throw new EngineError(
+          "conflict",
+          "Ya reportaste la revisión de este turno.",
+        );
+      const round = thread.counters.reviewRounds + 1;
+      update(threadId, {
+        counters: { ...thread.counters, reviewRounds: round },
+      });
+      appendItem(threadId, turnId, {
+        kind: "review",
+        reviewId: newId("review"),
+        round,
+        ...parsed.data,
+      });
+      state.review = { ...parsed.data, turnId, round };
+      return {
+        recorded: true,
+        round,
+        maxRounds: thread.limits.maxReviewRounds,
+        message:
+          parsed.data.verdict === "changes-requested"
+            ? "Revisión registrada; al terminar tu turno el thread vuelve a implementación (o al dueño si se acabaron las rondas). Termina tu respuesta ahora."
+            : "Revisión registrada. Termina tu respuesta ahora.",
+      };
     },
 
     /** thread_handoff: recorded now, applied when the agent's turn ends. */

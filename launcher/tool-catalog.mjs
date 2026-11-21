@@ -436,6 +436,7 @@ function defaultConnectorEntries(
         "brain_finance",
         "thread_ask_user",
         "thread_handoff",
+        "thread_report_review",
         "files_*",
         "usuario_preguntar",
         "usuario_consultar_respuesta",
