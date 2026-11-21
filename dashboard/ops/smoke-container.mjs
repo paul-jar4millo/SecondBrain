@@ -11,6 +11,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { unzipSync, strFromU8 } from "fflate";
+const image = process.env.SB_SMOKE_IMAGE || "second-brain:0.4.2";
 const temporary = mkdtempSync(path.join(tmpdir(), "sb-container-"));
 const root = path.join(temporary, "vault");
 const data = path.join(temporary, "data");
@@ -83,7 +84,7 @@ try {
     `type=bind,src=${root},dst=/vault`,
     "--mount",
     `type=bind,src=${data},dst=/data`,
-    "second-brain:0.4.2",
+    image,
   ]);
   base = "http://127.0.0.1:" + docker(["port", name, "8080"]).split(":").pop();
   let ready = false;
@@ -152,13 +153,7 @@ try {
   );
   console.log(
     "Image bytes: " +
-      docker([
-        "image",
-        "inspect",
-        "second-brain:0.4.2",
-        "--format",
-        "{{.Size}}",
-      ]),
+      docker(["image", "inspect", image, "--format", "{{.Size}}"]),
   );
 } finally {
   try {

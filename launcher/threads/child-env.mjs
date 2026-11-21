@@ -57,6 +57,8 @@ export function sanitizeChildEnv(
  */
 export function acpGeminiDir(env, scopeId) {
   const base =
-    env.SB_LANZADOR_DATA_DIR || path.join(os.tmpdir(), "sb-lanzador");
+    env.SB_LAUNCHER_DATA_DIR ??
+    env.SB_LANZADOR_DATA_DIR ??
+    path.join(os.tmpdir(), "sb-launcher");
   return path.join(base, "acp-runtime", scopeId, "gemini");
 }

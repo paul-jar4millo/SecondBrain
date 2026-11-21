@@ -29,7 +29,7 @@ export function ReferenceBoard({ projectId }: { projectId: string }) {
     let alive = true;
     setBoard(null);
     setError("");
-    agentApi(`/sala?espacio=${encodeURIComponent(projectId)}`)
+    agentApi(`/room?espacio=${encodeURIComponent(projectId)}`)
       .then((data) => {
         if (alive) setBoard(data as Board);
       })
@@ -96,7 +96,7 @@ export function ReferenceBoard({ projectId }: { projectId: string }) {
                     src={
                       isDemo
                         ? p.imagen
-                        : `/api/v1/sala/imagen?id=${encodeURIComponent(p.id)}`
+                        : `/api/v1/room/image?id=${encodeURIComponent(p.id)}`
                     }
                     alt=""
                     loading="lazy"
@@ -110,7 +110,7 @@ export function ReferenceBoard({ projectId }: { projectId: string }) {
                     const started = generation.current;
                     setPending((ids) => [...ids, p.id]);
                     try {
-                      const ids = (await agentApi("/sala/tablero", {
+                      const ids = (await agentApi("/room/board", {
                         id: p.id,
                         guardar: !board.tablero.includes(p.id),
                         espacio: projectId,

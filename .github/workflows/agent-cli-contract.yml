@@ -1,0 +1,44 @@
+name: Agent CLI contract
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/agent-cli-contract.yml"
+      - "launcher/**"
+      - "ops/agents/**"
+      - ".nvmrc"
+      - "package-lock.json"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent-cli-contract.yml"
+      - "launcher/**"
+      - "ops/agents/**"
+      - ".nvmrc"
+      - "package-lock.json"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  agent-cli-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            ops/agents/package-lock.json
+      - run: npm run setup
+      - name: Install the pinned CLIs
+        run: node ops/agents/install.mjs --prefix "$RUNNER_TEMP/secondbrain-cli"
+      - name: Validate the real launch options without credentials
+        run: node ops/agents/verify.mjs --prefix "$RUNNER_TEMP/secondbrain-cli"

@@ -451,7 +451,7 @@ test("rutas HTTP /agentes/herramientas/* respetan permisos de sala y bloquean bi
 
   // Room agent can inspect catalog & resolve skills, NEVER modify ToolProfiles (403)
   const catRes = await fetch(
-    `${base}/agentes/herramientas/catalogo?profileId=investigacion&billingAuthorized=true`,
+    `${base}/agents/tools/catalog?profileId=investigacion&billingAuthorized=true`,
     { headers: { authorization: "Bearer room-secret" } },
   );
   assert.equal(catRes.status, 200);
@@ -460,7 +460,7 @@ test("rutas HTTP /agentes/herramientas/* respetan permisos de sala y bloquean bi
   const ds = catJson.engines.find((e) => e.id === "deepseek");
   assert.equal(ds.states.permitida, false);
 
-  const editDenied = await fetch(`${base}/agentes/herramientas/perfiles`, {
+  const editDenied = await fetch(`${base}/agents/tools/profiles`, {
     method: "POST",
     headers: {
       authorization: "Bearer room-secret",

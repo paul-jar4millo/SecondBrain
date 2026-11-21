@@ -147,16 +147,16 @@ async function fixture(route) {
       body: JSON.stringify(value),
     });
   if (p === "/api/v1/items") return json(records);
-  if (p === "/api/v1/agentes/espacios")
+  if (p === "/api/v1/agents/workspaces")
     return json({
       revision: 0,
-      repositorios: ["demo"],
-      vinculos: { p1: "demo" },
+      repositories: ["demo"],
+      links: { p1: "demo" },
     });
-  if (p === "/api/v1/agentes/proyectos-lanzador") return json(["demo"]);
-  if (p === "/api/v1/bandeja") return json({ entries: [] });
-  if (p === "/api/v1/aprobaciones") return json([]);
-  if (p === "/api/v1/agentes/modelos-lanzador") return json({});
+  if (p === "/api/v1/agents/projects") return json(["demo"]);
+  if (p === "/api/v1/inbox") return json({ entries: [] });
+  if (p === "/api/v1/approvals") return json([]);
+  if (p === "/api/v1/agents/models") return json({});
   if (p === "/api/v1/finance/overview") return json(finance);
   if (p === "/api/v1/files/raw" && route.request().method() === "POST")
     return json({ id: "synthetic-statement", name: "estado.pdf" });

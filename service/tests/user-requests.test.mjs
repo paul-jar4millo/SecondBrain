@@ -226,7 +226,7 @@ test("aprobaciones validan expiración, invalidan por cambio de parámetros y re
   await afterCrash.cerrar();
 });
 
-test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplicación y preserva /aprobaciones", async (t) => {
+test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplicación y preserva /approvals", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-req-http-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
 
@@ -254,7 +254,7 @@ test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplic
   };
 
   // Agent creates question
-  const askRes = await fetch(`${base}/solicitudes/preguntar`, {
+  const askRes = await fetch(`${base}/requests/ask`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({
@@ -267,7 +267,7 @@ test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplic
   const reqId = askRes.solicitud.id;
 
   // Agent CANNOT answer on behalf of user
-  const agentRespond = await fetch(`${base}/solicitudes/responder`, {
+  const agentRespond = await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({
@@ -286,15 +286,15 @@ test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplic
   base = `http://127.0.0.1:${app.server.address().port}/api/v1`;
   const appHeaders = await getCsrfHeaders(base);
 
-  const listAfterRestart = await fetch(
-    `${base}/solicitudes?kind=question`,
-  ).then((r) => r.json());
+  const listAfterRestart = await fetch(`${base}/requests?kind=question`).then(
+    (r) => r.json(),
+  );
   assert.equal(listAfterRestart.solicitudes.length, 1);
   assert.equal(listAfterRestart.solicitudes[0].status, "pendiente");
 
   // User resolves with CSRF -> repeat with same requestId -> conflict with different requestId
   const clientReqId = randomUUID();
-  const res1 = await fetch(`${base}/solicitudes/responder`, {
+  const res1 = await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -307,7 +307,7 @@ test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplic
   const body1 = await res1.json();
   assert.equal(body1.recibo.requestId, clientReqId);
 
-  const resDup = await fetch(`${base}/solicitudes/responder`, {
+  const resDup = await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -319,7 +319,7 @@ test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplic
   assert.equal(resDup.repetido, true);
   assert.equal(resDup.recibo.selectedOption, "Sí");
 
-  const resConflict = await fetch(`${base}/solicitudes/responder`, {
+  const resConflict = await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -333,14 +333,14 @@ test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplic
   assert.equal(conflictJson.recibo.requestId, clientReqId);
 
   // Delivery tracking + protected approval HTTP endpoints
-  const delivRes = await fetch(`${base}/solicitudes/entrega`, {
+  const delivRes = await fetch(`${base}/requests/delivery`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({ id: reqId, status: "confirmada" }),
   }).then((r) => r.json());
   assert.equal(delivRes.solicitud.status, "confirmada");
 
-  const aprCreate = await fetch(`${base}/solicitudes/aprobacion`, {
+  const aprCreate = await fetch(`${base}/requests/approval`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({
@@ -354,7 +354,7 @@ test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplic
   }).then((r) => r.json());
   const aprId = aprCreate.solicitud.id;
 
-  const aprDecision = await fetch(`${base}/solicitudes/responder`, {
+  const aprDecision = await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -365,14 +365,14 @@ test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplic
   }).then((r) => r.json());
   assert.equal(aprDecision.solicitud.status, "confirmada");
 
-  const execOk = await fetch(`${base}/solicitudes/verificar-ejecucion`, {
+  const execOk = await fetch(`${base}/requests/verify-execution`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({ id: aprId }),
   });
   assert.equal(execOk.status, 200);
 
-  const execTampered = await fetch(`${base}/solicitudes/verificar-ejecucion`, {
+  const execTampered = await fetch(`${base}/requests/verify-execution`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({ id: aprId, recipient: "otro-archivo.md" }),
@@ -380,7 +380,7 @@ test("HTTP de solicitudes separa agente y usuario, persiste tras reiniciar aplic
   assert.equal(execTampered.status, 409);
 
   // Legacy approvals list remains untouched & empty array
-  const legacyApprovals = await fetch(`${base}/aprobaciones`).then((r) =>
+  const legacyApprovals = await fetch(`${base}/approvals`).then((r) =>
     r.json(),
   );
   assert.deepEqual(legacyApprovals, []);

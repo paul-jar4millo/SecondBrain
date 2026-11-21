@@ -28,6 +28,9 @@ env:
 
 jobs:
   build:
+    permissions:
+      contents: read
+      packages: write
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -46,11 +49,32 @@ jobs:
           npm test
           npm run test:api
           node --test ops/tests/*.test.mjs
-      - run: npm run build
-      - name: Package the application
+      - name: Publish the immutable service image with an SBOM
+        id: image
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVISION: ${{ github.sha }}
+        run: |
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker buildx create --name secondbrain --driver docker-container --use
+          docker buildx build --file dashboard/Dockerfile --platform linux/amd64 \
+            --build-arg "REVISION=$REVISION" --tag "$repository:git-$REVISION" \
+            --sbom=true --push --metadata-file image.json .
+          digest=$(jq -er '."containerimage.digest"' image.json)
+          printf 'reference=%s@%s\n' "$repository" "$digest" >> "$GITHUB_OUTPUT"
+      - name: Smoke test the published image
+        working-directory: dashboard
+        env:
+          SB_SMOKE_IMAGE: ${{ steps.image.outputs.reference }}
+        run: node ops/smoke-container.mjs
+      - name: Package the native launcher and operations files
+        env:
+          SERVICE_IMAGE: ${{ steps.image.outputs.reference }}
         run: |
           mkdir -p release
-          node ops/package-release.mjs release
+          node ops/package-release.mjs release --native-host
+          printf '%s\n' "$SERVICE_IMAGE" > release/image-reference
           tar -czf release.tar.gz -C release .
           sha256sum release.tar.gz | tee release.tar.gz.sha256
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

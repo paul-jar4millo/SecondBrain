@@ -153,7 +153,7 @@ try {
             requests: [],
           });
           return json({ thread: newThread }, 201);
-        case "/api/v1/bandeja":
+        case "/api/v1/inbox":
           return json({
             entries: answers.length
               ? []
@@ -167,26 +167,26 @@ try {
                   },
                 ],
           });
-        case "/api/v1/threads/detalle":
+        case "/api/v1/threads/detail":
           return json(records.get(url.searchParams.get("id")));
         case "/api/v1/threads/diff":
           return json(diff);
-        case "/api/v1/threads/mensajes":
+        case "/api/v1/threads/messages":
           sent.push(request.postDataJSON());
           return json({ delivery: "steer" }, 202);
-        case "/api/v1/threads/responder":
+        case "/api/v1/threads/answer":
           answers.push(request.postDataJSON());
           return json({ request: {} });
-        case "/api/v1/threads/cerrar":
+        case "/api/v1/threads/close":
           closes.push(request.postDataJSON());
           const record = records.get(closes.at(-1).id);
           record.thread = { ...record.thread, status: "done" };
           return json({ thread: record.thread });
-        case "/api/v1/agentes/uso":
+        case "/api/v1/agents/usage":
           return json({});
-        case "/api/v1/agentes/modelos-lanzador":
+        case "/api/v1/agents/models":
           return json({ codex: [{ id: "gpt-6.2", nombre: "GPT 6.2" }] });
-        case "/api/v1/agentes/proyectos-lanzador":
+        case "/api/v1/agents/projects":
           return json(["demo"]);
       }
       return route.continue();
@@ -215,11 +215,11 @@ try {
       });
     await page.waitForFunction(() =>
       window.__threadStreams.some((stream) =>
-        stream.url.includes("/threads/flujo"),
+        stream.url.includes("/threads/stream"),
       ),
     );
-    assert.match(await streamUrl(page, "/threads/flujo"), /after=3$/);
-    await emit(page, "/threads/flujo", {
+    assert.match(await streamUrl(page, "/threads/stream"), /after=3$/);
+    await emit(page, "/threads/stream", {
       type: "item.delta",
       threadId: THREAD,
       itemId: "itm_m1",
@@ -261,7 +261,7 @@ try {
     };
     await emit(
       page,
-      "/threads/flujo",
+      "/threads/stream",
       event(4, {
         type: "turn.completed",
         turnId: "trn_t1",

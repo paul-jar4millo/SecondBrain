@@ -3,12 +3,13 @@ import path from "node:path";
 
 // Operational project/repository links are independent from the knowledge vault.
 /**
- * @param {{ archivo: string, proyectos: Record<string, string>, workspaces: string }} options
+ * @param {{ archivo: string, proyectos: Record<string, string>, workspaces: string, legacyHttpRoutes?: boolean }} options
  */
 export async function openWorkspaces({
   archivo: file,
   proyectos: projects,
   workspaces,
+  legacyHttpRoutes = true,
 }) {
   /** @type {string[]} */
   const repositories = [];
@@ -21,13 +22,16 @@ export async function openWorkspaces({
   const repositoryPaths = Object.fromEntries(
     repositories.map((name) => [name, projects[name]]),
   );
-  /** @type {{ revision: number, vinculos: Record<string, string | null> }} */
-  let state = await readFile(file, "utf8")
+  // In the compatibility release an older launcher or repo-link script
+  // may update vinculos without knowing about links. Both remain readable.
+  const { revision, links, vinculos, ...extra } = await readFile(file, "utf8")
     .then(JSON.parse)
-    .catch((e) => {
-      if (e.code !== "ENOENT") throw e;
-      return { revision: 0, vinculos: {} };
+    .catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+      return { revision: 0, links: {} };
     });
+  /** @type {{ revision: number, links: Record<string, string | null> }} */
+  let state = { revision, links: vinculos ?? links ?? {} };
   /** @type {Promise<unknown>} */
   let queue = Promise.resolve();
   /**
@@ -37,19 +41,18 @@ export async function openWorkspaces({
   const valid = (id) =>
     typeof id === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(id);
   return {
-    leer: () =>
+    read: () =>
       structuredClone({
         ...state,
-        repositorios: repositories,
+        repositories,
         repositoryPaths,
       }),
-    /** @param {{ id: string, repositorio: string | null, revision: number }} data */
-    vincular(data) {
+    /** @param {{ id: string, repository: string | null, revision: number }} data */
+    link(data) {
       const operation = queue.then(async () => {
         if (
           !valid(data.id) ||
-          (data.repositorio !== null &&
-            !repositories.includes(data.repositorio))
+          (data.repository !== null && !repositories.includes(data.repository))
         )
           throw new Error("Vínculo inválido");
         if (data.revision !== state.revision)
@@ -58,28 +61,35 @@ export async function openWorkspaces({
           );
         const next = {
           revision: state.revision + 1,
-          vinculos: { ...state.vinculos, [data.id]: data.repositorio },
+          links: { ...state.links, [data.id]: data.repository },
         };
         await mkdir(path.dirname(file), { recursive: true });
-        await writeFile(file + ".tmp", JSON.stringify(next), {
+        const stored = {
+          ...extra,
+          ...next,
+          ...(legacyHttpRoutes ? { vinculos: next.links } : {}),
+        };
+        await writeFile(file + ".tmp", JSON.stringify(stored), {
           mode: 0o600,
         });
         await rename(file + ".tmp", file);
         state = next;
-        return this.leer();
+        return this.read();
       });
       queue = operation.catch(() => {});
       return operation;
     },
     /** @param {unknown} id */
-    async resolver(id) {
+    async resolve(id) {
       if (!valid(id)) throw new Error("Proyecto inválido");
-      const repository = state.vinculos[id] ?? null;
+      const repository = Object.hasOwn(state.links, id)
+        ? state.links[id]
+        : null;
       if (repository && !Object.hasOwn(projects, repository))
         throw new Error("Repositorio no disponible");
       const cwd = repository ? projects[repository] : path.join(workspaces, id);
       if (!repository) await mkdir(cwd, { recursive: true });
-      return { cwd, repositorio: repository };
+      return { cwd, repository };
     },
   };
 }

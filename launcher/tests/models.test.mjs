@@ -135,6 +135,6 @@ test("el servidor publica los modelos", async (t) => {
   t.after(() => server.close());
   const url = `http://127.0.0.1:${server.address().port}`;
   const headers = { authorization: "Bearer control" };
-  const models = await (await fetch(url + "/modelos", { headers })).json();
+  const models = await (await fetch(url + "/models", { headers })).json();
   assert.equal(models.codex[0].id, "gpt-a");
 });

@@ -58,7 +58,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
   };
 
   // 1) Prepare protected message send -> creates linked approval (no secrets leaked)
-  const prepRes = await fetch(`${base}/efectos/preparar`, {
+  const prepRes = await fetch(`${base}/effects/prepare`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({
@@ -78,7 +78,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
   assert.equal(externalCalls, 0);
 
   // 2) User approves via CSRF-authenticated endpoint
-  const approveRes = await fetch(`${base}/solicitudes/responder`, {
+  const approveRes = await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -91,7 +91,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
 
   // 3) Agent executes through service executor -> gets receipt, never raw secret
   const execReqId = randomUUID();
-  const exec1 = await fetch(`${base}/efectos/ejecutar`, {
+  const exec1 = await fetch(`${base}/effects/execute`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({ id: operation.id, requestId: execReqId }),
@@ -103,7 +103,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
   assert.equal(externalCalls, 1);
 
   // Idempotent retry returns same receipt WITHOUT re-running externalRunner
-  const execRetry = await fetch(`${base}/efectos/ejecutar`, {
+  const execRetry = await fetch(`${base}/effects/execute`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({ id: operation.id, requestId: execReqId }),
@@ -115,7 +115,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
   assert.equal(externalCalls, 1);
 
   // 4) Ambiguous timeout marks "entrega_incierta", blocks blind retries, requires explicit reconciliation
-  const prep2 = await fetch(`${base}/efectos/preparar`, {
+  const prep2 = await fetch(`${base}/effects/prepare`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({
@@ -128,7 +128,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
     }),
   }).then((r) => r.json());
 
-  await fetch(`${base}/solicitudes/responder`, {
+  await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -139,7 +139,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
   });
 
   forceTimeoutOnce = true;
-  const timedOut = await fetch(`${base}/efectos/ejecutar`, {
+  const timedOut = await fetch(`${base}/effects/execute`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({
@@ -152,7 +152,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
   assert.equal(externalCalls, 2);
 
   // Blind retry with new requestId MUST be rejected without calling externalRunner again
-  const blockedRetry = await fetch(`${base}/efectos/ejecutar`, {
+  const blockedRetry = await fetch(`${base}/effects/execute`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({
@@ -164,7 +164,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
   assert.equal(externalCalls, 2);
 
   // Agent cannot reconcile -> user reconciles explicitly
-  const agentReconcile = await fetch(`${base}/efectos/conciliar`, {
+  const agentReconcile = await fetch(`${base}/effects/reconcile`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({
@@ -175,7 +175,7 @@ test("flujo preparar -> aprobar -> ejecutar -> recibo, idempotencia y conciliaci
   });
   assert.equal(agentReconcile.status, 403);
 
-  const userReconcile = await fetch(`${base}/efectos/conciliar`, {
+  const userReconcile = await fetch(`${base}/effects/reconcile`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -225,7 +225,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   });
 
   // Bypass 1: Unprepared direct execution attempt -> 404/403, zero calls
-  const noPrep = await fetch(`${base}/efectos/ejecutar`, {
+  const noPrep = await fetch(`${base}/effects/execute`, {
     method: "POST",
     headers: agentHeaders(),
     body: JSON.stringify({ id: randomUUID(), requestId: randomUUID() }),
@@ -233,7 +233,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   assert.ok([403, 404, 409].includes(noPrep.status));
 
   // Prepare normal external message
-  const prep = await fetch(`${base}/efectos/preparar`, {
+  const prep = await fetch(`${base}/effects/prepare`, {
     method: "POST",
     headers: agentHeaders("ambar"),
     body: JSON.stringify({
@@ -248,7 +248,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   }).then((r) => r.json());
 
   // Bypass 2: Agent attempts to execute BEFORE user approves -> 409
-  const execUnapproved = await fetch(`${base}/efectos/ejecutar`, {
+  const execUnapproved = await fetch(`${base}/effects/execute`, {
     method: "POST",
     headers: agentHeaders("ambar"),
     body: JSON.stringify({ id: prep.operacion.id, requestId: randomUUID() }),
@@ -256,7 +256,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   assert.equal(execUnapproved.status, 409);
 
   // Bypass 3: Agent attempts to approve its own request with room token -> 403
-  const selfApprove = await fetch(`${base}/solicitudes/responder`, {
+  const selfApprove = await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: agentHeaders("ambar"),
     body: JSON.stringify({
@@ -268,7 +268,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   assert.equal(selfApprove.status, 403);
 
   // User approves
-  await fetch(`${base}/solicitudes/responder`, {
+  await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -279,7 +279,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   });
 
   // Bypass 4: Execute targeting wrong native turn -> 409
-  const wrongTurn = await fetch(`${base}/efectos/ejecutar`, {
+  const wrongTurn = await fetch(`${base}/effects/execute`, {
     method: "POST",
     headers: agentHeaders("ambar"),
     body: JSON.stringify({
@@ -291,7 +291,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   assert.equal(wrongTurn.status, 409);
 
   // Bypass 5: Mutating recipient/cost/content after user approved -> invalidates approval -> cancelada (409)
-  const tampered = await fetch(`${base}/efectos/ejecutar`, {
+  const tampered = await fetch(`${base}/effects/execute`, {
     method: "POST",
     headers: agentHeaders("ambar"),
     body: JSON.stringify({
@@ -304,7 +304,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   assert.equal(app.effects.get(prep.operacion.id).status, "cancelada");
 
   // Bypass 6: Expired approval cannot execute -> vencida (409)
-  const expPrep = await fetch(`${base}/efectos/preparar`, {
+  const expPrep = await fetch(`${base}/effects/prepare`, {
     method: "POST",
     headers: agentHeaders("ambar"),
     body: JSON.stringify({
@@ -315,7 +315,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
       ttlMs: 1000,
     }),
   }).then((r) => r.json());
-  await fetch(`${base}/solicitudes/responder`, {
+  await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -325,7 +325,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
     }),
   });
   now += 5000;
-  const expiredExec = await fetch(`${base}/efectos/ejecutar`, {
+  const expiredExec = await fetch(`${base}/effects/execute`, {
     method: "POST",
     headers: agentHeaders("ambar"),
     body: JSON.stringify({
@@ -337,7 +337,7 @@ test("ensayos obligatorios de bypass de efectos y gasto bloquean ejecución sin 
   assert.equal(app.effects.get(expPrep.operacion.id).status, "vencida");
 
   // Bypass 7: Unapproved billed API / spending route (spending policy) -> blocked 403 with free/subscription hint
-  const billedBlocked = await fetch(`${base}/efectos/preparar`, {
+  const billedBlocked = await fetch(`${base}/effects/prepare`, {
     method: "POST",
     headers: agentHeaders("marina"),
     body: JSON.stringify({
@@ -584,7 +584,7 @@ test("regresión: sin conector configurado nunca simula éxito sintético y cons
     "x-sb-agente": "ambar",
   };
 
-  const prep = await fetch(`${base}/efectos/preparar`, {
+  const prep = await fetch(`${base}/effects/prepare`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({
@@ -597,7 +597,7 @@ test("regresión: sin conector configurado nunca simula éxito sintético y cons
   assert.equal(prep.operacion.connectorAvailable, false);
   assert.equal(prep.operacion.executionMode, "manual_sin_conector");
 
-  await fetch(`${base}/solicitudes/responder`, {
+  await fetch(`${base}/requests/answer`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({
@@ -607,7 +607,7 @@ test("regresión: sin conector configurado nunca simula éxito sintético y cons
     }),
   });
 
-  const execRes = await fetch(`${base}/efectos/ejecutar`, {
+  const execRes = await fetch(`${base}/effects/execute`, {
     method: "POST",
     headers: agentHeaders,
     body: JSON.stringify({

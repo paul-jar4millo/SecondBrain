@@ -41,7 +41,6 @@ test("empaqueta recursos de operación sin configuración privada local", async 
   );
   for (const file of [
     "dashboard/dist/index.html",
-    "ops/compat/index.mjs",
     "ops/launcher/install.sh",
     "launcher/skills/resumen-matutino.md",
     "launcher/skills/personal-context/SKILL.md",
@@ -54,10 +53,6 @@ test("empaqueta recursos de operación sin configuración privada local", async 
     "ops/aviso/aviso.env",
   ])
     await put(file);
-  await put(
-    "launcher/version-registry.mjs",
-    "export const SESSION_REGISTRY_VERSION = 2;\n",
-  );
   const target = path.join(dir, "release");
   await packageRelease(target, { sourceRoot: source });
   assert.deepEqual((await readdir(path.join(target, "ops/backup"))).sort(), [
@@ -67,15 +62,30 @@ test("empaqueta recursos de operación sin configuración privada local", async 
   assert.deepEqual(await readdir(path.join(target, "ops/aviso")), []);
   // Product skills ship only their SKILL.md; folders without one are skipped.
   assert.deepEqual(
-    (await readdir(path.join(target, "lanzador/skills"))).sort(),
+    (await readdir(path.join(target, "launcher/skills"))).sort(),
     ["personal-context", "resumen-matutino.md"],
   );
   assert.deepEqual(
-    await readdir(path.join(target, "lanzador/skills/personal-context")),
+    await readdir(path.join(target, "launcher/skills/personal-context")),
     ["SKILL.md"],
   );
+  const image = path.join(dir, "image");
+  await packageRelease(image, { sourceRoot: source, serviceImage: true });
+  assert.deepEqual((await readdir(image)).sort(), [
+    "dashboard",
+    "mcp",
+    "service",
+  ]);
+  const native = path.join(dir, "native");
+  await packageRelease(native, { sourceRoot: source, nativeHost: true });
+  assert.deepEqual((await readdir(native)).sort(), [
+    "launcher",
+    "mcp",
+    "ops",
+    "server",
+  ]);
   const lanzadorLock = JSON.parse(
-    await readFile(path.join(target, "lanzador/package-lock.json"), "utf8"),
+    await readFile(path.join(target, "launcher/package-lock.json"), "utf8"),
   );
   assert.equal(lanzadorLock.name, "@x/launcher");
   assert.deepEqual(Object.keys(lanzadorLock.packages), [
@@ -114,15 +124,10 @@ test("ships contracts with vendored Zod so lanzador .ts files resolve it", async
   );
   for (const file of [
     "dashboard/dist/index.html",
-    "ops/compat/index.mjs",
     "ops/launcher/install.sh",
     "launcher/skills/resumen-matutino.md",
   ])
     await put(file);
-  await put(
-    "launcher/version-registry.mjs",
-    "export const SESSION_REGISTRY_VERSION = 2;\n",
-  );
   await put(
     "contracts/package.json",
     '{"private":true,"type":"module","dependencies":{"zod":"4.0.0"}}',
@@ -150,11 +155,11 @@ test("ships contracts with vendored Zod so lanzador .ts files resolve it", async
   assert.deepEqual(await readdir(path.join(target, "contracts/src")), [
     "index.ts",
   ]);
-  assert.deepEqual(await readdir(path.join(target, "lanzador/threads")), [
+  assert.deepEqual(await readdir(path.join(target, "launcher/threads")), [
     "kind.ts",
   ]);
   const { value } = await import(
-    pathToFileURL(path.join(target, "lanzador/threads/kind.ts")).href
+    pathToFileURL(path.join(target, "launcher/threads/kind.ts")).href
   );
   assert.equal(value, "repo");
 });
@@ -184,15 +189,10 @@ test("contracts may only depend on zod", async (t) => {
   );
   for (const file of [
     "dashboard/dist/index.html",
-    "ops/compat/index.mjs",
     "ops/launcher/install.sh",
     "launcher/skills/resumen-matutino.md",
   ])
     await put(file, "x");
-  await put(
-    "launcher/version-registry.mjs",
-    "export const SESSION_REGISTRY_VERSION = 2;\n",
-  );
   await put(
     "contracts/package.json",
     '{"private":true,"dependencies":{"zod":"4","left-pad":"1"}}',

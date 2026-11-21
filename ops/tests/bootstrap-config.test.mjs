@@ -70,22 +70,12 @@ async function fixture(t) {
   return { dir, release, root, config, run };
 }
 
-test("a clean install includes the compatible deployment helper and an executable morning command", async (t) => {
+test("a clean install includes the deployment helper and an executable morning command", async (t) => {
   const f = await fixture(t);
   const result = f.run();
   assert.equal(result.status, 0, result.stderr);
-  const helper = path.join(
-    f.root,
-    "usr/local/lib/secondbrain/launcher-compatible.mjs",
-  );
-  const index = path.join(f.dir, "sessions.json");
-  await writeFile(index, "[]");
-  assert.equal(
-    spawnSync(process.execPath, [helper, f.release, index], {
-      encoding: "utf8",
-    }).status,
-    0,
-  );
+  const helper = path.join(f.root, "usr/local/sbin/secondbrain-deploy");
+  assert.ok((await stat(helper)).isFile());
   const unit = await readFile(
     path.join(f.root, "etc/systemd/system/resumen-matutino.service"),
     "utf8",

@@ -95,11 +95,34 @@ the `production` environment with:
 The runner's label must match the one in `deploy.yml`
 (`secondbrain-production`) and `RUNNER_ETIQUETA` in `lxc.env`.
 
+### One-time upgrade to the container release
+
+Releases from Phase 1.5 run the service in Podman and need a new deploy
+helper. The helper installed on an older host rejects the new package, and
+nothing activates. Before you approve the first such tag, run these steps as
+root in the LXC. `aprovisionar.sh` already does this on a new host.
+
+1. Install Podman: `apt-get install -y podman`.
+2. Record the image repository in lowercase:
+   `printf 'ghcr.io/<owner>/<repo>\n' > /etc/secondbrain/image-repository`.
+3. The first push creates the GHCR package as **private**. Make it public in
+   the package settings, or write a read-only `podman login` auth file to
+   `/etc/secondbrain/registry-auth.json` (mode `0600`).
+4. Download the release artifact and install the new helper from it:
+   `install -m 0755 ops/deploy/deploy-release.sh /usr/local/sbin/secondbrain-deploy`.
+5. Approve the deployment. Afterwards, `bash /opt/secondbrain/current/ops/deploy/verify.sh /opt/secondbrain/current`
+   must pass. The native `secondbrain.service` stays disabled, and a rollback to
+   a release without `image-reference` turns it back on.
+
+The host layout keeps its Spanish names until you run the separate
+[host layout migration](host-layout-migration.md).
+
 ### Production layout
 
 | Path                                         | Content                                        |
 | -------------------------------------------- | ---------------------------------------------- |
-| `/opt/secondbrain/releases/<sha>`, `current` | Application code                               |
+| `/opt/secondbrain/releases/<sha>`, `current` | Launcher, MCP and operations code              |
+| `secondbrain-container.service` (Quadlet)    | Service, MCP and dashboard image, by digest    |
 | `/srv/secondbrain/vault`                     | Vault (own Git repository)                     |
 | `/var/lib/secondbrain`                       | `DATA_DIR`: auth, journal, history, briefcase  |
 | `/var/lib/sb-agente`                         | Agent sessions, conversations, provider logins |

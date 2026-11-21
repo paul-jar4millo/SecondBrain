@@ -64,14 +64,18 @@ trap 'systemctl start secondbrain-lanzador.service' EXIT
 chmod 644 "$registro"
 
 if [[ -n $proyecto ]]; then
-  # Same document and revision bump that espacios.vincular() writes; the launcher is stopped.
+  # Same document and revision bump as the launcher workspace registry; the launcher is stopped.
   runuser -u sb-agente -- "$node" -e '
     const fs = require("fs");
     const [archivo, id, nombre] = process.argv.slice(1);
     let estado = { revision: 0, vinculos: {} };
     try { estado = JSON.parse(fs.readFileSync(archivo, "utf8")); } catch (e) { if (e.code !== "ENOENT") throw e; }
     estado.revision += 1;
-    estado.vinculos[id] = nombre;
+    const links = estado.vinculos ?? estado.links ?? {};
+    links[id] = nombre;
+    estado.links = links;
+    if (process.env.SB_LEGACY_HTTP_ROUTES !== "off" && Object.hasOwn(estado, "vinculos")) estado.vinculos = links;
+    else delete estado.vinculos;
     fs.writeFileSync(archivo + ".tmp", JSON.stringify(estado));
     fs.renameSync(archivo + ".tmp", archivo);
   ' "$espacios" "$proyecto" "$nombre"

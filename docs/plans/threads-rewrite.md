@@ -6,6 +6,11 @@
 > sin worktree, rama ni scope residual. También se comprobaron los límites
 > del scope activo y las reglas de nftables del lanzador. Sigue la
 > **fase 1.5** (despliegue robusto y servidor en inglés), luego B, C y D.
+>
+> **Fase 1.5:** P1–P6 van juntos en la release de compatibilidad, porque los
+> alias y la migración del host tienen que viajar en la misma release. Falta
+> el paso manual único del host (`docs/deployment.md`), desplegarla, migrar
+> el host, la verificación de la fase y, una release después, P7.
 
 ## Contexto
 

@@ -17,13 +17,16 @@ como_agente() { runuser -u sb-agente -- env -C "$agente" HOME="$agente" "$@"; }
 
 echo "Servicio"
 probar "Node $NODE_VERSION" test "$(node -v)" = "v$NODE_VERSION"
-probar "secondbrain.service activo" systemctl is-active --quiet secondbrain
-probar "secondbrain-lanzador.service activo" systemctl is-active --quiet secondbrain-lanzador
+probar "active release" bash /opt/secondbrain/current/ops/deploy/verify.sh "$(readlink -f /opt/secondbrain/current)"
+if [[ -f /etc/secondbrain/english-layout ]]; then
+  probar "launcher service" systemctl is-active --quiet secondbrain-launcher
+else
+  probar "launcher service" systemctl is-active --quiet secondbrain-lanzador
+fi
 probar "health local" curl -fsS --max-time 5 http://127.0.0.1:8080/api/v1/health
 probar "release activa" test -f /opt/secondbrain/current/REVISION
 probar "vault con Home.md" test -f /srv/secondbrain/vault/Home.md
 probar "script matutino legible por el servicio" runuser -u secondbrain -- test -r /opt/secondbrain/current/ops/lanzador/resumen-matutino.sh
-probar "comprobador de compatibilidad instalado" test -r /usr/local/lib/secondbrain/launcher-compatible.mjs
 probar "API de threads del lanzador" sh -c 'curl -fsS --max-time 5 -H "Authorization: Bearer $(cat /var/lib/secondbrain/lanzador-token)" http://127.0.0.1:8092/threads'
 no_debe "sb-hilo retirado (ADR 0010)" test -e /usr/local/bin/sb-hilo
 if [[ -e $agente/estado/lanzador/sesiones.json ]]; then
@@ -62,12 +65,11 @@ no_debe "el vault es inaccesible para sb-agente" como_agente ls /srv/secondbrain
 no_debe "los datos del servicio son inaccesibles" como_agente cat /var/lib/secondbrain/agentes-brain-token
 
 echo "Motores (cuentas: dentro/conectar.sh)"
-probar "Claude $CLAUDE_VERSION instalado" sh -c "/opt/sb-agente/node_modules/.bin/claude --version | grep -q $CLAUDE_VERSION"
-probar "Codex $CODEX_VERSION instalado" sh -c "/opt/sb-agente/node_modules/.bin/codex --version | grep -q $CODEX_VERSION"
+probar "pinned agent CLIs" node /opt/secondbrain/current/ops/agents/install.mjs --check
 [[ -s $agente/claude/.credentials.json ]] && ok "sesión de Claude" || aviso "sesión de Claude"
 grep -q '^DEEPSEEK_API_KEY=.' "$agente/agentes.env" 2>/dev/null && ok "clave de DeepSeek" || aviso "clave de DeepSeek"
 [[ -s $agente/codex/auth.json ]] && ok "sesión de Codex" || aviso "sesión de Codex"
-[[ -x $agente/.local/bin/agy ]] && ok "Antigravity instalado" || aviso "Antigravity instalado"
+[[ -x /opt/sb-agente/cli/current/bin/agy ]] && ok "Antigravity instalado" || aviso "Antigravity instalado"
 [[ -s $agente/.gemini/antigravity-cli/antigravity-oauth-token ]] && ok "sesión de Antigravity" || aviso "sesión de Antigravity"
 [[ -s $agente/.config/gh/hosts.yml ]] && ok "token de GitHub de las agentes" || aviso "token de GitHub de las agentes"
 systemctl is-active --quiet claude-sb-agente.service && ok "Remote Control" || aviso "Remote Control"

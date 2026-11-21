@@ -29,7 +29,7 @@ export const threadsApi = {
       `/threads${status ? `?status=${encodeURIComponent(status)}` : ""}`,
     ),
   snapshot: (id: string) =>
-    api<ThreadSnapshot>(`/threads/detalle?id=${encodeURIComponent(id)}`),
+    api<ThreadSnapshot>(`/threads/detail?id=${encodeURIComponent(id)}`),
   create: (data: NewThread) => post<{ thread: Thread }>("/threads", data),
   send: (
     id: string,
@@ -37,15 +37,15 @@ export const threadsApi = {
     mode: "send" | "steer" | "queue",
     agent?: AgentRef,
   ) =>
-    post<{ item: Item; delivery: string }>("/threads/mensajes", {
+    post<{ item: Item; delivery: string }>("/threads/messages", {
       id,
       text,
       mode,
       ...(agent ? { agent } : {}),
     }),
-  interrupt: (id: string) => post("/threads/interrumpir", { id }),
+  interrupt: (id: string) => post("/threads/interrupt", { id }),
   answer: (id: string, requestId: string, answer: RequestAnswer) =>
-    post<{ request: UserRequest }>("/threads/responder", {
+    post<{ request: UserRequest }>("/threads/answer", {
       id,
       requestId,
       answer,
@@ -56,22 +56,21 @@ export const threadsApi = {
     title?: string,
     body?: string,
   ) =>
-    post<{ thread: Thread }>("/threads/cerrar", {
+    post<{ thread: Thread }>("/threads/close", {
       id,
       mode,
       ...(title ? { title } : {}),
       ...(body ? { body } : {}),
     }),
-  archive: (id: string) =>
-    post<{ thread: Thread }>("/threads/archivar", { id }),
+  archive: (id: string) => post<{ thread: Thread }>("/threads/archive", { id }),
   diff: (id: string, turnId?: string) =>
     api<{ files: FileDiff[] }>(
       `/threads/diff?id=${encodeURIComponent(id)}${turnId ? `&turnId=${encodeURIComponent(turnId)}` : ""}`,
     ),
-  inbox: () => api<{ entries: InboxEntry[] }>("/bandeja"),
+  inbox: () => api<{ entries: InboxEntry[] }>("/inbox"),
   models: () =>
     api<Record<string, { id: string; nombre: string; esfuerzos?: string[] }[]>>(
-      "/agentes/modelos-lanzador",
+      "/agents/models",
     ),
-  projects: () => api<string[]>("/agentes/proyectos-lanzador"),
+  projects: () => api<string[]>("/agents/projects"),
 };
