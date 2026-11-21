@@ -294,7 +294,40 @@ export async function saveUsageLine(engine, data, file, ahora = Date.now()) {
   return true;
 }
 
-export function createUsage({ env = process.env, ahora = Date.now } = {}) {
+/**
+ * Combines what the CLI recorded with what provider events said; the newer
+ * reading of each window wins, and context only comes from the CLI.
+ * @param {UsageSnapshot | null} recorded
+ * @param {UsageSnapshot | null} events
+ * @returns {UsageSnapshot | null}
+ */
+export function mergeUsage(recorded, events) {
+  if (!events) return recorded;
+  if (!recorded) return events;
+  const eventsNewer =
+    Date.parse(events.actualizado ?? "") >=
+    (Date.parse(recorded.actualizado ?? "") || 0);
+  return {
+    ...recorded,
+    ventanas: eventsNewer
+      ? { ...recorded.ventanas, ...events.ventanas }
+      : { ...events.ventanas, ...recorded.ventanas },
+    actualizado: eventsNewer ? events.actualizado : recorded.actualizado,
+  };
+}
+
+/**
+ * @param {{
+ *   env?: NodeJS.ProcessEnv,
+ *   ahora?: () => number,
+ *   snapshots?: (engine: UsageEngine) => UsageSnapshot | null,
+ * }} [options]
+ */
+export function createUsage({
+  env = process.env,
+  ahora = Date.now,
+  snapshots = () => null,
+} = {}) {
   /** @type {UsageCache | null} */
   let memory = null;
   return async function uso() {
@@ -319,7 +352,13 @@ export function createUsage({ env = process.env, ahora = Date.now } = {}) {
     /** @type {Partial<Record<UsageEngine, UsageSnapshot>>} */
     const result = {};
     for (const engine of /** @type {const} */ (["codex", "claude", "agy"])) {
-      const actual = current(memory[engine], ahora());
+      let events = null;
+      try {
+        events = snapshots(engine);
+      } catch {
+        // The thread store may be closing; the CLI readings still count.
+      }
+      const actual = current(mergeUsage(memory[engine], events), ahora());
       if (actual) result[engine] = actual;
     }
     return result;

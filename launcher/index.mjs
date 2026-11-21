@@ -73,7 +73,10 @@ export async function arrancar(env = process.env) {
     const server = createLauncherServer({
       toolCatalog,
       catalogo: createModelCatalog({ env }),
-      uso: createUsage({ env }),
+      uso: createUsage({
+        env,
+        snapshots: (engine) => threads.engine.usage(engine),
+      }),
       proyectos: projects,
       espacios: spaces,
       controlHash,

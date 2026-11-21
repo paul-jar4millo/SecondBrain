@@ -22,16 +22,16 @@ npm --prefix launcher test   # uses fake CLIs; never calls a provider
 
 ## Layout
 
-| File                                          | Responsibility                                                                                                                  |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `index.mjs`                                   | Start-up and HTTP API: threads plus `/estado`, `/proyectos`, `/modelos`, `/uso`, `/capacidades`, `/espacios`, `/herramientas/*` |
-| `threads/`                                    | The thread engine, its SQLite store and HTTP routes (below)                                                                     |
-| `provider-adapters.mjs`                       | Capability contract per engine                                                                                                  |
-| `provider-controllers.mjs` → `lib/providers/` | One controller per protocol: `codex`, `claude`, `acp`, plus elicitation and config helpers                                      |
-| `engines.mjs`, `models.mjs`, `usage.mjs`      | Engine capabilities, model catalog, usage windows                                                                               |
-| `tool-catalog.mjs`, `limits.mjs`              | Tool profiles and skills, process limits                                                                                        |
-| `version-registry.mjs`                        | Deploy marker read by the host helper; the thread launcher ignores the old session index                                        |
-| `skills/`                                     | Skills offered to agents (research, verification, document production…)                                                         |
+| File                                          | Responsibility                                                                                                              |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `index.mjs`                                   | Start-up and HTTP API: threads plus `/status`, `/projects`, `/models`, `/usage`, `/capabilities`, `/workspaces`, `/tools/*` |
+| `threads/`                                    | The thread engine, its SQLite store and HTTP routes (below)                                                                 |
+| `provider-adapters.mjs`                       | Capability contract per engine                                                                                              |
+| `provider-controllers.mjs` → `lib/providers/` | One controller per protocol: `codex`, `claude`, `acp`, plus elicitation and config helpers                                  |
+| `engines.mjs`, `models.mjs`, `usage.mjs`      | Engine capabilities, model catalog, usage windows (provider events first, then the CLI readings)                            |
+| `tool-catalog.mjs`, `limits.mjs`              | Tool profiles and skills, process limits                                                                                    |
+| `version-registry.mjs`                        | Deploy marker read by the host helper; the thread launcher ignores the old session index                                    |
+| `skills/`                                     | Skills offered to agents (research, verification, document production…)                                                     |
 
 ## Threads
 
