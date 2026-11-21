@@ -1,6 +1,6 @@
 # 0007 · English identifiers, Spanish product
 
-- Status: accepted
+- Status: accepted; release and host layout completed by [ADR 0017](0017-english-host-layout.md)
 - Date: 2026-11-20
 
 ## Context and problem statement

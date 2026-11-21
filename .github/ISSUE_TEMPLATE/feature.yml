@@ -18,4 +18,11 @@ body:
     id: module
     attributes:
       label: Module
-      options: [dashboard, service, mcp, launcher, ops, docs]
+      options: [dashboard, service, mcp, launcher, contracts, ops, docs]
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: What must be true for this to be finished (behavior, tests, docs).

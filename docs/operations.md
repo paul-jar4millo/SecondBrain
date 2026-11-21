@@ -6,9 +6,9 @@ Commands run inside the container as root unless stated otherwise.
 ## Health and logs
 
 ```sh
-systemctl is-active secondbrain secondbrain-launcher
+systemctl is-active secondbrain-container secondbrain-launcher
 cat /opt/secondbrain/current/REVISION
-journalctl -u secondbrain -n 50 --no-pager
+journalctl -u secondbrain-container -n 50 --no-pager
 curl -fsS http://127.0.0.1:8080/api/v1/health
 ```
 
@@ -33,9 +33,11 @@ dashboard or the health endpoint, not on the task's last result.
 Without `backup.env` the backup unit is skipped, and the health endpoint says
 so — a disabled timer is never reported as a working backup.
 
-The agent runner keeps an index (`sesiones.json`) and per-session details
-(`sesiones.json.d/`) under `SB_LAUNCHER_DATA_DIR`. Back up and restore them
-together, with the runner stopped.
+The launcher keeps its state in `threads.sqlite` under `SB_LAUNCHER_DATA_DIR`
+(`/var/lib/sb-agent/state/launcher`, see
+[ADR 0009](adr/0009-operational-state-in-sqlite.md)). A nightly
+`VACUUM INTO` writes a consistent copy for the backup; restore it with the
+launcher stopped.
 
 `ops/migration/manifest.py` inventories content and hashes of a data set
 (`scan`) and checks a restored copy against it (`verify`). Keep real
@@ -57,11 +59,10 @@ ntfy topic or webhook) and optionally `AVISO_FORMATO=json` in
 This switches code only. Never reset the vault or restore credentials as
 part of a software rollback.
 
-Before restarting the agent runner, the helper checks that the release
-`current` points to can read the stored session index
-(`launcher/version-registry.mjs`). If active sessions exist, deployment
-waits up to 15 minutes, then finishes the service update and keeps the
-previous runner, reporting it in the health endpoint.
+Before restarting the launcher, the helper asks it for threads that are
+mid-turn (`ops/deploy/wait-launcher.mjs`). It waits up to 15 minutes for them
+to finish; if they do not, or the launcher cannot be read, the deployment
+stops before changing anything.
 
 ## Recovering a note
 
@@ -86,4 +87,4 @@ bash /opt/secondbrain/current/ops/launcher/add-repo.sh <owner/repo> [project-id]
 ```
 
 It clones as `sb-agente`, registers the repository in `SB_PROJECTS_FILE` and
-restarts the runner, refusing to do so while sessions are active.
+restarts the launcher, refusing to do so while a thread is working.

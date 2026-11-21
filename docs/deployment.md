@@ -37,7 +37,7 @@ flowchart LR
   pc["Your PC<br/>(Git Bash)"] -- "ssh $HOST_SSH" --> host["Proxmox VE host"]
   host -- "pct create / pct exec" --> lxc["Container $VMID"]
   subgraph lxc
-    svc["secondbrain.service<br/>(user secondbrain)"]
+    svc["secondbrain-container.service<br/>(Podman Quadlet, image by digest)"]
     lz["secondbrain-launcher.service<br/>(user sb-agente)"]
     runner["actions runner<br/>(user sb-runner)"]
     timers["timers: vault push · backup · morning summary"]
@@ -119,14 +119,16 @@ The host layout keeps its Spanish names until you run the separate
 
 ### Production layout
 
-| Path                                         | Content                                        |
-| -------------------------------------------- | ---------------------------------------------- |
-| `/opt/secondbrain/releases/<sha>`, `current` | Launcher, MCP and operations code              |
-| `secondbrain-container.service` (Quadlet)    | Service, MCP and dashboard image, by digest    |
-| `/srv/secondbrain/vault`                     | Vault (own Git repository)                     |
-| `/var/lib/secondbrain`                       | `DATA_DIR`: auth, journal, history, briefcase  |
-| `/var/lib/sb-agente`                         | Agent sessions, conversations, provider logins |
-| `/etc/secondbrain/*.env`                     | Host-only settings (backup, alerts, deploy)    |
-| `/opt/actions-runner`                        | Deployment runner (user `sb-runner`)           |
+| Path                                         | Content                                       |
+| -------------------------------------------- | --------------------------------------------- |
+| `/opt/secondbrain/releases/<sha>`, `current` | Launcher, MCP and operations code             |
+| `secondbrain-container.service` (Quadlet)    | Service, MCP and dashboard image, by digest   |
+| `/srv/secondbrain/vault`                     | Vault (own Git repository)                    |
+| `/var/lib/secondbrain`                       | `DATA_DIR`: auth, journal, history, briefcase |
+| `/var/lib/sb-agent/state/launcher`           | Launcher state (`threads.sqlite`)             |
+| `/srv/sb-agent/projects`, `deliverables`     | Repositories and thread worktrees for agents  |
+| `/var/lib/sb-agente`                         | Home of the agent user: provider CLI logins   |
+| `/etc/secondbrain/*.env`                     | Host-only settings (backup, alerts, deploy)   |
+| `/opt/actions-runner`                        | Deployment runner (user `sb-runner`)          |
 
 A release package contains code only: no vault, credentials or state.
