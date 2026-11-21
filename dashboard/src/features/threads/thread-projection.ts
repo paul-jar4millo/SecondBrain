@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { isDemo } from "../../core/store";
+import { onLongHidden } from "../../core/visibility";
 import { threadsApi } from "./thread-api";
 import { followFeed } from "./thread-stream";
 import type { Thread } from "./thread-types";
@@ -15,6 +16,7 @@ let pending: Promise<void> | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let poll: ReturnType<typeof setInterval> | undefined;
 let refreshAgain = false;
+let stopWatching: (() => void) | undefined;
 
 function scheduleRefresh() {
   timer ??= setTimeout(() => {
@@ -62,6 +64,14 @@ export const threadProjection = {
       poll = setInterval(() => {
         if (!document.hidden) void threadProjection.refresh();
       }, 20_000);
+      // A background tab gives its feed back; refresh() reopens it.
+      stopWatching = onLongHidden(
+        () => {
+          stopFeed?.();
+          stopFeed = undefined;
+        },
+        () => void threadProjection.refresh(),
+      );
     }
     return () => {
       listeners.delete(listener);
@@ -71,6 +81,8 @@ export const threadProjection = {
       clearTimeout(timer);
       timer = undefined;
       clearInterval(poll);
+      stopWatching?.();
+      stopWatching = undefined;
     };
   },
 };

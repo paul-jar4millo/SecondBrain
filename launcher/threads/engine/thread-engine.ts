@@ -181,6 +181,24 @@ export type DeltaListener = (message: StreamMessage) => void;
 
 const BUSY_STATUSES = new Set(["closing", ...TERMINAL_STATUSES]);
 
+/**
+ * A short title from the owner's prompt: its first sentence without
+ * Markdown marks, cut at a word within 60 characters.
+ */
+export function titleOf(prompt: string) {
+  const line = prompt.split("\n").find((l) => l.trim()) ?? "";
+  const plain = line
+    .replace(/[`*_#>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const sentence = (plain.split(/(?<=[.!?])\s/)[0] ?? plain).replace(/\.$/, "");
+  if (!sentence) return "Thread";
+  if (sentence.length <= 60) return sentence;
+  const cut = sentence.slice(0, 60);
+  const space = cut.lastIndexOf(" ");
+  return `${space > 30 ? cut.slice(0, space) : cut}…`;
+}
+
 export function createThreadEngine(deps: EngineDeps) {
   const {
     store,
@@ -404,11 +422,13 @@ export function createThreadEngine(deps: EngineDeps) {
     const turnId = turn.id as string;
     if (isPlainApproval(ask) && thread.autonomy !== "ask") {
       const accept = thread.autonomy === "auto-worktree";
-      turn.mapper?.notice(
-        "info",
-        accept ? "auto-approved" : "auto-declined",
-        `${accept ? "Aprobado" : "Rechazado"} automáticamente: ${ask.title ?? "acción"}`,
-      );
+      // The tool call already shows in the timeline; only a refusal is news.
+      if (!accept)
+        turn.mapper?.notice(
+          "info",
+          "auto-declined",
+          `Rechazado por la autonomía del thread: ${ask.title ?? "acción"}`,
+        );
       return Promise.resolve({ decision: accept ? "accept" : "decline" });
     }
     const request = toUserRequest(ask, {
@@ -916,13 +936,8 @@ export function createThreadEngine(deps: EngineDeps) {
           throw new EngineError("conflict", "El thread ya existe.");
         id = threadId;
       }
-      const title = (
-        command.title ??
-        command.prompt.split("\n").find((l) => l.trim()) ??
-        "Thread"
-      )
-        .trim()
-        .slice(0, 80);
+      const title =
+        command.title?.trim().slice(0, 80) || titleOf(command.prompt);
       let repo: Thread["repo"] = null;
       let workspace: string | null = null;
       if (command.kind === "repo") {

@@ -16,6 +16,33 @@ interface StagePick {
   choice: ModelChoice;
 }
 
+/** The dialog opens with the flow, agents and autonomy used last time. */
+interface LastChoice {
+  flowId?: string;
+  autonomy?: Thread["autonomy"];
+  project?: string;
+  stagePicks?: Record<string, StagePick>;
+}
+const LAST_CHOICE = "sb-thread-dialog";
+
+function readLastChoice(): LastChoice {
+  if (isDemo) return {};
+  try {
+    const value = JSON.parse(localStorage.getItem(LAST_CHOICE) ?? "{}");
+    return value && typeof value === "object" ? (value as LastChoice) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLastChoice(choice: LastChoice) {
+  try {
+    localStorage.setItem(LAST_CHOICE, JSON.stringify(choice));
+  } catch {
+    // Storage can be unavailable in private browsing.
+  }
+}
+
 const AUTONOMY: { id: Thread["autonomy"]; label: string; hint: string }[] = [
   {
     id: "auto-worktree",
@@ -48,6 +75,7 @@ export function NewThreadDialog({
   projectId?: string;
 }) {
   const models = useModels();
+  const [last] = useState(readLastChoice);
   const [projects, setProjects] = useState<string[]>([]);
   const [engine, setEngine] = useState<Engine>(
     () =>
@@ -74,11 +102,15 @@ export function NewThreadDialog({
   });
   const [project, setProject] = useState("");
   const [loadingProjects, setLoadingProjects] = useState(!isDemo);
-  const [autonomy, setAutonomy] = useState<Thread["autonomy"]>("auto-worktree");
+  const [autonomy, setAutonomy] = useState<Thread["autonomy"]>(
+    last.autonomy ?? "auto-worktree",
+  );
   const [choice, setChoice] = useState<ModelChoice>(() => loadChoice(engine));
   const [flows, setFlows] = useState<FlowTemplate[]>([]);
-  const [flowId, setFlowId] = useState("single");
-  const [stagePicks, setStagePicks] = useState<Record<string, StagePick>>({});
+  const [flowId, setFlowId] = useState(last.flowId ?? "single");
+  const [stagePicks, setStagePicks] = useState<Record<string, StagePick>>(
+    last.stagePicks ?? {},
+  );
   const flow = flows.find((f) => f.id === flowId);
   const staged = (flow?.stages.length ?? 0) > 1;
   useEffect(() => {
@@ -110,13 +142,19 @@ export function NewThreadDialog({
       if (!active) return;
       const linked = projectId ? links?.links[projectId] : null;
       setProjects(list);
-      setProject(linked && list.includes(linked) ? linked : "");
+      setProject(
+        linked && list.includes(linked)
+          ? linked
+          : !projectId && last.project && list.includes(last.project)
+            ? last.project
+            : "",
+      );
       setLoadingProjects(false);
     });
     return () => {
       active = false;
     };
-  }, [projectId]);
+  }, [projectId, last.project]);
   const create = async () => {
     setBusy(true);
     setError("");
@@ -127,11 +165,16 @@ export function NewThreadDialog({
           const pick = pickOf(stage.key);
           stageAgents[stage.key] = agentRef(pick.engine, models, pick.choice);
         }
+      // In a flow the thread starts with the first stage's agent.
+      const first = flow && staged ? flow.stages[0] : undefined;
+      const agent = first
+        ? (stageAgents[first.key] as AgentRef)
+        : agentRef(engine, models, choice);
       const { thread } = await threadsApi.create({
         prompt: prompt.trim(),
         kind: project ? "repo" : "scratch",
         ...(project ? { repoPath: project } : {}),
-        agent: agentRef(engine, models, choice),
+        agent,
         autonomy,
         ...(flow ? { flowTemplateId: flow.id } : {}),
         ...(staged ? { stageAgents } : {}),
@@ -142,6 +185,18 @@ export function NewThreadDialog({
       } catch {
         // Storage can be unavailable in private browsing.
       }
+      saveLastChoice({
+        flowId,
+        autonomy,
+        project,
+        ...(staged
+          ? {
+              stagePicks: Object.fromEntries(
+                (flow?.stages ?? []).map((s) => [s.key, pickOf(s.key)]),
+              ),
+            }
+          : {}),
+      });
       onCreated(thread);
     } catch (e) {
       setError((e as Error).message);
@@ -248,6 +303,8 @@ export function NewThreadDialog({
               <input
                 type="radio"
                 name="autonomy"
+                value={a.id}
+                aria-label={a.label}
                 checked={autonomy === a.id}
                 onChange={() => setAutonomy(a.id)}
               />
@@ -281,6 +338,18 @@ export function NewThreadDialog({
   );
 }
 
+/** A title fit for a commit: no Markdown marks, at most 60 characters. */
+export function plainTitle(title: string) {
+  const plain = title
+    .replace(/[`*_#>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (plain.length <= 60) return plain;
+  const cut = plain.slice(0, 60);
+  const space = cut.lastIndexOf(" ");
+  return `${space > 30 ? cut.slice(0, space) : cut}…`;
+}
+
 export function CloseDialog({
   thread,
   onClose,
@@ -291,8 +360,9 @@ export function CloseDialog({
   onDone: () => void;
 }) {
   const repo = Boolean(thread.repo);
+  // Local integration is the safe default: nothing leaves the machine.
   const [mode, setMode] = useState<"pr" | "merge" | "discard">(
-    repo ? "pr" : "discard",
+    repo ? "merge" : "discard",
   );
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -325,6 +395,8 @@ export function CloseDialog({
               <input
                 type="radio"
                 name="mode"
+                value="pr"
+                aria-label="Abrir un PR"
                 checked={mode === "pr"}
                 onChange={() => setMode("pr")}
               />
@@ -342,6 +414,8 @@ export function CloseDialog({
               <input
                 type="radio"
                 name="mode"
+                value="merge"
+                aria-label="Integrar en local"
                 checked={mode === "merge"}
                 onChange={() => setMode("merge")}
               />
@@ -358,6 +432,8 @@ export function CloseDialog({
             <input
               type="radio"
               name="mode"
+              value="discard"
+              aria-label="Descartar"
               checked={mode === "discard"}
               onChange={() => setMode("discard")}
             />
@@ -372,7 +448,7 @@ export function CloseDialog({
             Título del commit
             <input
               value={title}
-              placeholder={`feat: ${thread.title}`}
+              placeholder={`feat: ${plainTitle(thread.title)}`}
               onChange={(e) => setTitle(e.target.value)}
             />
           </label>

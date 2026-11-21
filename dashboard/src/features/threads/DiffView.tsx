@@ -49,7 +49,7 @@ export function DiffView({
 }: {
   threadId: string;
   turnId?: string;
-  refreshKey: number;
+  refreshKey: number | string;
 }) {
   const [files, setFiles] = useState<FileDiff[] | null>(null);
   const [error, setError] = useState("");

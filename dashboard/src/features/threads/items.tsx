@@ -7,6 +7,33 @@ import type { Item, ItemOf } from "./thread-types";
 
 const STEP_MARK = { pending: "○", in_progress: "◐", completed: "●" } as const;
 
+const plural = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+
+const TOOL_LABELS: Record<string, string> = {
+  thread_handoff: "Pasa a la siguiente etapa",
+  thread_report_review: "Reporta la revisión",
+  thread_request_subtask: "Pide una sub-tarea",
+  thread_subtask_status: "Consulta sus sub-tareas",
+  thread_integrate_subtask: "Integra una sub-tarea",
+  thread_ask_user: "Te pregunta",
+  agent_usage: "Consulta el uso de los planes",
+  brain_context: "Lee el contexto del vault",
+  brain_read: "Lee una nota",
+  brain_search: "Busca en el vault",
+  brain_list: "Lista notas",
+  brain_write: "Escribe una nota",
+};
+
+/** Tool names without the MCP plumbing: mcp__secondbrain__brain_read → "Lee una nota". */
+export function toolLabel(name: string, server?: string | null) {
+  const bare = name.replace(/^mcp__.+?__/, "");
+  if (TOOL_LABELS[bare]) return TOOL_LABELS[bare];
+  if (["Bash", "PowerShell", "shell"].includes(bare)) return "Comando";
+  if (server && !["secondbrain"].includes(server)) return `${server}: ${bare}`;
+  return bare;
+}
+
 function Steps({
   steps,
 }: {
@@ -136,8 +163,16 @@ export function WorkItem({ item }: { item: Item }) {
     case "tool_call":
       return (
         <Folded
-          label={`Herramienta ${item.server ? `${item.server}/` : ""}${item.name}`}
-          meta={item.error ? "error" : item.status === "in-progress" ? "…" : ""}
+          label={toolLabel(
+            // Codex reports MCP calls as mcpToolCall with the tool as input.
+            item.name === "mcpToolCall" && typeof item.input === "string"
+              ? item.input
+              : item.name,
+            item.server,
+          )}
+          meta={
+            item.error ? "no se pudo" : item.status === "in-progress" ? "…" : ""
+          }
         >
           <pre className="thread-output">
             {JSON.stringify(item.input, null, 2)}
@@ -155,6 +190,8 @@ export function WorkItem({ item }: { item: Item }) {
         </Folded>
       );
     case "notice":
+      // Older threads logged every automatic approval.
+      if (item.code === "auto-approved") return null;
       return (
         <p className="thread-notice" data-level={item.level}>
           {item.text}
@@ -165,9 +202,17 @@ export function WorkItem({ item }: { item: Item }) {
   }
 }
 
-export function MessageItem({ item }: { item: Item }) {
+export function MessageItem({
+  item,
+  stages = [],
+}: {
+  item: Item;
+  /** Stage names of the thread's flow, for hand-offs. */
+  stages?: string[];
+}) {
   switch (item.kind) {
     case "assistant_message":
+      if (!item.text.trim()) return null;
       return (
         <div className="thread-message" data-role="agent">
           <Markdown texto={item.text} />
@@ -213,7 +258,8 @@ export function MessageItem({ item }: { item: Item }) {
       return (
         <div className="thread-message" data-role="handoff">
           <p className="thread-work-title">
-            Traspaso de la etapa {item.fromStage + 1} a la {item.toStage + 1}
+            Traspaso: {stages[item.fromStage] ?? `etapa ${item.fromStage + 1}`}{" "}
+            → {stages[item.toStage] ?? `etapa ${item.toStage + 1}`}
           </p>
           <Markdown texto={item.narrative} />
           {item.openItems.length > 0 && (
@@ -231,12 +277,20 @@ export function MessageItem({ item }: { item: Item }) {
             item.brief.errors.length > 0) && (
             <details>
               <summary>
-                {item.brief.files.length} archivos ·{" "}
-                {item.brief.commands.length} comandos
-                {item.brief.failedTests.length > 0 &&
-                  ` · ${item.brief.failedTests.length} con tests fallidos`}
-                {item.brief.errors.length > 0 &&
-                  ` · ${item.brief.errors.length} errores`}
+                {[
+                  plural(item.brief.files.length, "archivo", "archivos"),
+                  plural(item.brief.commands.length, "comando", "comandos"),
+                  item.brief.failedTests.length > 0 &&
+                    plural(
+                      item.brief.failedTests.length,
+                      "con tests fallidos",
+                      "con tests fallidos",
+                    ),
+                  item.brief.errors.length > 0 &&
+                    plural(item.brief.errors.length, "error", "errores"),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </summary>
               <ul>
                 {item.brief.diffstat.map((f) => (

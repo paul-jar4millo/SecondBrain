@@ -2,6 +2,7 @@
 // on its own with Last-Event-ID; "snapshot-required" reloads; when the
 // stream keeps failing, the view falls back to polling the snapshot.
 import { useEffect, useRef, useState } from "react";
+import { usePageActive } from "../../core/visibility";
 import { threadsApi } from "./thread-api";
 import { applyMessage, fromSnapshot, type ThreadView } from "./thread-store";
 import type { StreamMessage, ThreadEvent } from "./thread-types";
@@ -24,9 +25,11 @@ export function useThread(id: string | undefined): ThreadFollow {
   const [generation, setGeneration] = useState(0);
   const viewRef = useRef<ThreadView | null>(null);
   viewRef.current = view;
+  // A background tab closes the stream; showing it reloads and reconnects.
+  const active = usePageActive();
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !active) return;
     let alive = true;
     let source: EventSource | null = null;
     let poll: ReturnType<typeof setInterval> | null = null;
@@ -88,7 +91,7 @@ export function useThread(id: string | undefined): ThreadFollow {
       source?.close();
       if (poll) clearInterval(poll);
     };
-  }, [id, generation]);
+  }, [id, generation, active]);
 
   return {
     view,

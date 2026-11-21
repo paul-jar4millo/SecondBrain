@@ -29,7 +29,10 @@ npm --prefix dashboard run verify:browser     # Playwright suites
   are replayed as `POST /mutations` with the base version, so conflicts are
   detected server-side.
 - **Live.** `GET /events` (SSE) invalidates cached data; a disconnection keeps
-  the last visible state and shows how old it is.
+  the last visible state and shows how old it is. A tab hidden for 15 s closes
+  its streams (`/events`, `/threads/feed`, `/threads/stream`) and reloads them
+  when shown again: over HTTP/1.1 a browser allows six connections per host
+  across all tabs. Serving the app over HTTP/2 removes that limit.
 - **Accessible without WebGL.** Every tool works without the scene; reduced
   motion, visible focus, 44 px targets and Escape handling are checked by the
   browser suites.

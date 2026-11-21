@@ -1,5 +1,6 @@
 // A question, approval or form from the agent, answered inline.
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { agentName } from "../agents/characters";
 import { Markdown } from "../../components/Markdown";
 import { threadsApi } from "./thread-api";
 import type { RequestAnswer, UserRequest } from "./thread-types";
@@ -48,9 +49,13 @@ export function RequestCard({
   const [values, setValues] = useState<Record<string, string | boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // A second click lands before React re-renders the disabled button.
+  const sending = useRef(false);
   const open = request.status === "open";
 
   const submit = async (answer: RequestAnswer) => {
+    if (sending.current) return;
+    sending.current = true;
     setBusy(true);
     setError("");
     try {
@@ -59,9 +64,18 @@ export function RequestCard({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      sending.current = false;
       setBusy(false);
     }
   };
+  // The engine's text names the engine; the app uses the agents' names.
+  const body =
+    request.kind === "subtask" && request.subtask
+      ? request.body.replace(
+          /^Agente: [^\n(.]+/m,
+          `Agente: ${agentName(request.subtask.agent.engine)}`,
+        )
+      : request.body;
 
   return (
     <section
@@ -70,7 +84,7 @@ export function RequestCard({
       aria-label={`Solicitud: ${request.title}`}
     >
       <p className="thread-work-title">{request.title}</p>
-      {request.body && <Markdown texto={request.body} />}
+      {body && <Markdown texto={body} />}
       {!open ? (
         <p className="muted">
           {RESOLVED[request.status] ?? request.status}
@@ -86,7 +100,11 @@ export function RequestCard({
             disabled={busy}
             onClick={() => void submit({ approved: true })}
           >
-            {request.kind === "subtask" ? "Crear sub-tarea" : "Aprobar"}
+            {request.kind === "subtask"
+              ? busy
+                ? "Creando sub-tarea…"
+                : "Crear sub-tarea"
+              : "Aprobar"}
           </button>
           <button
             type="button"

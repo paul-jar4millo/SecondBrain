@@ -48,10 +48,19 @@ function ThreadList({
 }) {
   if (!threads.length)
     return <p className="muted thread-empty">Todavía no hay threads.</p>;
+  // Subtasks follow their parent, indented.
+  const ids = new Set(threads.map((t) => t.id));
+  const children = new Map<string, Thread[]>();
+  for (const t of threads)
+    if (t.parentId && ids.has(t.parentId))
+      children.set(t.parentId, [...(children.get(t.parentId) ?? []), t]);
+  const ordered = threads
+    .filter((t) => !t.parentId || !ids.has(t.parentId))
+    .flatMap((t) => [t, ...(children.get(t.id) ?? [])]);
   return (
     <ul className="thread-list">
-      {threads.map((t) => (
-        <li key={t.id}>
+      {ordered.map((t) => (
+        <li key={t.id} data-child={t.parentId ? true : undefined}>
           <Link
             to={`/threads/${t.id}`}
             aria-current={t.id === selected ? "page" : undefined}
@@ -59,11 +68,14 @@ function ThreadList({
           >
             <span className="thread-list-title">{t.title}</span>
             <span className="thread-list-meta">
+              {t.parentId && <span className="thread-tag">Sub-tarea</span>}
               <span className="thread-status" data-status={t.status}>
                 {STATUS_LABEL[t.status]}
               </span>{" "}
               · {agentName(t.agent.engine)}
-              {t.repo ? ` · ${t.repo.branch}` : ""}
+              {t.flow && t.flow.stages.length > 1
+                ? ` · ${t.flow.stages[t.stageIndex]?.name ?? ""}`
+                : ""}
             </span>
           </Link>
         </li>
@@ -91,7 +103,7 @@ function InboxList({ entries }: { entries: InboxEntry[] }) {
   );
 }
 
-function SidePanel({ view, tick }: { view: ThreadView; tick: number }) {
+function SidePanel({ view, tick }: { view: ThreadView; tick: string }) {
   const [tab, setTab] = useState<"diff" | "plan">(
     view.thread.repo ? "diff" : "plan",
   );
@@ -123,7 +135,14 @@ function SidePanel({ view, tick }: { view: ThreadView; tick: number }) {
         </button>
       </div>
       {tab === "diff" && view.thread.repo ? (
-        <DiffView threadId={view.thread.id} refreshKey={tick} />
+        ["done", "archived"].includes(view.thread.status) ? (
+          <p className="muted">
+            El thread está cerrado: sus cambios ya se integraron o se
+            descartaron.
+          </p>
+        ) : (
+          <DiffView threadId={view.thread.id} refreshKey={tick} />
+        )
       ) : plan ? (
         <WorkItem item={plan} />
       ) : (
@@ -145,13 +164,25 @@ function ThreadDetail({
   const [sheet, setSheet] = useState(false);
   const { confirm, confirmation } = useConfirmation();
   const navigate = useNavigate();
-  // Re-read the diff when a turn ends.
-  const tick = view?.items.filter((i) => i.kind === "file_change").length ?? 0;
+  // Re-read the diff when files change or a turn ends (commands write
+  // files without a file_change item).
+  const tick = view
+    ? `${view.items.filter((i) => i.kind === "file_change").length}:${view.thread.counters.turns}:${view.thread.status}`
+    : "";
   if (error && !view) return <p className="inline-error">{error}</p>;
   if (!view) return <p role="status">Abriendo thread…</p>;
   const { thread } = view;
   const finished = ["done", "failed", "archived"].includes(thread.status);
   const pending = openRequests(view).length;
+  const stage = thread.flow?.stages[thread.stageIndex];
+  // A flow moves on by itself; idle in the middle means the agent ended
+  // its turn without handing off (or a hand-off failed).
+  const stuck =
+    !!thread.flow &&
+    thread.flow.stages.length > 1 &&
+    thread.status === "idle" &&
+    pending === 0 &&
+    thread.counters.turns > 0;
   return (
     <div className="thread-detail">
       <header className="thread-header">
@@ -178,8 +209,18 @@ function ThreadDetail({
             {thread.flow &&
               thread.flow.stages.length > 1 &&
               ` · Etapa ${thread.stageIndex + 1}/${thread.flow.stages.length}: ${thread.flow.stages[thread.stageIndex]?.name ?? ""}`}
-            {thread.repo &&
-              ` · ${thread.repo.branch} → ${thread.repo.baseBranch}`}
+            {thread.repo && (
+              <>
+                {" · "}
+                <span
+                  className="thread-branch"
+                  title={`${thread.repo.branch} → ${thread.repo.baseBranch}`}
+                >
+                  {thread.repo.branch}
+                </span>
+                {` → ${thread.repo.baseBranch}`}
+              </>
+            )}
             {thread.prUrl && (
               <>
                 {" · "}
@@ -235,6 +276,12 @@ function ThreadDetail({
           )}
         </div>
       </header>
+      {stuck && (
+        <p className="thread-banner" role="status">
+          La etapa «{stage?.name}» terminó sin pasar el trabajo a la siguiente.
+          Escríbele al agente qué falta para que siga, o cierra el thread.
+        </p>
+      )}
       <div className="thread-body">
         <div className="thread-main">
           <Timeline view={view} onAnswered={onChanged} />

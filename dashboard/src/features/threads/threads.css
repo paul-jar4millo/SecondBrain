@@ -4,7 +4,7 @@
   grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   gap: var(--s16, 16px);
   /* Inside the tools modal: the timeline scrolls, the composer stays. */
-  height: clamp(440px, calc(100dvh - 260px), 920px);
+  height: clamp(520px, calc(100dvh - 200px), 920px);
 }
 .threads-column {
   display: flex;
@@ -115,6 +115,37 @@
   margin: 0;
   font-size: 1.15em;
   overflow-wrap: anywhere;
+  /* Long titles take two lines at most; the timeline keeps the space. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.thread-branch {
+  display: inline-block;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.thread-banner {
+  margin: var(--s8, 8px) 0 0;
+  padding: var(--s8, 8px) var(--s12, 12px);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+.thread-tag {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--line, #8883);
+  border-radius: 999px;
+  font-size: 0.85em;
+}
+.thread-list li[data-child] {
+  margin-left: var(--s16, 16px);
+  border-left: 2px solid var(--line, #8883);
 }
 .thread-header-text {
   flex: 1;
@@ -156,6 +187,8 @@
 }
 .thread-timeline {
   flex: 1;
+  /* Never squeezed to a sliver by the header and composer. */
+  min-height: 240px;
   overflow-y: auto;
   padding: var(--s8, 8px) 0;
   display: flex;

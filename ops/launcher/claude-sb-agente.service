@@ -13,6 +13,9 @@ Environment=CLAUDE_CONFIG_DIR=/var/lib/sb-agente/claude
 # Sin los conectores de claude.ai del dueño: podrían mandar mensajes sin aprobación.
 Environment=ENABLE_CLAUDEAI_MCP_SERVERS=false
 ExecStart=/opt/sb-agente/cli/current/bin/claude remote-control --name sb-agente --permission-mode auto
+# Remote Control redraws its status screen every second; errors still reach
+# the journal through stderr.
+StandardOutput=null
 Restart=on-failure
 RestartSec=5
 MemoryMax=768M

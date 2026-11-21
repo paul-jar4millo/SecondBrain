@@ -51,14 +51,21 @@ export function Timeline({
   const end = useRef<HTMLDivElement>(null);
   const last = view.items.at(-1);
   const signature = `${view.items.length}:${last?.id}:${"text" in (last ?? {}) ? (last as { text: string }).text.length : 0}`;
+  const opened = useRef(false);
   useEffect(() => {
     const box = end.current?.parentElement;
     if (!box) return;
-    // Follow the stream only when the reader is already at the bottom.
-    if (box.scrollHeight - box.scrollTop - box.clientHeight < 160)
+    // Open at the latest item, then follow the stream only when the reader
+    // is already at the bottom.
+    if (
+      !opened.current ||
+      box.scrollHeight - box.scrollTop - box.clientHeight < 160
+    )
       end.current?.scrollIntoView?.({ block: "end" });
+    opened.current = true;
   }, [signature]);
   const requestById = new Map(view.requests.map((r) => [r.id, r]));
+  const stages = view.thread.flow?.stages.map((s) => s.name) ?? [];
   return (
     <div className="thread-timeline" aria-live="polite">
       {groups.map((group, i) => (
@@ -85,7 +92,7 @@ export function Timeline({
                 />
               ) : null;
             }
-            return <MessageItem key={item.id} item={item} />;
+            return <MessageItem key={item.id} item={item} stages={stages} />;
           })}
           {!group.turnId &&
             group.work.map((item) => <WorkItem key={item.id} item={item} />)}
