@@ -136,12 +136,17 @@ try {
   assert.match(tasks, /- \[ \] Escrita desde Node/);
   writeFileSync(
     path.join(root, "00-Inbox/Original.md"),
-    "# Desde Obsidian\nActualizado fuera de la app.\n",
+    "# Editada en Obsidian\nActualizado fuera de la app.\n",
   );
+  // The item list omits note bodies; the new title proves the index re-read it.
   assert.ok(
-    (await request("/api/v1/items")).some((i) =>
-      i.body?.includes("Actualizado fuera"),
+    (await request("/api/v1/items")).some(
+      (i) => i.title === "Editada en Obsidian",
     ),
+  );
+  assert.match(
+    (await request("/api/v1/vault/note?path=00-Inbox/Original.md")).content,
+    /Actualizado fuera/,
   );
   const response = await fetch(base + "/api/v1/export", {
     headers: {
