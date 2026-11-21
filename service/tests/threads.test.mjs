@@ -75,6 +75,7 @@ async function fakeLauncher(t) {
       return res.end('id: 4\ndata: {"type":"event"}\n\n');
     }
     if (url === "/inbox") return json(200, { entries: [] });
+    if (url === "/flows") return json(200, { flows: [{ id: "single" }] });
     json(404, { error: "no" });
   });
   server.listen(0, "127.0.0.1");
@@ -124,6 +125,18 @@ test("threads are relayed to the launcher with a credential per thread", async (
     }),
   });
   assert.equal(created.status, 201);
+  const billed = await fetch(`${base}/threads`, {
+    method: "POST",
+    headers: owner,
+    body: JSON.stringify({
+      prompt: "Hola",
+      kind: "scratch",
+      agent: { engine: "codex" },
+      flowTemplateId: "plan-implement-review",
+      stageAgents: { review: { engine: "deepseek" } },
+    }),
+  });
+  assert.equal(billed.status, 403);
   const sent = launcher.seen.find(
     (s) => s.url === "/threads" && s.method === "POST",
   );
@@ -230,6 +243,10 @@ test("threads are relayed to the launcher with a credential per thread", async (
   assert.deepEqual(
     await fetch(`${base}/inbox`, { headers: owner }).then((r) => r.json()),
     { entries: [] },
+  );
+  assert.deepEqual(
+    await fetch(`${base}/flows`, { headers: owner }).then((r) => r.json()),
+    { flows: [{ id: "single" }] },
   );
 
   // Closing (other than by PR) revokes the thread's credential.
