@@ -44,7 +44,7 @@ A thread is one task:
   get a private folder.
 - `engine/event-mapper.ts`: provider callbacks and `ProviderEvent`s become
   items; streamed text and command output are ephemeral deltas.
-- `engine/scheduler.ts`: `SB_MAX_ACTIVOS` slots, owner turns first; a
+- `engine/scheduler.ts`: `SB_MAX_ACTIVE_TURNS` slots, owner turns first; a
   waiting turn shows "Esperando capacidad".
 - A stop keeps the queued messages and sends them with the owner's next one.
   A turn with no provider activity for five minutes gets a notice, once.

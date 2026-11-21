@@ -67,7 +67,7 @@ export async function arrancar(env = process.env) {
       projects,
       git: gitExecutor.git,
       gh: gitExecutor.gh,
-      maxActive: limits.maxActivos,
+      maxActive: limits.maxActiveTurns,
       toolCatalog,
     });
     const server = createLauncherServer({

@@ -1,4 +1,4 @@
-// Process slots for thread turns (SB_MAX_ACTIVOS). Waiting turns are served
+// Process slots for thread turns (SB_MAX_ACTIVE_TURNS). Waiting turns are served
 // by priority — owner turns first, then reviews, then subtasks — and in
 // arrival order within a priority.
 
