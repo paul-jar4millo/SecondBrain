@@ -133,6 +133,15 @@ test("plans without mutations, preserves alias access and rolls the host layout 
     "/etc/sb-agente/proyectos.json",
     JSON.stringify({ sandbox: oldProjects + "/sandbox" }),
   );
+  const claudeConfig = "/var/lib/sb-agente/claude/.claude.json";
+  await put(
+    claudeConfig,
+    JSON.stringify({
+      projects: {
+        [oldProjects + "/sandbox"]: { hasTrustDialogAccepted: true },
+      },
+    }),
+  );
   const calls = [];
   const host = {
     state(unit) {
@@ -146,6 +155,9 @@ test("plans without mutations, preserves alias access and rolls the host layout 
     },
     waitForLauncher() {
       calls.push(["wait"]);
+    },
+    configure() {
+      calls.push(["configure"]);
     },
     repairWorktrees() {},
   };
@@ -175,6 +187,24 @@ test("plans without mutations, preserves alias access and rolls the host layout 
       ([command, unit]) =>
         command === "start" && unit === "secondbrain-launcher.service",
     ),
+  );
+  // Units are regenerated for the new layout before systemd reloads them.
+  const configureAt = calls.findIndex(([command]) => command === "configure");
+  assert.ok(configureAt >= 0);
+  assert.ok(
+    configureAt < calls.findIndex(([command]) => command === "daemon-reload"),
+  );
+  // Claude keeps workspace trust under both the alias and the new path.
+  const projects = JSON.parse(
+    await readFile(path.join(root, claudeConfig), "utf8"),
+  ).projects;
+  assert.equal(
+    projects[newProjects + "/sandbox"]?.hasTrustDialogAccepted,
+    true,
+  );
+  assert.equal(
+    projects[oldProjects + "/sandbox"]?.hasTrustDialogAccepted,
+    true,
   );
   const before = calls.length;
   await migrateHostLayout({ root, host, mode: "apply" });

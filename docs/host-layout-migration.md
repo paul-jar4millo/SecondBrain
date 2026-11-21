@@ -30,7 +30,10 @@ The migration changes the launcher state path to
 `/var/lib/sb-agent/state/launcher`, repositories to `/srv/sb-agent/projects`,
 and deliverables to `/srv/sb-agent/deliverables`. It updates repository links
 and structured thread paths in SQLite, preserving the event sequence and user
-text. Git repairs the active worktree registrations as `sb-agente`. Existing
+text. Git repairs the active worktree registrations as `sb-agente`. Claude's
+workspace trust is copied to the new paths, so Remote Control keeps working.
+The command then regenerates the managed units and scripts with
+`configure.mjs` before it restarts them. Existing
 data paths, installed commands, and systemd names remain usable through aliases
 during the compatibility release.
 
