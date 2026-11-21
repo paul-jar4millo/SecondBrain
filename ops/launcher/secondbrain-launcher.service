@@ -18,8 +18,7 @@ Environment=AGENTES_CLAUDE_DIR=/var/lib/sb-agente/claude
 Environment=AGENTES_DEEPSEEK_DIR=/var/lib/sb-agente/deepseek
 Environment=SB_CLAUDE_BIN=/opt/sb-agente/cli/current/bin/claude
 Environment=CODEX_HOME=/var/lib/sb-agente/codex
-Environment=SB_MAX_ACTIVOS=2
-Environment=SB_RETENCION_DIAS=14
+Environment=SB_MAX_ACTIVE_TURNS=2
 Environment=SB_SESSION_SCOPES=1
 Environment=XDG_RUNTIME_DIR=/run/user/@UID@
 ExecStart=/opt/node/bin/node /opt/secondbrain/current/server/launcher.mjs

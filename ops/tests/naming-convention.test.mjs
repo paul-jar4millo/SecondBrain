@@ -48,6 +48,13 @@ test("flags new Spanish routes, environment names, scripts and units", () => {
   );
   assert.deepEqual(
     operationalNamesIn(
+      "ops/launcher/secondbrain-launcher.service",
+      "Environment=SB_MAX_ACTIVOS=2\nEnvironment=SB_RETENCION_DIAS=14\nEnvironment=SB_MAX_ACTIVE_TURNS=2",
+    ),
+    ["env:SB_MAX_ACTIVOS", "env:SB_RETENCION_DIAS"],
+  );
+  assert.deepEqual(
+    operationalNamesIn(
       "launcher/threads/http/routes.ts",
       /^\/threads\/borrar$/.toString(),
     ),

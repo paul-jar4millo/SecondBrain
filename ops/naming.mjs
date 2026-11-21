@@ -10,12 +10,12 @@ export const root = fileURLToPath(new URL("..", import.meta.url));
 
 /** Common Spanish words of this codebase, without accents, singular. */
 export const SPANISH = new Set(
-  `accion acciones abrir actualizar agente aislamiento aprobacion arranque
+  `accion acciones abrir activo actualizar agente aislamiento aprobacion arranque
   borrar buscar cancelar catalogo cerrar cola conversacion continuar crear
-  cuarto cuenta diagnostico efecto ejecucion ejecutor eliminar encargo entrega
+  cuarto cuenta dia diagnostico efecto ejecucion ejecutor eliminar encargo entrega
   equipo errores espacio esperar estado fase flujo guardar herramienta
   hilo iniciar integrante lanzador leer manifiesto mensaje modelo motor mundo
-  nota nuevo personaje preparar proyecto refugio registro remoto sala saldo
+  nota nuevo personaje preparar proyecto refugio registro remoto retencion sala saldo
   seguimiento sesion solicitud tablero tarea ultimo uso validar verificar`.split(
     /\s+/,
   ),

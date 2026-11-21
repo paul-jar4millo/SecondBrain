@@ -53,15 +53,13 @@ and [ADR 0016](adr/0016-pinned-agent-clis.md).
 
 ### Engineering debt
 
-- Rename the last Spanish environment variables (`SB_MAX_ACTIVOS`,
-  `SB_RETENCION_DIAS`) and extend the naming check to catch them.
 - Raise MCP and dashboard coverage; convert the remaining `.js` files in the
   3D scene to TypeScript so they are measured.
 - Extend type checking to the remaining Node files.
 
 ## Risks kept in view
 
-- `SB_MAX_ACTIVOS` slots versus reviews and subtasks: owner turns go first,
+- `SB_MAX_ACTIVE_TURNS` slots versus reviews and subtasks: owner turns go first,
   and waiting turns show "waiting for capacity".
 - Memory: the launcher is capped at 3 GB and each turn at 1 GB; idle provider
   controllers expire.

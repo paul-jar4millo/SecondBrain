@@ -16,8 +16,7 @@ export function readLimits(env = {}) {
     return Number(value);
   };
   return {
-    maxActivos: integer("SB_MAX_ACTIVOS", 6, 16),
-    retencionDias: integer("SB_RETENCION_DIAS", 90, 365),
+    maxActiveTurns: integer("SB_MAX_ACTIVE_TURNS", 6, 16),
   };
 }
 
