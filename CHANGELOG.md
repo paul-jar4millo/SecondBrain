@@ -4,6 +4,37 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] - 2026-11-21
+
+### Fixed
+
+- A flow with a different engine per stage can hand off and report reviews:
+  the thread's credential accepts every stage's agent.
+- Approving a subtask twice creates a single child.
+- `agent_usage` works from inside a thread, and Claude's plan usage updates
+  from its events again.
+- Stopping a turn keeps the queued messages for the owner's next one; a turn
+  silent for five minutes says so.
+- The review limit counts only change requests; going on from "needs
+  decision" grants one more round.
+- Claude can read and run tests in read-only stages; later stages receive
+  the owner's original task.
+- The changes panel refreshes after every turn and no longer fails on a
+  closed thread.
+- Background tabs release their live connections, so sends and actions no
+  longer stall with several tabs open.
+
+### Changed
+
+- Threads view: the timeline opens at the latest item with a usable height;
+  hand-offs name their stages; tools read as actions; subtasks sit under
+  their parent; a flow that stops between stages says what to do.
+- The new thread dialog remembers the last flow, agents, autonomy and
+  project; closing proposes local integration first.
+- Thread titles are the prompt's first sentence without Markdown.
+- Documentation reads as a portfolio project: README, docs index, roadmap
+  and ADRs 0012–0018.
+
 ## [0.7.0] - 2026-11-21
 
 ### Added
@@ -294,6 +325,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.7.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.7.1
 [0.7.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.7.0
 [0.6.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.6.0
 [0.5.3]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.3
