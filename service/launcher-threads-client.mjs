@@ -80,6 +80,7 @@ export function createThreadsClient({ base, secret, request, Failure }) {
         30_000,
       ),
     inbox: () => request("/inbox"),
+    flows: () => request("/flows"),
     /**
      * Opens a launcher SSE stream (one thread, or the global feed when `id`
      * is null) and returns the raw response for the caller to pipe.

@@ -160,8 +160,12 @@ export const threadRoutes = (ctx, req) => {
     "POST /threads": async () => {
       ownerOnly();
       const data = await body(request);
+      const engines = [
+        data.agent?.engine,
+        ...Object.values(data.stageAgents ?? {}).map((a) => a?.engine),
+      ];
       if (
-        data.agent?.engine === "deepseek" &&
+        engines.includes("deepseek") &&
         process.env.SB_ALLOW_BILLED_DEEPSEEK !== "1"
       )
         throw new Failure(
@@ -231,6 +235,10 @@ export const threadRoutes = (ctx, req) => {
         200,
         await threads.diff(query.get("id"), query.get("turnId") || undefined),
       );
+    },
+    "GET /flows": async () => {
+      ownerOnly();
+      return send(response, 200, await threads.flows());
     },
     "GET /inbox": async () => {
       ownerOnly();

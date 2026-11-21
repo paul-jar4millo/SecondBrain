@@ -3,6 +3,7 @@
 export type {
   AgentRef,
   FileDiff,
+  FlowTemplate,
   InboxEntry,
   Item,
   ItemOf,

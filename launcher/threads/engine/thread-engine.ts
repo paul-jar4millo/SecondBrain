@@ -36,6 +36,7 @@ import {
 import type { Scheduler, Slot } from "./scheduler.ts";
 import type { ThreadWorkspaces } from "./workspace.ts";
 import { CloseError, commitTitle, type Closing } from "./closing.ts";
+import { flowTemplate, freezeFlow, isReadOnly } from "./flows.ts";
 
 export interface ProviderController {
   isAlive(): boolean;
@@ -262,7 +263,7 @@ export function createThreadEngine(deps: EngineDeps) {
       model: agent.model ?? null,
       effort: agent.effort ?? null,
       cwd: cwdOf(thread),
-      readOnly: thread.autonomy === "read-only",
+      readOnly: isReadOnly(thread),
     });
 
   const scheduleIdleShutdown = (threadId: string) => {
@@ -481,7 +482,7 @@ export function createThreadEngine(deps: EngineDeps) {
         threadId,
         agent,
         cwd,
-        readOnly: thread.autonomy === "read-only",
+        readOnly: isReadOnly(thread),
       });
       const controller = await controllerFor(threadId, thread, agent);
       if (turn.abort.signal.aborted) throw new Error("Interrumpido");
@@ -671,6 +672,20 @@ export function createThreadEngine(deps: EngineDeps) {
           parsed.error.issues[0]?.message ?? "Datos inválidos.",
         );
       const command = parsed.data;
+      let flow: Thread["flow"] = null;
+      if (command.flowTemplateId !== undefined) {
+        const template = flowTemplate(command.flowTemplateId);
+        if (!template) throw new EngineError("invalid", "Flujo desconocido.");
+        try {
+          flow = freezeFlow(template, command.agent, command.stageAgents);
+        } catch (cause) {
+          throw new EngineError("invalid", (cause as Error).message);
+        }
+      } else if (command.stageAgents)
+        throw new EngineError(
+          "invalid",
+          "Elegir agentes por etapa requiere un flujo.",
+        );
       // The service may choose the id, so the thread's credential is bound
       // to it before the first turn starts.
       let id = newId("thread");
@@ -724,14 +739,17 @@ export function createThreadEngine(deps: EngineDeps) {
         kind: command.kind,
         status: command.kind === "repo" ? "setting-up" : "idle",
         autonomy: command.autonomy,
-        agent: command.agent,
+        agent: flow?.stages[0]?.agent ?? command.agent,
         repo,
         workspace,
         parentId: command.parentId ?? null,
-        flow: null,
+        flow,
         stageIndex: 0,
         counters: { turns: 0, reviewRounds: 0, subtasks: 0 },
-        limits: { maxTurns: defaultMaxTurns, maxReviewRounds: 3 },
+        limits: {
+          maxTurns: defaultMaxTurns,
+          maxReviewRounds: flow?.maxReviewRounds ?? 3,
+        },
         lastSeq: 0,
         closeMode: null,
         prUrl: null,
