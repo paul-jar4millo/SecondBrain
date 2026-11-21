@@ -4,6 +4,18 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] - 2026-11-21
+
+### Fixed
+
+- The host layout migration runs when called through
+  `/opt/secondbrain/current`. Before, it exited without doing anything.
+- After the migration, Remote Control keeps Claude's workspace trust, and
+  the managed units are regenerated before they restart.
+- Under the English layout, the deploy helper no longer shows as permanent
+  configuration drift.
+- Remote Control uses the pinned Claude CLI.
+
 ## [0.5.2] - 2026-11-21
 
 ### Fixed
@@ -237,6 +249,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.5.3]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.3
 [0.5.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.2
 [0.5.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.1
 [0.5.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.0
