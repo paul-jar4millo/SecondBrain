@@ -159,6 +159,13 @@ export function createThreadsHttp({
       },
     ],
     [
+      "POST",
+      new RegExp(`^/threads/${ID}/handoff$`),
+      async (m, req, res) => {
+        send(res, 202, engine.handoff(m[1] as string, await readJson(req)));
+      },
+    ],
+    [
       "GET",
       new RegExp(`^/threads/${ID}/requests/(req_[0-9A-Za-z_-]{6,64})$`),
       (m, _req, res) => {

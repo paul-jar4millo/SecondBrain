@@ -237,3 +237,14 @@ test("thread_ask_user follows user.ask like the usuario_* tools", () => {
     false,
   );
 });
+
+test("thread_handoff follows user.ask like thread_ask_user", () => {
+  assert.equal(
+    isToolAllowedForOperations("thread_handoff", new Set(["user.ask"])),
+    true,
+  );
+  assert.equal(
+    isToolAllowedForOperations("thread_handoff", new Set(["vault.read"])),
+    false,
+  );
+});
