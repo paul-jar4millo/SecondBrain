@@ -449,6 +449,24 @@ test("threads are relayed to the launcher with a credential per thread", async (
     (await fetch(`${base}/notifications`, { headers: agent })).status,
     403,
   );
+  const key = await fetch(`${base}/push/key`, { headers: owner }).then((r) =>
+    r.json(),
+  );
+  assert.equal(Buffer.from(key.publicKey, "base64url").length, 65);
+  assert.equal(key.subscriptions, 0);
+  const insecure = await fetch(`${base}/push/subscriptions`, {
+    method: "POST",
+    headers: owner,
+    body: JSON.stringify({
+      endpoint: "http://push.example.net/x",
+      keys: { p256dh: "a", auth: "b" },
+    }),
+  });
+  assert.equal(insecure.status, 400);
+  assert.equal(
+    (await fetch(`${base}/push/key`, { headers: agent })).status,
+    403,
+  );
 
   // Closing (other than by PR) revokes the thread's credential.
   const closed = await fetch(`${base}/threads/close`, {

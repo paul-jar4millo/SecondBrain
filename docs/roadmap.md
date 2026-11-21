@@ -22,15 +22,16 @@ and [ADR 0016](adr/0016-pinned-agent-clis.md).
 
 ### C · Notifications and Discord
 
-- **C1 Dispatcher.** The service follows the launcher's global feed and
-  writes an outbox in `notifications.sqlite` for events that need the owner:
-  open request, needs decision, ready for review, failed, hand-off. Inbox
-  badge in the HUD.
-- **C2 Web push.** VAPID keys in a host secrets file,
-  `/api/v1/push/subscriptions`, `push` and `notificationclick` in the service
-  worker that open `/threads/:id`; opt-in in Settings.
-- **C3 Refuge state.** Each character shows its thread's state (working,
-  waiting, review, ready); a click opens the thread. It never invents work.
+- **C1 Dispatcher** (done). The service follows the launcher's global feed
+  from its own cursor and keeps an outbox of what needs the owner: open
+  request, needs decision, ready for review, failed, hand-off. Unread badge on
+  Threads.
+- **C2 Web push** (done). VAPID keys generated in the service's data
+  directory, `/api/v1/push/subscriptions`, `push` and `notificationclick`
+  in the service worker that open `/threads/:id`; opt-in in Settings.
+- **C3 Refuge state** (done). Each character follows the agent of its
+  thread's current stage and shows its state; a click opens the thread. It
+  never invents work.
 - **C4 Discord bot skeleton.** A `discord/` module that only talks to the
   service API with a loopback-only `bot` credential (read threads, create,
   message, answer requests, read the inbox; close, merge and settings are

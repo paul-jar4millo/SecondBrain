@@ -24,6 +24,7 @@ import { createSharedFiles } from "../shared-files.mjs";
 import { createUserRequestStore } from "../user-requests.mjs";
 import { createEffectsExecutor } from "../effects-executor.mjs";
 import { createNotifications } from "../notifications.mjs";
+import { createPush } from "../push.mjs";
 import { agentHeaders } from "./io.mjs";
 
 /** @import { ApplicationOptions, HttpLogRecord, HttpRequest, ScopedRecord, ToolProfile } from "../types.d.ts" */
@@ -118,6 +119,21 @@ export async function createContext(options) {
         stages: thread.flow?.stages.map((stage) => stage.name) ?? [],
       };
     },
+  });
+  const push = await createPush({
+    directory: path.join(dataDirectory, "push"),
+  });
+  // Each notice also goes to the owner's subscribed browsers (phase C2).
+  notifications.onNotify((notice) => {
+    if (!push.count()) return;
+    void push
+      .send({
+        title: notice.title,
+        body: notice.text,
+        url: `/threads/${encodeURIComponent(notice.threadId)}`,
+        tag: notice.threadId,
+      })
+      .catch(() => undefined);
   });
   // One subscription: every event refreshes the app, and the events that
   // need the owner go to the outbox (in order, resuming from its cursor).
@@ -488,6 +504,7 @@ export async function createContext(options) {
     mundo: world,
     lanzador,
     notifications,
+    push,
     clients,
     watchers,
     change,
