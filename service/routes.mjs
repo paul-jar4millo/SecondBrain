@@ -967,6 +967,25 @@ for (const [
     z.object({ upTo: z.int().min(0) }).strict(),
     z.object({}).strict(),
   ],
+  ["GET /push/key", false, object, z.object({}).strict()],
+  [
+    "POST /push/subscriptions",
+    false,
+    z
+      .object({
+        endpoint: z.string().max(1024),
+        expirationTime: z.number().nullable().optional(),
+        keys: z.object({ p256dh: z.string(), auth: z.string() }).strict(),
+      })
+      .strict(),
+    z.object({}).strict(),
+  ],
+  [
+    "POST /push/subscriptions/remove",
+    false,
+    z.object({ endpoint: z.string().max(1024) }).strict(),
+    z.object({}).strict(),
+  ],
   [
     "POST /threads/agent/ask",
     true,

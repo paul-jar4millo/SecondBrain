@@ -23,6 +23,7 @@ import { CSVImport } from "./CSVImport";
 import { Security } from "./Security";
 import { McpClients } from "./McpClients";
 import { TeamSettings } from "./TeamSettings";
+import { PushSetting } from "./PushSetting";
 import { preference, setPreference } from "./preferences";
 import { PageHeading } from "../../components/PageHeading";
 import { getLang, LANGS, setLang, t, type Lang } from "../../core/i18n";
@@ -240,6 +241,8 @@ export function SettingsPage() {
                   ))}
                 </select>
               </div>
+              <SectionTitle title="Avisos" />
+              <PushSetting />
               <SectionTitle title="Privacidad" />
               <label className="setting-row setting-switch">
                 <div>

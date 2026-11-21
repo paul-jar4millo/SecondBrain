@@ -6,6 +6,7 @@ import { once } from "node:events";
 import { body, send } from "../io.mjs";
 import { Failure } from "../../vault.mjs";
 import { ENGINE_ACTOR, intersectList } from "../../agent-profiles.mjs";
+import { validSubscription } from "../../push.mjs";
 /** @import { RouteModule } from "../route-types.d.ts" */
 
 export const THREAD_ID = /^thr_[0-9A-Za-z_-]{6,64}$/;
@@ -59,7 +60,8 @@ export async function waitThreadRequest(threads, threadId, requestId, timeout) {
 
 /** @type {RouteModule} */
 export const threadRoutes = (ctx, req) => {
-  const { auth, lanzador, notifications, options, resolveServerProfile } = ctx;
+  const { auth, lanzador, notifications, options, push, resolveServerProfile } =
+    ctx;
   const { callerCap, consulta: query, request, response } = req;
   const threads = lanzador?.threads;
 
@@ -317,6 +319,33 @@ export const threadRoutes = (ctx, req) => {
     "GET /notifications": async () => {
       ownerOnly();
       return send(response, 200, notifications.list());
+    },
+    // Web push (phase C2): the browser subscribes with the service's key.
+    "GET /push/key": async () => {
+      ownerOnly();
+      return send(response, 200, {
+        publicKey: push.publicKey(),
+        subscriptions: push.count(),
+      });
+    },
+    "POST /push/subscriptions": async () => {
+      ownerOnly();
+      const subscription = validSubscription(await body(request));
+      if (!subscription)
+        throw new Failure("La suscripción push no es válida.", 400);
+      const origin = String(request.headers.origin ?? "");
+      // The push service may contact the app's owner through its address.
+      const contact = /^https:\/\/[^/]+$/.test(origin)
+        ? origin
+        : "mailto:push@localhost";
+      await push.subscribe(subscription, contact);
+      return send(response, 201, { subscriptions: push.count() });
+    },
+    "POST /push/subscriptions/remove": async () => {
+      ownerOnly();
+      const { endpoint } = await body(request);
+      await push.unsubscribe(String(endpoint));
+      return send(response, 200, { subscriptions: push.count() });
     },
     "POST /notifications/seen": async () => {
       ownerOnly();
