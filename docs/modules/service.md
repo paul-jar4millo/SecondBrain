@@ -78,3 +78,9 @@ like the other thread tools): the launcher checks the flow's rules, waits for
 the agent's turn to end, adds a `handoff` item with the brief (diffstat,
 commands and exit codes, failed tests, errors, files) and starts the next
 stage with its own agent and a new provider conversation.
+
+A review stage reports its verdict with `POST /threads/agent/review` (MCP
+`thread_report_review`, once per turn). When the turn ends, `approved` leaves
+the thread `ready-for-review` for the owner, `changes-requested` sends it back
+to the implementer with the findings as open items, and the last allowed
+round (`maxReviewRounds`, 3 at most) turns it `needs-decision`.
