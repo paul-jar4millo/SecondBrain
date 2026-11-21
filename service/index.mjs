@@ -9,7 +9,6 @@ import { createContext } from "./http/context.mjs";
 import { prepareResponse, sendError } from "./http/middleware.mjs";
 import { serveStatic } from "./http/static.mjs";
 import { buildRoutes } from "./http/routes/index.mjs";
-import { legacyPaths } from "./http/legacy-paths.mjs";
 
 /** @import { ApplicationOptions, HttpRequest } from "./types.d.ts" */
 /** @import { ServerResponse } from "node:http" */
@@ -19,8 +18,6 @@ const apiPrefix = "/api/v1";
 /** @param {ApplicationOptions} [options] */
 export async function createApplication(options = {}) {
   const context = await createContext(options);
-  const legacyHttpRoutes =
-    options.legacyHttpRoutes ?? process.env.SB_LEGACY_HTTP_ROUTES !== "off";
   const {
     root,
     dataDirectory,
@@ -54,16 +51,6 @@ export async function createApplication(options = {}) {
         url = new URL(request.url ?? "/", "http://localhost");
       } catch {
         throw new Failure("Ruta inválida.", 400);
-      }
-      const successor =
-        legacyHttpRoutes && url.pathname.startsWith(apiPrefix + "/")
-          ? legacyPaths.get(url.pathname.slice(apiPrefix.length))
-          : undefined;
-      if (successor) {
-        response.setHeader("Deprecation", "@1795132800");
-        url.pathname = apiPrefix + successor;
-        // Body validation and request logging also use the canonical policy.
-        request.url = url.pathname + url.search;
       }
       const { pathname } = url;
       if (
@@ -107,7 +94,6 @@ export async function createApplication(options = {}) {
           consulta,
           required,
           callerCap,
-          legacy: Boolean(successor),
         };
         const routes = buildRoutes(context, req);
         const handler = routes[method + " " + route];

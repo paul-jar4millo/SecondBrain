@@ -115,21 +115,13 @@ test("catalog routes deny the room credential and the session routes are gone", 
   await once(app.server, "listening");
   t.after(() => app.close());
   const base = `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (app.server.address()).port}/api/v1`;
-  const canonical = await fetch(base + "/agents/projects");
-  assert.equal(canonical.status, 200);
-  assert.equal(canonical.headers.get("Deprecation"), null);
-  assert.deepEqual(await canonical.json(), ["demo"]);
-  const projects = await fetch(base + "/agentes/proyectos-lanzador");
-  assert.match(projects.headers.get("Deprecation") ?? "", /^@[0-9]+$/);
+  const projects = await fetch(base + "/agents/projects");
   assert.equal(projects.status, 200);
   assert.deepEqual(await projects.json(), ["demo"]);
   for (const route of [
     "/agents/workspaces",
     "/agents/projects",
     "/agents/models",
-    "/agentes/espacios",
-    "/agentes/proyectos-lanzador",
-    "/agentes/modelos-lanzador",
   ])
     assert.equal(
       (
@@ -145,55 +137,8 @@ test("catalog routes deny the room credential and the session routes are gone", 
     "/agentes/terminal/stream?id=f1111111-1111-4111-8111-111111111111",
     "/agentes/sesiones/diff?id=f1111111-1111-4111-8111-111111111111",
     "/encargos",
+    "/agentes/espacios",
+    "/agentes/proyectos-lanzador",
   ])
     assert.equal((await fetch(base + route)).status, 404, route);
-});
-
-test("a new service can write workspace links through an older launcher", async (t) => {
-  /** @type {{ path: string, body: Record<string, unknown> }[]} */
-  const calls = [];
-  const server = http.createServer(async (req, res) => {
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    calls.push({
-      path: req.url ?? "",
-      body: JSON.parse(Buffer.concat(chunks).toString()),
-    });
-    res.setHeader("content-type", "application/json");
-    if (req.url === "/workspaces") {
-      res.statusCode = 404;
-      return res.end(JSON.stringify({ error: "Ruta no encontrada." }));
-    }
-    res.end(
-      JSON.stringify({
-        revision: 2,
-        vinculos: { p1: "demo" },
-        repositorios: ["demo"],
-      }),
-    );
-  });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  t.after(() => server.close());
-  const client = createLauncherClient(Failure, {
-    url:
-      "http://127.0.0.1:" +
-      /** @type {import("node:net").AddressInfo} */ (server.address()).port,
-    token: "synthetic",
-  });
-  assert.deepEqual(
-    await client.espacios({ id: "p1", repository: "demo", revision: 1 }),
-    {
-      revision: 2,
-      links: { p1: "demo" },
-      repositories: ["demo"],
-    },
-  );
-  assert.deepEqual(calls, [
-    {
-      path: "/workspaces",
-      body: { id: "p1", repository: "demo", revision: 1 },
-    },
-    { path: "/espacios", body: { id: "p1", repositorio: "demo", revision: 1 } },
-  ]);
 });

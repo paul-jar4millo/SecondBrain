@@ -21,13 +21,12 @@ async function fixture(t) {
   const release = path.join(dir, "release");
   const root = path.join(dir, "root");
   await mkdir(root);
-  // The release keeps the repository's ops/launcher as ops/lanzador.
   for (const [sub, out] of [
-    ["launcher", "lanzador"],
+    ["launcher", "launcher"],
     ["backup", "backup"],
-    ["aviso", "aviso"],
+    ["notify", "notify"],
     ["deploy", "deploy"],
-    ["lxc/plantillas", "lxc/plantillas"],
+    ["lxc/templates", "lxc/templates"],
   ])
     await cp("ops/" + sub, path.join(release, "ops", out), { recursive: true });
   for (const [source, destination] of [
@@ -37,7 +36,7 @@ async function fixture(t) {
   ])
     await cp(source, path.join(release, "ops/deploy", destination));
   await mkdir(path.join(release, "ops/homelab"), { recursive: true });
-  for (const file of ["prender-pc", "estado-pc"])
+  for (const file of ["pc-wake", "pc-status"])
     await writeFile(path.join(release, "ops/homelab", file), "synthetic\n");
   const config = path.join(dir, "parameters.json");
   await writeFile(
@@ -49,7 +48,7 @@ async function fixture(t) {
       pc: "192.0.2.44",
       mac: "00:00:5e:00:53:01",
       broadcast: "192.0.2.255",
-      remoteWorkdir: "/srv/sb-agente/proyectos/SecondBrain",
+      remoteWorkdir: "/srv/sb-agent/projects/SecondBrain",
     }),
   );
   const run = (...args) =>
@@ -77,7 +76,7 @@ test("a clean install includes the deployment helper and an executable morning c
   const helper = path.join(f.root, "usr/local/sbin/secondbrain-deploy");
   assert.ok((await stat(helper)).isFile());
   const unit = await readFile(
-    path.join(f.root, "etc/systemd/system/resumen-matutino.service"),
+    path.join(f.root, "etc/systemd/system/morning-summary.service"),
     "utf8",
   );
   const command = unit.match(/^ExecStart=(.*)$/m)[1];
@@ -122,10 +121,8 @@ test("invalid administrative parameters fail before creating system configuratio
   await assert.rejects(stat(path.join(f.root, "etc")), { code: "ENOENT" });
 });
 
-test("the English layout renames units but installs the deploy helper verbatim", async (t) => {
+test("installs English unit names and the deploy helper verbatim", async (t) => {
   const f = await fixture(t);
-  await mkdir(path.join(f.root, "etc/secondbrain"), { recursive: true });
-  await writeFile(path.join(f.root, "etc/secondbrain/english-layout"), "1\n");
   const result = f.run();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(

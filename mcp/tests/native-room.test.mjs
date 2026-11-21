@@ -34,7 +34,7 @@ test("el MCP stdio usa la credencial de sala y atribuye la agente", async (t) =>
       ...process.env,
       SB_BRAIN_URL: `http://127.0.0.1:${api.address().port}/api/v1`,
       SB_BRAIN_TOKEN_FILE: token,
-      SB_AGENTE: "menta",
+      SB_AGENT: "menta",
       SB_SESSION_ID: "session-test",
     },
   });

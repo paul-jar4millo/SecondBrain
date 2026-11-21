@@ -15,10 +15,10 @@ test("arranca solo en loopback con configuración y huellas desde archivos", asy
     JSON.stringify({ prueba: dir }),
   );
   const server = await arrancar({
-    SB_LANZADOR_DATA_DIR: dir,
+    SB_LAUNCHER_DATA_DIR: dir,
     SB_CONTROL_HASH_FILE: path.join(dir, "control"),
-    SB_PROYECTOS_FILE: path.join(dir, "proyectos.json"),
-    SB_LANZADOR_PORT: "0",
+    SB_PROJECTS_FILE: path.join(dir, "proyectos.json"),
+    SB_LAUNCHER_PORT: "0",
   });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   // After the server: Windows cannot delete the open threads database.

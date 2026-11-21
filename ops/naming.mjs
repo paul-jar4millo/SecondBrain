@@ -24,7 +24,8 @@ export const SPANISH = new Set(
 // Folders whose source files follow the convention.
 const SOURCE =
   /^(contracts|discord|service|mcp|launcher|ops|dashboard\/src|dashboard\/ops)\/.*\.(mjs|js|ts|tsx|py|css)$/;
-const SKIP = /(^|\/)(node_modules|dist|fixtures)\/|^ops\/compat\//;
+// The host migration maps the legacy names on purpose.
+const SKIP = /(^|\/)(node_modules|dist|fixtures)\/|^ops\/migration\//;
 
 /** @param {string} name */
 export const words = (name) =>
@@ -141,7 +142,8 @@ export function operationalFindings() {
         if (
           !/^(?:service|launcher|ops|mcp|dashboard\/src|\.github\/workflows)\//.test(
             file,
-          )
+          ) ||
+          SKIP.test(file)
         )
           return [];
         return operationalNamesIn(

@@ -13,17 +13,14 @@ try {
     throw new Error();
   const token = (
     await readFile(
-      process.env.LAUNCHER_TOKEN_FILE ||
-        process.env.LANZADOR_TOKEN_FILE ||
+      process.env.SB_LAUNCHER_TOKEN_FILE ||
         "/var/lib/secondbrain/lanzador-token",
       "utf8",
     )
   ).trim();
   const endpoint = new URL(
     `/threads?status=${BUSY}`,
-    process.env.LAUNCHER_URL ||
-      process.env.LANZADOR_URL ||
-      "http://127.0.0.1:8092",
+    process.env.SB_LAUNCHER_URL || "http://127.0.0.1:8092",
   );
   if (endpoint.hostname !== "127.0.0.1" || endpoint.protocol !== "http:")
     throw new Error();
