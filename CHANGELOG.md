@@ -4,6 +4,15 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] - 2026-11-21
+
+### Fixed
+
+- The v0.5.1 deploy rolled back because the native launcher imported
+  service code that the native package no longer ships. The shared modules
+  live in `contracts/`, and a test fails on any import that does not
+  resolve inside the native package.
+
 ## [0.5.1] - 2026-11-21
 
 ### Fixed
@@ -228,6 +237,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.5.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.2
 [0.5.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.1
 [0.5.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.0
 [0.4.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.4.2
