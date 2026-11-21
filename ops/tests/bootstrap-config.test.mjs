@@ -121,3 +121,27 @@ test("invalid administrative parameters fail before creating system configuratio
   assert.equal(f.run().status, 2);
   await assert.rejects(stat(path.join(f.root, "etc")), { code: "ENOENT" });
 });
+
+test("the English layout renames units but installs the deploy helper verbatim", async (t) => {
+  const f = await fixture(t);
+  await mkdir(path.join(f.root, "etc/secondbrain"), { recursive: true });
+  await writeFile(path.join(f.root, "etc/secondbrain/english-layout"), "1\n");
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    await readFile(
+      path.join(f.root, "usr/local/sbin/secondbrain-deploy"),
+      "utf8",
+    ),
+    await readFile("dashboard/ops/deploy-release.sh", "utf8"),
+  );
+  assert.ok(
+    (
+      await stat(
+        path.join(f.root, "etc/systemd/system/secondbrain-launcher.service"),
+      )
+    ).isFile(),
+  );
+  const check = f.run("--check");
+  assert.equal(check.status, 0, check.stderr);
+});

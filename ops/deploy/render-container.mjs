@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 /** @param {{image: string, repository: string, proxy: string, uid: number, gid: number}} settings */
@@ -55,7 +55,7 @@ export function renderContainer({ image, repository, proxy, uid, gid }) {
 
 if (
   process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  import.meta.url === pathToFileURL(await realpath(process.argv[1])).href
 ) {
   const [, , imageFile, parametersFile, repositoryFile, uid, gid] =
     process.argv;

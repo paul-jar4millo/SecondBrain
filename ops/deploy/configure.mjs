@@ -187,7 +187,11 @@ export async function configure({
             names?.HOST_COMMANDS.find(([from]) => from === target)?.[1] ??
             renderedTarget,
           mode,
-          content: names ? names.hostUnitText(content) : content,
+          // The deploy helper handles both layouts itself and must stay verbatim.
+          content:
+            names && target !== "/usr/local/sbin/secondbrain-deploy"
+              ? names.hostUnitText(content)
+              : content,
         };
       }),
   );
