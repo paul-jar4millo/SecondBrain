@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Desde la PC (Git Bash), en este repo y con el commit que quieres desplegar.
 # Crea el LXC de SecondBrain en Proxmox VE y lo deja funcionando, salvo las cuentas
-# de los motores (después: dentro/conectar.sh, interactivo).
+# de los motores (después: inside/connect.sh, interactivo).
 #
-#   bash ops/lxc/instalar.sh [lxc.env] [--reusar]
+#   bash ops/lxc/install.sh [lxc.env] [--reusar]
 #
 # Requisitos: `ssh $HOST_SSH` sin contraseña, `gh` autenticado, `npm run setup` hecho.
 # Copia ops/lxc/lxc.env.example a ops/lxc/lxc.env (ignorado por git) y edítalo.
@@ -31,7 +31,7 @@ npm run build --silent
 node ops/package-release.mjs "$tmp/release" >/dev/null
 mkdir -p "$tmp/sb-lxc/vault-push"
 tar --owner=0 --group=0 -czf "$tmp/sb-lxc/release.tar.gz" -C "$tmp/release" .
-cp -r ops/lxc/host ops/lxc/dentro ops/lxc/plantillas "$tmp/sb-lxc/"
+cp -r ops/lxc/host ops/lxc/inside ops/lxc/templates "$tmp/sb-lxc/"
 cp "$conf" "$tmp/sb-lxc/lxc.env"
 cp dashboard/ops/deploy-release.sh "$tmp/sb-lxc/"
 cp ops/secondbrain-vault-push.service ops/secondbrain-vault-push.timer "$tmp/sb-lxc/vault-push/"
@@ -45,13 +45,13 @@ ssh "$HOST_SSH" "touch '$remote_dir/.secondbrain-bootstrap' && tar --no-same-own
 if $reusar; then
   ssh "$HOST_SSH" "pct status $VMID" >/dev/null
 else
-  ssh "$HOST_SSH" "bash '$remote_dir/sb-lxc/host/crear-lxc.sh' '$remote_dir/sb-lxc/lxc.env'"
+  ssh "$HOST_SSH" "bash '$remote_dir/sb-lxc/host/create-lxc.sh' '$remote_dir/sb-lxc/lxc.env'"
 fi
 ssh "$HOST_SSH" "pct push $VMID '$remote_dir/package.tgz' /root/sb-lxc.tgz && test -f '$remote_dir/.secondbrain-bootstrap' && test \$(stat -c %u '$remote_dir') = 0 && rm -rf -- '$remote_dir'"
 dentro "bash -c 'tar --no-same-owner -xzf /root/sb-lxc.tgz -C /root && rm /root/sb-lxc.tgz'"
 
 echo "== Aprovisionando"
-dentro bash /root/sb-lxc/dentro/aprovisionar.sh base
+dentro bash /root/sb-lxc/inside/provision.sh base
 
 if [[ -n $REPO_VAULT ]]; then
   echo "== Llave de despliegue del vault en $REPO_VAULT"
@@ -63,21 +63,21 @@ if [[ -n $REPO_VAULT ]]; then
     gh repo deploy-key add "$tmp/vault.pub" --repo "$REPO_VAULT" --allow-write --title "$NOMBRE $(date +%F)"
   fi
 fi
-dentro bash /root/sb-lxc/dentro/aprovisionar.sh vault
-dentro bash /root/sb-lxc/dentro/aprovisionar.sh desplegar "$sha"
+dentro bash /root/sb-lxc/inside/provision.sh vault
+dentro bash /root/sb-lxc/inside/provision.sh desplegar "$sha"
 
 if [[ -n $RUNNER_NOMBRE ]]; then
   echo "== Runner de GitHub"
   # El token de registro dura una hora y pasa directo de gh al LXC por stdin.
   gh api -X POST "repos/$REPO_APP/actions/runners/registration-token" --jq .token |
-    ssh "$HOST_SSH" "pct exec $VMID -- bash /root/sb-lxc/dentro/aprovisionar.sh runner"
+    ssh "$HOST_SSH" "pct exec $VMID -- bash /root/sb-lxc/inside/provision.sh runner"
 fi
 
 echo "== Verificación"
-dentro bash /root/sb-lxc/dentro/verificar.sh
+dentro bash /root/sb-lxc/inside/verify.sh
 cat <<EOF
 
 Siguiente paso (interactivo, en tu terminal):
   ssh -t $HOST_SSH pct enter $VMID
-  bash /root/sb-lxc/dentro/conectar.sh
+  bash /root/sb-lxc/inside/connect.sh
 EOF

@@ -32,7 +32,7 @@ try {
   server = createBrainMcp({
     baseUrl,
     token,
-    actor: process.env.SB_AGENT ?? process.env.SB_AGENTE,
+    actor: process.env.SB_AGENT,
     sessionId: process.env.SB_SESSION_ID,
     descargasLocales: true,
     allowedOperations,

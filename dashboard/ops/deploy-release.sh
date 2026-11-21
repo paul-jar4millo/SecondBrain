@@ -16,8 +16,7 @@ check_public() {
   [[ -z $public_health ]] || curl -fsS --retry 3 --retry-delay 1 --max-time 5 "$public_health"
 }
 parameters=/etc/secondbrain/parameters.json
-launcher=secondbrain-lanzador.service
-if [[ -f /etc/secondbrain/english-layout ]]; then launcher=secondbrain-launcher.service; fi
+launcher=secondbrain-launcher.service
 current=/opt/secondbrain/current
 quadlet=/etc/containers/systemd/secondbrain-container.container
 registry=/etc/secondbrain/image-repository
@@ -27,7 +26,10 @@ apply_configuration() {
   local target=$1
   if [[ -f $target/ops/deploy/verify.sh ]]; then
     node "$target/ops/deploy/configure.mjs" --release "$target" --parameters "$parameters" --skip-helper
-    SB_RELEASE="$target" SB_ACTIVATE=0 bash "$target/ops/lanzador/install.sh"
+    # Releases before v0.6 ship the installer under ops/lanzador; a rollback may target one.
+    local installer=$target/ops/launcher/install.sh
+    [[ -f $installer ]] || installer=$target/ops/lanzador/install.sh
+    SB_RELEASE="$target" SB_ACTIVATE=0 bash "$installer"
   fi
   systemctl daemon-reload
   nft -c -f /etc/nftables.conf

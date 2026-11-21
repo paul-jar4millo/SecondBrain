@@ -58,3 +58,17 @@ that does not understand the English host marker:
 
 Repeat the verifier. Keep the aliases for the compatibility release and the
 rollback window. Local CLI logins and the vault remain in their existing locations.
+
+## Retire the aliases (v0.6.0 and later)
+
+Releases from v0.6.0 use only the English names. After such a release is
+active and `verify.sh` passes, remove the legacy symlinks left by the
+migration. Only symlinks that point to their English successor are removed;
+data stays in place:
+
+```sh
+/opt/node/bin/node /opt/secondbrain/current/ops/migration/migrate-host-layout.mjs --retire-aliases
+```
+
+A rollback to a v0.5 release still works after this step: those releases
+read the `/etc/secondbrain/english-layout` marker, which stays in place.

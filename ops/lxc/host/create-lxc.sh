@@ -2,7 +2,7 @@
 # En el host Proxmox VE, como root: crea el LXC descrito en lxc.env y lo arranca.
 # No borra nada: si el VMID ya existe, se detiene.
 set -euo pipefail
-conf=${1:?Uso: crear-lxc.sh <lxc.env>}
+conf=${1:?Uso: create-lxc.sh <lxc.env>}
 # shellcheck source=/dev/null
 source "$conf"
 [[ $VMID =~ ^[1-9][0-9]{2,8}$ ]] || { echo 'VMID inválido' >&2; exit 2; }

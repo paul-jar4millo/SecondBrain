@@ -251,3 +251,59 @@ test("refuses conflicting managed data before stopping any service", async (t) =
     "new",
   );
 });
+
+test("retires only the legacy aliases and keeps the migrated data", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "sb-host-retire-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, oldProjects, "sandbox"), { recursive: true });
+  await writeFile(path.join(root, oldProjects, "sandbox/README.md"), "kept");
+  await mkdir(path.join(root, "/etc/systemd/system"), { recursive: true });
+  await writeFile(
+    path.join(root, "/etc/systemd/system/secondbrain-lanzador.service"),
+    "[Service]\n",
+  );
+  const calls = [];
+  const host = {
+    state: () => ({ active: false, enabled: false }),
+    run: (...args) => calls.push(args),
+    configure: () => {},
+    waitForLauncher: () => {},
+    repairWorktrees: () => {},
+  };
+  await assert.rejects(
+    migrateHostLayout({ root, host, mode: "retire-aliases" }),
+    /Apply the host migration/,
+  );
+  await migrateHostLayout({ root, host, mode: "apply" });
+  assert.ok((await lstat(path.join(root, oldProjects))).isSymbolicLink());
+  const result = await migrateHostLayout({
+    root,
+    host,
+    mode: "retire-aliases",
+  });
+  assert.deepEqual(result.removed.sort(), [
+    "/etc/systemd/system/secondbrain-lanzador.service",
+    oldProjects,
+  ]);
+  await assert.rejects(lstat(path.join(root, oldProjects)), {
+    code: "ENOENT",
+  });
+  assert.equal(
+    await readFile(path.join(root, newProjects, "sandbox/README.md"), "utf8"),
+    "kept",
+  );
+  assert.ok(
+    (
+      await lstat(
+        path.join(root, "/etc/systemd/system/secondbrain-launcher.service"),
+      )
+    ).isFile(),
+  );
+  assert.deepEqual(calls.at(-1), ["daemon-reload"]);
+  const again = await migrateHostLayout({
+    root,
+    host,
+    mode: "retire-aliases",
+  });
+  assert.equal(again.changed, false);
+});

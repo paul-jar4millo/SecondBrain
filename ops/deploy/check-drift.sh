@@ -15,8 +15,8 @@ check() {
   fi
 }
 check "$release/ops/deploy/deploy-release.sh" /usr/local/sbin/secondbrain-deploy
-for unit in secondbrain-lanzador.service claude-sb-agente.service resumen-matutino.service resumen-matutino.timer; do
-  check "$release/ops/lanzador/$unit" "/etc/systemd/system/$unit"
+for unit in secondbrain-launcher.service claude-sb-agente.service morning-summary.service morning-summary.timer; do
+  check "$release/ops/launcher/$unit" "/etc/systemd/system/$unit"
 done
 for unit in secondbrain-vault-push.service secondbrain-vault-push.timer; do
   check "$release/ops/deploy/$unit" "/etc/systemd/system/$unit"
@@ -24,7 +24,7 @@ done
 for unit in secondbrain-backup.service secondbrain-backup.timer; do
   check "$release/ops/backup/$unit" "/etc/systemd/system/$unit"
 done
-check "$release/ops/aviso/secondbrain-aviso@.service" '/etc/systemd/system/secondbrain-aviso@.service'
+check "$release/ops/notify/secondbrain-notify@.service" '/etc/systemd/system/secondbrain-notify@.service'
 if [[ -f $root/etc/secondbrain/ops.env ]]; then
   # Root-owned deployment parameters, never agent-controlled input.
   # shellcheck source=/dev/null
@@ -32,10 +32,10 @@ if [[ -f $root/etc/secondbrain/ops.env ]]; then
   : "${PROXY_IP:?}" "${GATEWAY:?}" "${AGENTE_UID:?}"
   temp=$(mktemp -d)
   trap 'rm -rf -- "$temp"' EXIT
-  sed "s|@PROXY_IP@|$PROXY_IP|g" "$release/ops/lxc/plantillas/secondbrain.service" >"$temp/service"
+  sed "s|@PROXY_IP@|$PROXY_IP|g" "$release/ops/lxc/templates/secondbrain.service" >"$temp/service"
   check "$temp/service" /etc/systemd/system/secondbrain.service
   sed -e "s|@PROXY_IP@|$PROXY_IP|g" -e "s|@GATEWAY@|$GATEWAY|g" -e "s|@UID@|$AGENTE_UID|g" \
-    "$release/ops/lxc/plantillas/nftables.conf" >"$temp/nftables"
+    "$release/ops/lxc/templates/nftables.conf" >"$temp/nftables"
   check "$temp/nftables" /etc/nftables.conf
 else
   echo 'AVISO: falta /etc/secondbrain/ops.env; no se pudo comparar servicio y firewall.' >&2

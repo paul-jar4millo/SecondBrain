@@ -7,10 +7,12 @@
 > del scope activo y las reglas de nftables del lanzador. Sigue la
 > **fase 1.5** (despliegue robusto y servidor en inglés), luego B, C y D.
 >
-> **Fase 1.5:** P1–P6 van juntos en la release de compatibilidad, porque los
-> alias y la migración del host tienen que viajar en la misma release. Falta
-> el paso manual único del host (`docs/deployment.md`), desplegarla, migrar
-> el host, la verificación de la fase y, una release después, P7.
+> **Fase 1.5 (2026-11-21):** P1–P6 salieron en la release de compatibilidad
+> v0.5.x y están desplegadas en el LXC 204, con el servicio en Podman por
+> digest y el host migrado al layout en inglés. La verificación pasó: e2e en
+> vivo con Codex y con Claude, rollback automático real (v0.5.1) y rollback
+> por digest v0.5.3 → v0.5.2 → v0.5.3, con `verify.sh` en 0 fallos. P7 retira
+> los alias en v0.6.0. Sigue la fase B.
 
 ## Contexto
 

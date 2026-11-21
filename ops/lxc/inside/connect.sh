@@ -3,8 +3,8 @@
 # Conecta las cuentas del dueño: lo único que no se puede automatizar.
 # Cada paso pregunta antes y se puede repetir; las claves se escriben sin mostrarse.
 #
-#   bash /root/sb-lxc/dentro/conectar.sh            todos los pasos
-#   bash /root/sb-lxc/dentro/conectar.sh claude     solo uno: claude | deepseek | codex | agy | github | remote
+#   bash /root/sb-lxc/inside/connect.sh            todos los pasos
+#   bash /root/sb-lxc/inside/connect.sh claude     solo uno: claude | deepseek | codex | agy | github | remote
 set -euo pipefail
 agente=/var/lib/sb-agente
 env_file=$agente/agentes.env
@@ -13,7 +13,7 @@ export PATH=/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbi
 source "${SB_LXC_ENV:-$(dirname "$0")/../lxc.env}"
 
 como_agente() {
-  runuser -u sb-agente -- env -C /srv/sb-agente/proyectos HOME="$agente" LANG=C.UTF-8 \
+  runuser -u sb-agente -- env -C /srv/sb-agent/projects HOME="$agente" LANG=C.UTF-8 \
     PATH="/opt/sb-agente/cli/current/bin:/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:$agente/.local/bin" "$@"
 }
 # Algunos CLIs necesitan una TTY propia aunque runuser no la asigne.
@@ -67,11 +67,11 @@ github() {
   como_agente gh auth setup-git
   como_agente git config --global user.name "${AGENT_GIT_NAME:-SecondBrain agents}"
   como_agente git config --global user.email "${AGENT_GIT_EMAIL:-agents@secondbrain.invalid}"
-  local destino=/srv/sb-agente/proyectos/SecondBrain
+  local destino=/srv/sb-agent/projects/SecondBrain
   if [[ -d $destino/.git ]]; then echo "SecondBrain ya clonado."
   else como_agente rm -rf "$destino"; como_agente gh repo clone "${REPO_APP:?}" "$destino" -- -q; fi
   # Regenera la lista de proyectos del lanzador con las carpetas nuevas.
-  bash /opt/secondbrain/current/ops/lanzador/install.sh >/dev/null
+  bash /opt/secondbrain/current/ops/launcher/install.sh >/dev/null
 }
 remote() {
   echo "Remote Control: deja una sesión de Claude del LXC disponible en la app del celular."
@@ -85,6 +85,6 @@ for p in $pasos; do
   case $p in claude|deepseek|codex|agy|github|remote) printf '\n== %s\n' "$p"; "$p" ;;
     *) echo "Paso desconocido: $p" >&2; exit 2 ;; esac
 done
-systemctl restart secondbrain-lanzador.service
+systemctl restart secondbrain-launcher.service
 echo
-echo "Listo. Comprueba todo con: bash /root/sb-lxc/dentro/verificar.sh"
+echo "Listo. Comprueba todo con: bash /root/sb-lxc/inside/verify.sh"

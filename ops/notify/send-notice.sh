@@ -1,6 +1,6 @@
 #!/bin/sh
 # Sends a failure notice for one systemd unit to the endpoint in AVISO_URL.
-# Started by secondbrain-aviso@.service (OnFailure=); never run by hand with secrets.
+# Started by secondbrain-notify@.service (OnFailure=); never run by hand with secrets.
 #
 # Environment (from /etc/secondbrain/aviso.env, optional):
 #   AVISO_URL      endpoint, e.g. a self-hosted ntfy topic or a generic webhook.

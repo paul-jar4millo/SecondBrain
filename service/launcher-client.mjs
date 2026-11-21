@@ -1,14 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { createThreadsClient } from "./launcher-threads-client.mjs";
-import {
-  canonicalWorkspaces,
-  legacyLauncherPaths,
-  legacyWorkspaceUpdate,
-} from "../contracts/src/node/launcher-wire.mjs";
-
-const oldCatalogPaths = new Map(
-  Array.from(legacyLauncherPaths, ([old, canonical]) => [canonical, old]),
-);
 
 /**
  * @param {typeof import("./vault.mjs").Failure} Failure
@@ -17,9 +8,8 @@ const oldCatalogPaths = new Map(
 export function createLauncherClient(
   Failure,
   {
-    url = process.env.SB_LAUNCHER_URL ?? process.env.LANZADOR_URL,
-    tokenFile = process.env.SB_LAUNCHER_TOKEN_FILE ??
-      process.env.LANZADOR_TOKEN_FILE,
+    url = process.env.SB_LAUNCHER_URL,
+    tokenFile = process.env.SB_LAUNCHER_TOKEN_FILE,
     token,
   } = {},
 ) {
@@ -91,9 +81,8 @@ export function createLauncherClient(
    * @param {string} path
    * @param {unknown} [data]
    * @param {number} [timeout]
-   * @param {{ path: string, data: unknown }} [fallback]
    */
-  async function request(path, data, timeout = 10000, fallback) {
+  async function request(path, data, timeout = 10000) {
     if (!base) throw new Failure("El lanzador no está instalado.", 503);
     let response;
     try {
@@ -112,14 +101,6 @@ export function createLauncherClient(
       throw new Failure("El lanzador no responde.", 503);
     }
     const contenido = await response.json().catch(() => ({}));
-    // A service can be upgraded while a running launcher still uses old paths.
-    // Retry only the older server's explicit "no such route" response.
-    if (
-      fallback &&
-      response.status === 404 &&
-      contenido.error === "Ruta no encontrada."
-    )
-      return request(fallback.path, fallback.data, timeout);
     const known = new Set([
       "Conflicto de vínculos; actualiza e inténtalo de nuevo",
       "Modelo no disponible",
@@ -135,22 +116,7 @@ export function createLauncherClient(
   }
   /** @param {string} resource @param {unknown} [data] @param {number} [timeout] @param {string} [query] */
   function catalog(resource, data, timeout, query = "") {
-    const legacy = oldCatalogPaths.get(resource);
-    const fallback =
-      legacy && process.env.SB_LEGACY_HTTP_ROUTES !== "off"
-        ? {
-            path: legacy + query,
-            data:
-              resource === "/workspaces" && data !== undefined
-                ? legacyWorkspaceUpdate(
-                    /** @type {Parameters<typeof legacyWorkspaceUpdate>[0]} */ (
-                      data
-                    ),
-                  )
-                : data,
-          }
-        : undefined;
-    return request(resource + query, data, timeout, fallback);
+    return request(resource + query, data, timeout);
   }
   return {
     /** @param {() => void} listener */
@@ -159,7 +125,7 @@ export function createLauncherClient(
     modelos: () => catalog("/models", undefined, 30000),
     uso: () => catalog("/usage"),
     /** @param {unknown} [data] Omitted to list; an object to create one. */
-    espacios: (data) => catalog("/workspaces", data).then(canonicalWorkspaces),
+    espacios: (data) => catalog("/workspaces", data),
     capacidades: () => catalog("/capabilities"),
     catalogoHerramientas: (params = {}) => {
       const q = new URLSearchParams();

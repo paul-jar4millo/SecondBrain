@@ -17,11 +17,6 @@ import { CAPABILITIES, REQUIREMENTS } from "./engines.mjs";
 import { readLimits } from "./limits.mjs";
 import { createToolCatalogStore } from "./tool-catalog.mjs";
 import { openThreads } from "./threads/runtime.mjs";
-import {
-  canonicalWorkspaceUpdate,
-  legacyLauncherPaths,
-  legacyWorkspaces,
-} from "../contracts/src/node/launcher-wire.mjs";
 
 /** @import { LauncherRequestBody, LauncherServerOptions } from "./launcher-server-types.d.ts" */
 
@@ -30,19 +25,16 @@ const MAX_BODY = 512_000;
 export async function arrancar(env = process.env) {
   const limits = readLimits(env);
   /** An absolute path the launcher cannot start without. */
-  const requiredPath = (
-    /** @type {string} */ name,
-    /** @type {string} */ legacy = name,
-  ) => {
-    const value = env[name] ?? env[legacy];
+  const requiredPath = (/** @type {string} */ name) => {
+    const value = env[name];
     if (!value || !path.isAbsolute(value))
       throw new Error(`Falta configuración: ${name}`);
     return value;
   };
-  const dataDir = requiredPath("SB_LAUNCHER_DATA_DIR", "SB_LANZADOR_DATA_DIR");
+  const dataDir = requiredPath("SB_LAUNCHER_DATA_DIR");
   const controlHashFile = requiredPath("SB_CONTROL_HASH_FILE");
-  const projectsFile = requiredPath("SB_PROJECTS_FILE", "SB_PROYECTOS_FILE");
-  const port = Number(env.SB_LAUNCHER_PORT ?? env.SB_LANZADOR_PORT ?? 8092);
+  const projectsFile = requiredPath("SB_PROJECTS_FILE");
+  const port = Number(env.SB_LAUNCHER_PORT ?? 8092);
   if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw new Error("Puerto inválido");
   const projects = JSON.parse(await readFile(projectsFile, "utf8"));
@@ -66,7 +58,6 @@ export async function arrancar(env = process.env) {
       archivo: path.join(dataDir, "espacios.json"),
       proyectos: projects,
       workspaces: path.join(dataDir, "workspaces"),
-      legacyHttpRoutes: env.SB_LEGACY_HTTP_ROUTES !== "off",
     });
     const gitExecutor = createGit({ env });
     const toolCatalog = await createToolCatalogStore({ dataDir, env });
@@ -87,7 +78,6 @@ export async function arrancar(env = process.env) {
       espacios: spaces,
       controlHash,
       threads,
-      legacyHttpRoutes: env.SB_LEGACY_HTTP_ROUTES !== "off",
     });
     server.once("close", () => {
       void threads
@@ -128,7 +118,6 @@ export function createLauncherServer({
   espacios: spaces,
   controlHash,
   threads = null,
-  legacyHttpRoutes = process.env.SB_LEGACY_HTTP_ROUTES !== "off",
   registrar: register = (line) => console.error(line),
 }) {
   if (!/^[a-f0-9]{64}$/i.test(controlHash))
@@ -157,13 +146,6 @@ export function createLauncherServer({
       if (!authorized(req.headers.authorization, controlHash))
         return send(401, { error: "No autorizado." });
       const ruta = new URL(req.url ?? "/", "http://127.0.0.1");
-      const successor = legacyHttpRoutes
-        ? legacyLauncherPaths.get(ruta.pathname)
-        : undefined;
-      if (successor) {
-        res.setHeader("Deprecation", "@1795132800");
-        ruta.pathname = successor;
-      }
       if (threads && (await threads.http.handle(req, res, ruta))) return;
       const route = `${req.method} ${ruta.pathname}`;
       switch (route) {
@@ -179,8 +161,7 @@ export function createLauncherServer({
           return send(200, await usage());
         case "GET /workspaces":
           if (spaces) {
-            const view = spaces.read();
-            return send(200, successor ? legacyWorkspaces(view) : view);
+            return send(200, spaces.read());
           }
           break;
         case "GET /tools/catalog": {
@@ -227,15 +208,12 @@ export function createLauncherServer({
       const body = datos;
       if (ruta.pathname === "/workspaces") {
         if (!spaces) return send(404, { error: "Ruta no encontrada." });
-        const update = successor
-          ? canonicalWorkspaceUpdate(
-              /** @type {Parameters<typeof canonicalWorkspaceUpdate>[0]} */ (
-                body
-              ),
-            )
-          : /** @type {Parameters<typeof spaces.link>[0]} */ (body);
-        const view = await spaces.link(update);
-        return send(200, successor ? legacyWorkspaces(view) : view);
+        return send(
+          200,
+          await spaces.link(
+            /** @type {Parameters<typeof spaces.link>[0]} */ (body),
+          ),
+        );
       }
       const cat = await getToolCatalog();
       if (ruta.pathname === "/tools/profiles") {

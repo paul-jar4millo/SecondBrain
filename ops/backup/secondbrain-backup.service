@@ -4,7 +4,7 @@ Description=SecondBrain off-host backup with restic
 ConditionPathExists=/etc/secondbrain/backup.env
 Wants=network-online.target
 After=network-online.target
-OnFailure=secondbrain-aviso@%n.service
+OnFailure=secondbrain-notify@%n.service
 
 [Service]
 Type=oneshot

@@ -71,7 +71,7 @@ Closing (`engine/closing.ts`, `POST /threads/:id/close` with `mode`
 - `discard` removes the worktree and branch, or the scratch folder.
 - Archiving removes the worktree and the branch, except a branch with a PR.
 
-The daily summary (`ops/launcher/resumen-matutino.sh`) opens a scratch
+The daily summary (`ops/launcher/morning-summary.sh`) opens a scratch
 thread for Marina with `POST /threads`.
 
 ## End-to-end check

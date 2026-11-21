@@ -2,7 +2,7 @@
 Description=Push committed SecondBrain knowledge to its private repository
 Wants=network-online.target
 After=network-online.target
-OnFailure=secondbrain-aviso@%n.service
+OnFailure=secondbrain-notify@%n.service
 
 [Service]
 Type=oneshot

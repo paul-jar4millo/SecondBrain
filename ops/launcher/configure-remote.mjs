@@ -57,8 +57,7 @@ await update(base + "/.gemini/antigravity-cli/settings.json", (data) => {
       ...Object.values(projects).filter(
         (p) =>
           typeof p === "string" &&
-          (p.startsWith("/srv/sb-agente/proyectos/") ||
-            p.startsWith("/srv/sb-agent/projects/")) &&
+          p.startsWith("/srv/sb-agent/projects/") &&
           !p.includes("/../"),
       ),
     ]),

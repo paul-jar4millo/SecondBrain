@@ -38,7 +38,7 @@ flowchart LR
   host -- "pct create / pct exec" --> lxc["Container $VMID"]
   subgraph lxc
     svc["secondbrain.service<br/>(user secondbrain)"]
-    lz["secondbrain-lanzador.service<br/>(user sb-agente)"]
+    lz["secondbrain-launcher.service<br/>(user sb-agente)"]
     runner["actions runner<br/>(user sb-runner)"]
     timers["timers: vault push · backup · morning summary"]
   end
@@ -58,10 +58,10 @@ flowchart LR
 ```sh
 cp ops/lxc/lxc.env.example ops/lxc/lxc.env   # git-ignored; fill in your values
 npm run setup
-bash ops/lxc/instalar.sh                      # build, create, provision, verify
+bash ops/lxc/install.sh                      # build, create, provision, verify
 ```
 
-`instalar.sh` never destroys an existing container. `--reusar` provisions an
+`install.sh` never destroys an existing container. `--reusar` provisions an
 existing one; do not use it as a routine deployment.
 
 Then, inside the container, connect the provider accounts interactively
@@ -69,8 +69,8 @@ Then, inside the container, connect the provider accounts interactively
 
 ```sh
 ssh -t <host> pct enter <vmid>
-bash /root/sb-lxc/dentro/conectar.sh
-bash /root/sb-lxc/dentro/verificar.sh
+bash /root/sb-lxc/inside/connect.sh
+bash /root/sb-lxc/inside/verify.sh
 ```
 
 ### Rehearsal first
@@ -100,7 +100,7 @@ The runner's label must match the one in `deploy.yml`
 Releases from Phase 1.5 run the service in Podman and need a new deploy
 helper. The helper installed on an older host rejects the new package, and
 nothing activates. Before you approve the first such tag, run these steps as
-root in the LXC. `aprovisionar.sh` already does this on a new host.
+root in the LXC. `provision.sh` already does this on a new host.
 
 1. Install Podman: `apt-get install -y podman`.
 2. Record the image repository in lowercase:
