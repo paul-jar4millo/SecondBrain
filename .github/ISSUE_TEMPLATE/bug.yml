@@ -20,7 +20,7 @@ body:
     id: module
     attributes:
       label: Module
-      options: [dashboard, service, mcp, launcher, ops, docs]
+      options: [dashboard, service, mcp, launcher, contracts, ops, docs]
     validations:
       required: true
   - type: input
@@ -33,3 +33,10 @@ body:
       label: Logs or screenshots
       description: Remove any personal data, tokens or vault content first.
       render: shell
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: This report contains no vault content, credentials, host names, IPs or other personal data.
+          required: true

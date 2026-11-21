@@ -52,12 +52,22 @@ squash or rebase merges.
 - User interface: Spanish by default, with English through `dashboard/src/i18n/`.
   Add every new user-facing string to both dictionaries.
 - Code identifiers, file names, comments and documentation: English
-  ([ADR 0007](docs/adr/0007-english-identifiers.md)). HTTP routes
-  (`/agentes/...`), MCP tools (`equipo_*`), env vars and host unit names keep
-  their Spanish names because they are contracts.
+  ([ADR 0007](docs/adr/0007-english-identifiers.md),
+  [ADR 0017](docs/adr/0017-english-host-layout.md)). HTTP routes and host
+  names are English too. Published contracts keep their names: MCP tools
+  (`brain_*`, `usuario_*`), stored data keys and the `sb-agente` account.
+  `ops/tests/naming-convention.test.mjs` rejects new Spanish names.
+
+## Decisions
+
+Add an ADR in `docs/adr/` for any choice that is hard to reverse, using the
+existing records as the template (context, drivers, options, decision,
+consequences). If you cannot say why an option was chosen, list it under
+"Not yet recorded" in the [ADR index](docs/adr/README.md) instead of guessing.
 
 ## Module rules
 
 Each module has an `AGENTS.md` with its rules (they apply to humans too):
 [root](AGENTS.md), [service](service/AGENTS.md), [mcp](mcp/AGENTS.md),
+[launcher](launcher/AGENTS.md), [contracts](contracts/AGENTS.md),
 [dashboard](dashboard/AGENTS.md).

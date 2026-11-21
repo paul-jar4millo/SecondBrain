@@ -1,6 +1,6 @@
 # 0008 · npm workspaces with per-module release lockfiles
 
-- Status: accepted
+- Status: accepted; the service is no longer installed with `npm ci` on the host ([ADR 0014](0014-container-service-native-launcher.md))
 - Date: 2026-11-20
 
 ## Context and problem statement

@@ -10,7 +10,7 @@
   persistent scene, a game-like HUD and clear tools over it ([DESIGN](../DESIGN.md)).
 - The scene is generated in Blender by `ops/room-refuge.py`; the runtime is
   `src/features/room/room-world.js`.
-- The refuge observes and approves real sessions; it never invents work,
+- The refuge observes and approves real threads; it never invents work,
   conversations or deliverables. Opening a profile or copying a work order
   never starts a model. Do not connect paid services without cost approval.
 - Notes stay in the vault and are not shown in regular navigation or search.
@@ -18,6 +18,7 @@
   phrases locally. Project dashboards are added only on request, registered in
   `src/features/projects/dashboards.tsx`.
 - Keep focus handling, drafts, finance privacy and access without WebGL.
-- Inside an agent session run `npm test` and `npm run test:api`; the build and
-  browser suites exceed the 2 GB session budget and run in CI.
+- Inside an agent thread run `npm test` and `npm run test:api`; the build and
+  browser suites exceed the per-turn memory budget (1 GB scope, 3 GB for the
+  launcher) and run in CI.
 - Module guide: [docs/modules/dashboard.md](../docs/modules/dashboard.md).

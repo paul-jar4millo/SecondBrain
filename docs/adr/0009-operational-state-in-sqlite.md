@@ -44,7 +44,7 @@ Chosen option 2.
 - A nightly `VACUUM INTO` writes the backup copy.
 - ADR 0002 applies only to the vault.
 
-Spike (LXC 204, Node 24.22.2, 2026-11-20): `DatabaseSync` opens WAL
+Spike (production LXC, Node 24.22.2, 2026-11-20): `DatabaseSync` opens WAL
 databases and reads `user_version` without flags.
 
 ### Consequences

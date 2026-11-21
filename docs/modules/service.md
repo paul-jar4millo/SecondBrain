@@ -10,21 +10,22 @@ VAULT_ROOT=/tmp/vault npm run dev  # API on :5080 plus the Vite dev server
 
 ## Layout
 
-| File                                        | Responsibility                                                                       |
-| ------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `index.mjs`                                 | Server factory, request pipeline (auth, CSRF, rate limits, body limits) and handlers |
-| `routes.mjs`                                | Route table: method, path, public / room access, body schema                         |
-| `auth.mjs`                                  | Owner account (scrypt), sessions, TOTP, CSRF, agent credentials                      |
-| `remote-mcp.mjs`                            | OAuth 2.1 authorization server and Streamable HTTP MCP endpoint                      |
-| `vault.mjs`, `vault-*.mjs`                  | Reading, parsing, validation, formatting, mutations, tasks, ledger, Git history      |
-| `journal.mjs`, `history.mjs`                | Write-ahead journal and per-note history                                             |
-| `finance*.mjs`                              | Finance domain: accounts, cards, cash-flow, idempotent operations, imports           |
-| `approvals.mjs`                             | Approvals with idempotent receipts                                                   |
-| `user-requests.mjs`, `effects-executor.mjs` | Persistent questions, effects with external consequences                             |
-| `shared-files.mjs`                          | Briefcase storage, quotas, expiry and trash                                          |
-| `launcher-client.mjs`                       | Client for the agent runner                                                          |
-| `change-feed.mjs`                           | SSE change notifications                                                             |
-| `lib/durable-store.mjs`                     | Atomic JSON writes, JSON-lines append, serial queues                                 |
+| File                                                 | Responsibility                                                                       |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `index.mjs`                                          | Server factory and request pipeline (auth, CSRF, rate limits, body limits)           |
+| `routes.mjs`                                         | Route table: method, path, public / room access, body schema                         |
+| `http/context.mjs`, `http/middleware.mjs`            | Shared stores and clients for routes; security headers, request ids, logging, errors |
+| `http/routes/*.mjs`                                  | Handlers grouped by area: vault, finance, approvals, files, threads, system…         |
+| `auth.mjs`                                           | Owner account (scrypt), sessions, TOTP, CSRF, agent credentials                      |
+| `remote-mcp.mjs`                                     | OAuth 2.1 authorization server and Streamable HTTP MCP endpoint                      |
+| `vault.mjs`, `vault-*.mjs`                           | Reading, parsing, validation, formatting, mutations, tasks, ledger, Git history      |
+| `journal.mjs`, `history.mjs`                         | Write-ahead journal and per-note history                                             |
+| `finance*.mjs`                                       | Finance domain: accounts, cards, cash-flow, idempotent operations, imports           |
+| `approvals.mjs`                                      | Approvals with idempotent receipts                                                   |
+| `user-requests.mjs`, `effects-executor.mjs`          | Persistent questions, effects with external consequences                             |
+| `shared-files.mjs`                                   | Briefcase storage, quotas, expiry and trash                                          |
+| `launcher-client.mjs`, `launcher-threads-client.mjs` | Clients for the launcher's control API and thread streams                            |
+| `lib/durable-store.mjs`                              | Atomic JSON writes, JSON-lines append, serial queues                                 |
 
 ## Write path
 
