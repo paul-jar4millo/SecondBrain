@@ -4,6 +4,14 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.1] - 2026-11-21
+
+### Changed
+
+- The launcher turn limit is `SB_MAX_ACTIVE_TURNS` (was `SB_MAX_ACTIVOS`);
+  `SB_RETENCION_DIAS`, unused since threads, is gone. The naming check flags
+  the old names.
+
 ## [0.8.0] - 2026-11-21
 
 ### Added
@@ -337,6 +345,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.8.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.8.1
 [0.8.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.8.0
 [0.7.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.7.1
 [0.7.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.7.0

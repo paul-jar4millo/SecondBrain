@@ -1,6 +1,6 @@
 # Roadmap
 
-Status as of v0.8.0 (2026-11-21). Released work is in the
+Status as of v0.8.1 (2026-11-21). Released work is in the
 [changelog](../CHANGELOG.md); open work is tracked as
 [GitHub issues](https://github.com/paul-jar4millo/SecondBrain/issues) grouped
 by milestone.
