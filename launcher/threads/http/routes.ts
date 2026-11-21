@@ -140,12 +140,13 @@ export function createThreadsHttp({
       "POST",
       new RegExp(`^/threads/${ID}/requests/(req_[0-9A-Za-z_-]{6,64})$`),
       async (m, req, res) => {
+        const data = await readJson(req);
+        const [threadId, requestId] = [m[1] as string, m[2] as string];
         send(res, 200, {
-          request: engine.answer(
-            m[1] as string,
-            m[2] as string,
-            await readJson(req),
-          ),
+          request:
+            store.getRequest(requestId)?.kind === "subtask"
+              ? await engine.answerSubtask(threadId, requestId, data)
+              : engine.answer(threadId, requestId, data),
         });
       },
     ],
@@ -156,6 +157,33 @@ export function createThreadsHttp({
         send(res, 201, {
           request: engine.askUser(m[1] as string, await readJson(req)),
         });
+      },
+    ],
+    [
+      "POST",
+      new RegExp(`^/threads/${ID}/subtasks$`),
+      async (m, req, res) => {
+        send(res, 201, {
+          request: engine.requestSubtask(m[1] as string, await readJson(req)),
+        });
+      },
+    ],
+    [
+      "GET",
+      new RegExp(`^/threads/${ID}/subtasks$`),
+      async (m, _req, res) => {
+        send(res, 200, { subtasks: await engine.subtasks(m[1] as string) });
+      },
+    ],
+    [
+      "POST",
+      new RegExp(`^/threads/${ID}/subtasks/${ID}/integrate$`),
+      async (m, _req, res) => {
+        send(
+          res,
+          200,
+          await engine.integrateSubtask(m[1] as string, m[2] as string),
+        );
       },
     ],
     [

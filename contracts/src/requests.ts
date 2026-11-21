@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentRef } from "./agents.ts";
 import { RequestId, ThreadId, Timestamp, TurnId } from "./ids.ts";
 import { ReviewFinding } from "./items.ts";
 
@@ -67,6 +68,23 @@ export const RequestStatus = z.enum([
 ]);
 export type RequestStatus = z.infer<typeof RequestStatus>;
 
+/** thread_request_subtask: a child thread the owner must approve. */
+export const AgentSubtask = z.object({
+  title: z.string().min(1).max(200),
+  prompt: z.string().min(1).max(100_000),
+  agent: AgentRef.optional(),
+  reason: z.string().max(5_000).optional(),
+});
+export type AgentSubtask = z.infer<typeof AgentSubtask>;
+
+/** What a subtask request creates once approved. */
+export const SubtaskDraft = z.object({
+  title: z.string().min(1).max(200),
+  prompt: z.string().min(1).max(100_000),
+  agent: AgentRef,
+});
+export type SubtaskDraft = z.infer<typeof SubtaskDraft>;
+
 export const UserRequest = z.object({
   id: RequestId,
   threadId: ThreadId,
@@ -76,6 +94,7 @@ export const UserRequest = z.object({
   body: z.string().max(20_000),
   options: z.array(RequestOption).optional(),
   fields: z.array(RequestField).optional(),
+  subtask: SubtaskDraft.optional(),
   status: RequestStatus,
   answer: RequestAnswer.nullable(),
   origin: RequestOrigin.nullable(),

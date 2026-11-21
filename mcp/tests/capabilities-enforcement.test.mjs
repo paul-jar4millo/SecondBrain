@@ -238,8 +238,14 @@ test("thread_ask_user follows user.ask like the usuario_* tools", () => {
   );
 });
 
-test("thread_handoff and thread_report_review follow user.ask", () => {
-  for (const name of ["thread_handoff", "thread_report_review"]) {
+test("the thread coordination tools follow user.ask", () => {
+  for (const name of [
+    "thread_handoff",
+    "thread_report_review",
+    "thread_request_subtask",
+    "thread_subtask_status",
+    "thread_integrate_subtask",
+  ]) {
     assert.equal(isToolAllowedForOperations(name, new Set(["user.ask"])), true);
     assert.equal(
       isToolAllowedForOperations(name, new Set(["vault.read"])),

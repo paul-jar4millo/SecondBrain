@@ -84,3 +84,14 @@ A review stage reports its verdict with `POST /threads/agent/review` (MCP
 the thread `ready-for-review` for the owner, `changes-requested` sends it back
 to the implementer with the findings as open items, and the last allowed
 round (`maxReviewRounds`, 3 at most) turns it `needs-decision`.
+
+Subtasks: the agent asks with `POST /threads/agent/subtask` (MCP
+`thread_request_subtask`), which opens a `subtask` request in its thread.
+When the owner approves it through `POST /threads/answer`, the service mints
+the child's id and credential and the launcher creates a repo thread from the
+parent's branch, with `parentId` set; the answer reaches the parent agent as a
+message. `GET /threads/agent/subtasks` (`thread_subtask_status`) lists the
+children, and `POST /threads/agent/subtasks/integrate`
+(`thread_integrate_subtask`) closes a child by merging its branch into the
+parent's (conflicts change nothing) and revokes its credential. Subtasks do
+not nest.
