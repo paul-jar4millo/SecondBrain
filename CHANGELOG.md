@@ -4,6 +4,15 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-11-21
+
+### Fixed
+
+- The v0.5.0 deploy stopped at the container smoke test, which ran the
+  image as a user that could not write its data folder. The smoke now runs
+  as the data owner, as production does, and CI builds and tests the image
+  on every pull request.
+
 ## [0.5.0] - 2026-11-21
 
 ### Changed
@@ -219,6 +228,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.5.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.1
 [0.5.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.0
 [0.4.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.4.2
 [0.4.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.4.1
