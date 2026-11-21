@@ -76,6 +76,10 @@ try {
     name,
     "--label",
     "second-brain.test=true",
+    // Run as the owner of the bind mounts, as the Quadlet unit does in production.
+    ...(process.getuid
+      ? ["--user", process.getuid() + ":" + process.getgid()]
+      : []),
     "-e",
     "TRUSTED_PROXY=" + gateway,
     "-p",
@@ -88,7 +92,7 @@ try {
   ]);
   base = "http://127.0.0.1:" + docker(["port", name, "8080"]).split(":").pop();
   let ready = false;
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 300; i++) {
     try {
       const response = await fetch(base + "/api/v1/health");
       if (response.ok) {
@@ -97,6 +101,10 @@ try {
       }
     } catch {}
     await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!ready) {
+    const logs = spawnSync("docker", ["logs", name], { encoding: "utf8" });
+    console.error(logs.stdout + logs.stderr);
   }
   assert.ok(ready, "container readiness");
   assert.equal(
@@ -128,12 +136,17 @@ try {
   assert.match(tasks, /- \[ \] Escrita desde Node/);
   writeFileSync(
     path.join(root, "00-Inbox/Original.md"),
-    "# Desde Obsidian\nActualizado fuera de la app.\n",
+    "# Editada en Obsidian\nActualizado fuera de la app.\n",
   );
+  // The item list omits note bodies; the new title proves the index re-read it.
   assert.ok(
-    (await request("/api/v1/items")).some((i) =>
-      i.body?.includes("Actualizado fuera"),
+    (await request("/api/v1/items")).some(
+      (i) => i.title === "Editada en Obsidian",
     ),
+  );
+  assert.match(
+    (await request("/api/v1/vault/note?path=00-Inbox/Original.md")).content,
+    /Actualizado fuera/,
   );
   const response = await fetch(base + "/api/v1/export", {
     headers: {

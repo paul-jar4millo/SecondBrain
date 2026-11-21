@@ -143,6 +143,29 @@ jobs:
             git show -s --format=%B "$sha" | node ops/check-commit.mjs || exit 1
           done < <(git rev-list "$range")
 
+  # Builds the service image the way deploy.yml does and runs the container
+  # smoke test, so an image that cannot start fails here instead of at a tag.
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm run setup
+      - name: Build the service image
+        run: docker build --file dashboard/Dockerfile --build-arg "REVISION=$GITHUB_SHA" --tag second-brain:ci .
+      - name: Smoke test the image
+        working-directory: dashboard
+        env:
+          SB_SMOKE_IMAGE: second-brain:ci
+        run: node ops/smoke-container.mjs
+
   # A new advisory in a third-party package must not block unrelated work:
   # this job stays green and leaves a visible warning. It also runs weekly.
   audit:
