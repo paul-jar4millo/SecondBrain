@@ -4,6 +4,18 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-11-21
+
+### Added
+
+- Notifications: the service keeps an outbox of what needs the owner (a
+  question or subtask to approve, a decision, a review, a failure, a hand-off
+  between stages). Threads shows the unread count in the HUD and the tabs,
+  and opening Threads marks them seen.
+- Web push: Settings → General → "Avisos en este dispositivo" sends those
+  notices to the device; a click opens the thread. VAPID keys are generated
+  on the host on first start; no push library is used.
+
 ## [0.7.1] - 2026-11-21
 
 ### Fixed
@@ -325,6 +337,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.8.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.8.0
 [0.7.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.7.1
 [0.7.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.7.0
 [0.6.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.6.0
