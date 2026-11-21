@@ -17,6 +17,8 @@ import type {
   ThreadSnapshot,
   UserRequest,
 } from "../src/features/threads/thread-types";
+// Static, so loading the timeline does not count against the test timeout.
+import { Timeline } from "../src/features/threads/Timeline";
 
 const fixture = vi.hoisted(() => ({ answer: vi.fn() }));
 vi.mock("../src/features/threads/thread-api", () => ({
@@ -215,7 +217,6 @@ describe("thread store", () => {
 
 describe("thread timeline", () => {
   it("folds finished work and answers a question inline", async () => {
-    const { Timeline } = await import("../src/features/threads/Timeline");
     const done = applyEvent(
       fromSnapshot({
         ...snapshot,
