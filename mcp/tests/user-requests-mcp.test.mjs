@@ -76,7 +76,7 @@ test("herramientas MCP usuario_preguntar, usuario_consultar_respuesta y usuario_
   });
   await new Promise((r) => setTimeout(r, 150));
 
-  const userResp = await fetch(`${baseUrl}/solicitudes/responder`, {
+  const userResp = await fetch(`${baseUrl}/requests/answer`, {
     method: "POST",
     headers: appHeaders,
     body: JSON.stringify({

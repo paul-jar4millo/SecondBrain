@@ -7,9 +7,9 @@ export const agentToolRoutes = (ctx, req) => {
   const { auth, lanzador: launcher, resolveServerProfile } = ctx;
   const { callerCap, consulta: query, request, response } = req;
   return {
-    "GET /agentes/capacidades": async () =>
+    "GET /agents/capabilities": async () =>
       send(response, 200, await launcher.capacidades()),
-    "GET /agentes/mi-capacidad": async () => {
+    "GET /agents/self-capability": async () => {
       if (callerCap) {
         const { digest: _d, ...publicCap } = callerCap;
         return send(response, 200, { scoped: true, ...publicCap });
@@ -22,7 +22,7 @@ export const agentToolRoutes = (ctx, req) => {
       }
       return send(response, 200, { scoped: false, owner: true });
     },
-    "POST /agentes/capacidades/token": async () => {
+    "POST /agents/capabilities/token": async () => {
       if (!auth.isSupervisor(request)) {
         throw new Failure(
           "Solo el operador o supervisor puede emitir credenciales acotadas.",
@@ -57,7 +57,7 @@ export const agentToolRoutes = (ctx, req) => {
         capacidad: publicRec,
       });
     },
-    "GET /agentes/herramientas/catalogo": async () =>
+    "GET /agents/tools/catalog": async () =>
       send(
         response,
         200,
@@ -70,13 +70,13 @@ export const agentToolRoutes = (ctx, req) => {
           probe: query.get("probe") === "true" ? "true" : undefined,
         }),
       ),
-    "POST /agentes/herramientas/perfiles": async () =>
+    "POST /agents/tools/profiles": async () =>
       send(
         response,
         200,
         await launcher.actualizarPerfilHerramientas(await body(request)),
       ),
-    "POST /agentes/herramientas/skills/resolver": async () => {
+    "POST /agents/tools/skills/resolve": async () => {
       const payload = await body(request);
       const { billingAuthorized: _ignored, ...safePayload } = payload;
       return send(response, 200, await launcher.resolverSkills(safePayload));

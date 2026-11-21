@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { openWorkspaces } from "../workspaces.mjs";
@@ -14,40 +14,55 @@ test("vincula proyectos sin confundir su identidad con el repositorio y detecta 
     proyectos: { repo: dir },
     workspaces: path.join(dir, "workspaces"),
   };
+  await writeFile(
+    options.archivo,
+    JSON.stringify({ revision: 2, vinculos: { existing: "repo" } }),
+  );
   const spaces = await openWorkspaces(options);
-  const free = await spaces.resolver("p1");
-  assert.equal(free.repositorio, null);
+  assert.equal(spaces.read().links.existing, "repo");
+  const free = await spaces.resolve("p1");
+  assert.equal(free.repository, null);
   assert.ok(free.cwd.startsWith(options.workspaces + path.sep));
-  const initial = spaces.leer();
+  const initial = spaces.read();
   assert.deepEqual(initial.repositoryPaths, { repo: dir });
-  await spaces.vincular({
+  await spaces.link({
     id: "p1",
-    repositorio: "repo",
+    repository: "repo",
     revision: initial.revision,
   });
-  assert.equal((await spaces.resolver("p1")).cwd, dir);
+  assert.equal((await spaces.resolve("p1")).cwd, dir);
   await assert.rejects(
-    spaces.vincular({
+    spaces.link({
       id: "p2",
-      repositorio: "repo",
+      repository: "repo",
       revision: initial.revision,
     }),
     /Conflicto/,
   );
   await assert.rejects(
-    spaces.vincular({
+    spaces.link({
       id: "p2",
-      repositorio: "../vault",
-      revision: spaces.leer().revision,
+      repository: "../vault",
+      revision: spaces.read().revision,
     }),
   );
-  await assert.rejects(spaces.resolver("../vault"));
-  const reopened = await openWorkspaces(options);
-  assert.equal((await reopened.resolver("p1")).repositorio, "repo");
-  await reopened.vincular({
-    id: "p1",
-    repositorio: null,
-    revision: reopened.leer().revision,
+  await assert.rejects(spaces.resolve("../vault"));
+  const stored = JSON.parse(await readFile(options.archivo, "utf8"));
+  assert.deepEqual(stored.links, { existing: "repo", p1: "repo" });
+  assert.deepEqual(stored.vinculos, stored.links);
+  const reopened = await openWorkspaces({
+    ...options,
+    legacyHttpRoutes: false,
   });
-  assert.equal((await reopened.resolver("p1")).repositorio, null);
+  assert.equal((await reopened.resolve("p1")).repository, "repo");
+  await reopened.link({
+    id: "p1",
+    repository: null,
+    revision: reopened.read().revision,
+  });
+  assert.equal((await reopened.resolve("p1")).repository, null);
+  assert.deepEqual(JSON.parse(await readFile(options.archivo, "utf8")), {
+    revision: 4,
+    links: { existing: "repo", p1: null },
+  });
 });

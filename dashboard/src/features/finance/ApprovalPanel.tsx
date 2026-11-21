@@ -20,9 +20,7 @@ export function ApprovalPanel({ hideEmpty = false }: { hideEmpty?: boolean }) {
   const refresh = useCallback(async () => {
     const actual = ++revision.current;
     try {
-      const list = isDemo
-        ? []
-        : ((await agentApi("/aprobaciones")) as Approval[]);
+      const list = isDemo ? [] : ((await agentApi("/approvals")) as Approval[]);
       if (actual === revision.current) {
         setRequests(list);
         setRecent(
@@ -56,7 +54,7 @@ export function ApprovalPanel({ hideEmpty = false }: { hideEmpty?: boolean }) {
     try {
       // One id per click; a lost answer is retried with the same one.
       const answer = (await sendWithRetry((requestId) =>
-        agentApi("/aprobaciones/decidir", { id, aprobar: approve, requestId }),
+        agentApi("/approvals/decide", { id, aprobar: approve, requestId }),
       )) as { recibo?: Receipt };
       if (answer?.recibo) setLast(answer.recibo);
     } catch (caught) {

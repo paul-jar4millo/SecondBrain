@@ -67,7 +67,7 @@ export default function RoomPage() {
         openThread: (target) => latest.current.openThread(target),
         datos: () => latest.current.summary,
         irAEspacio: (path) => latest.current.navigate(path),
-        aprobaciones: () => agentApi("/aprobaciones"),
+        aprobaciones: () => agentApi("/approvals"),
       }),
     [],
   );

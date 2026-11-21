@@ -1,4 +1,4 @@
-// Data package of the Mundo Hipotético panel (`/mundo/overview`), as the panel
+// Data package of the Mundo Hipotético panel (`/world/overview`), as the panel
 // reads it. Field names come from the channel's files and stay as published.
 
 export interface WorldVideo {

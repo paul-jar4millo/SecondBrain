@@ -163,9 +163,9 @@ async function mount(view: string, extra = "") {
   dialog.showModal = () => dialog.setAttribute("open", "");
   dialog.close = () => dialog.removeAttribute("open");
   const api = vi.fn(async (path: string) =>
-    path.startsWith("/mundo/document")
+    path.startsWith("/world/document")
       ? { path: "agents/analista.md", text: "# Analista" }
-      : path === "/mundo/overview"
+      : path === "/world/overview"
         ? data
         : {},
   );
@@ -209,7 +209,7 @@ it("abre los diálogos de encargo, configuración, documento e ideas", async () 
     expect(dialog.querySelector("pre")?.textContent).toBe("# Analista"),
   );
   expect(api).toHaveBeenCalledWith(
-    "/mundo/document?path=agents%2Fanalista.md",
+    "/world/document?path=agents%2Fanalista.md",
     undefined,
   );
   click('[data-action="task-cancel"]');
@@ -220,7 +220,7 @@ it("abre los diálogos de encargo, configuración, documento e ideas", async () 
   );
   click('[data-action="confirm-cancel"]');
   await vi.waitFor(() =>
-    expect(api).toHaveBeenCalledWith("/mundo/tasks/status", {
+    expect(api).toHaveBeenCalledWith("/world/tasks/status", {
       id: "t1",
       status: "cancelled",
     }),
@@ -243,7 +243,7 @@ it("una idea llena el brief y el formulario guarda", async () => {
   form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   await vi.waitFor(() =>
     expect(api).toHaveBeenCalledWith(
-      "/mundo/briefs",
+      "/world/briefs",
       expect.objectContaining({ slug: "no-hubiera-noche" }),
     ),
   );

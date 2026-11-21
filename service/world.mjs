@@ -127,7 +127,7 @@ export function createWorld(dataDirectory, Failure, packageDirectory) {
         videos: data.videos.map((v) => ({
           ...v,
           poster: v.poster
-            ? "/api/v1/mundo/media?path=" + encodeURIComponent(v.poster)
+            ? "/api/v1/world/media?path=" + encodeURIComponent(v.poster)
             : null,
         })),
         agents: data.agents.map((a) => ({

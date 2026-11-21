@@ -9,13 +9,14 @@ Group=sb-agente
 WorkingDirectory=/srv/sb-agente/proyectos
 EnvironmentFile=/var/lib/sb-agente/agentes.env
 Environment=HOME=/var/lib/sb-agente
-Environment=PATH=/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:/var/lib/sb-agente/.local/bin
+Environment=PATH=/opt/sb-agente/cli/current/bin:/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:/var/lib/sb-agente/.local/bin
 Environment=SB_LANZADOR_DATA_DIR=/var/lib/sb-agente/estado/lanzador
 Environment=SB_CONTROL_HASH_FILE=/etc/sb-agente/lanzador-control.sha256
 Environment=SB_PROYECTOS_FILE=/etc/sb-agente/proyectos.json
 Environment=AGENTES_BRAIN_TOKEN_FILE=/var/lib/sb-agente/brain-token
 Environment=AGENTES_CLAUDE_DIR=/var/lib/sb-agente/claude
 Environment=AGENTES_DEEPSEEK_DIR=/var/lib/sb-agente/deepseek
+Environment=SB_CLAUDE_BIN=/opt/sb-agente/cli/current/bin/claude
 Environment=CODEX_HOME=/var/lib/sb-agente/codex
 Environment=SB_MAX_ACTIVOS=2
 Environment=SB_RETENCION_DIAS=14

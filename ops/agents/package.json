@@ -1,0 +1,9 @@
+{
+  "name": "@secondbrain/agent-clis",
+  "private": true,
+  "description": "Installable CLI versions shared by the launcher host and CI",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.326",
+    "@openai/codex": "0.167.0"
+  }
+}

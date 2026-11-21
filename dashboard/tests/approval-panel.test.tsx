@@ -29,7 +29,7 @@ it("carga solicitudes, permite rechazarlas y vuelve a consultar", async () => {
   render(<ApprovalPanel />);
   await screen.findByText("lira solicita una operación");
   await user.click(screen.getByRole("button", { name: "Rechazar" }));
-  expect(fixture.api).toHaveBeenCalledWith("/aprobaciones/decidir", {
+  expect(fixture.api).toHaveBeenCalledWith("/approvals/decide", {
     id: "a",
     aprobar: false,
     requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
@@ -58,7 +58,7 @@ it("reintenta con el mismo requestId tras un fallo de red y muestra el recibo", 
   const enviados: string[] = [];
   fixture.api.mockImplementation(
     async (path: string, body?: { requestId: string }) => {
-      if (path === "/aprobaciones")
+      if (path === "/approvals")
         return enviados.length
           ? [
               {
@@ -97,7 +97,7 @@ it("ante un 409 con recibo informa quién resolvió la solicitud sin reintentar"
   };
   let intentos = 0;
   fixture.api.mockImplementation(async (path: string) => {
-    if (path === "/aprobaciones")
+    if (path === "/approvals")
       return [
         {
           id: "a",

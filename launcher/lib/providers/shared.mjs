@@ -98,7 +98,13 @@ export function brainServer(env = {}) {
       command: process.execPath,
       args: [fileURLToPath(new URL("../mcp/index.mjs", import.meta.url))],
       env: Object.fromEntries(
-        ["SB_BRAIN_TOKEN_FILE", "SB_BRAIN_URL", "SB_AGENTE", "SB_SESSION_ID"]
+        [
+          "SB_BRAIN_TOKEN_FILE",
+          "SB_BRAIN_URL",
+          "SB_AGENT",
+          "SB_AGENTE",
+          "SB_SESSION_ID",
+        ]
           .filter((key) => env[key])
           .map((key) => [key, env[key]]),
       ),

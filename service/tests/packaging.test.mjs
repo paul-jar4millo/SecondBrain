@@ -48,10 +48,6 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
   await put("service/http/routes/vault.mjs", "export const routes = true;");
   await put("service/http/route-types.d.ts", "export {};");
   await put("launcher/threads/runtime.mjs", "export const runtime = true;");
-  await put(
-    "launcher/version-registry.mjs",
-    "export const SESSION_REGISTRY_VERSION = 2;\n",
-  );
   await put("dashboard/dist/index.html", "<main>synthetic</main>");
   await put("assets/reference-bank/references.json", "{}");
   await put("assets/reference-bank/auth.json", "secret");
@@ -61,7 +57,6 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
   await put("launcher/skills/resumen-matutino.md", "# Resumen");
   await put("ops/launcher/install.sh", "#!/bin/sh");
   const target = path.join(temp, "release");
-  // The release keeps the launcher in lanzador/: host units and entry points use that path.
   await packageRelease(target, { sourceRoot: source });
   assert.equal(
     await readFile(path.join(target, "dashboard/dist/index.html"), "utf8"),
@@ -69,7 +64,7 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
   );
   assert.deepEqual((await readdir(target)).sort(), [
     "dashboard",
-    "lanzador",
+    "launcher",
     "mcp",
     "ops",
     "server",
@@ -89,26 +84,18 @@ test("el paquete incluye los módulos ejecutables y excluye datos personales", a
     "package-lock.json",
     "package.json",
   ]);
-  assert.deepEqual((await readdir(path.join(target, "lanzador"))).sort(), [
+  assert.deepEqual((await readdir(path.join(target, "launcher"))).sort(), [
     "index.mjs",
     "package-lock.json",
     "package.json",
-    "registro-version.mjs",
     "skills",
     "threads",
-    "version-registry.mjs",
   ]);
-  assert.deepEqual(await readdir(path.join(target, "lanzador/skills")), [
+  assert.deepEqual(await readdir(path.join(target, "launcher/skills")), [
     "resumen-matutino.md",
   ]);
-  // The helper already installed on hosts reads the old marker name.
-  assert.match(
-    await readFile(path.join(target, "lanzador/registro-version.mjs"), "utf8"),
-    // The exact pattern of the v0.1.2 helper.
-    /^(?:[ \t]*(?:\/\/[^\n]*)?\r?\n)*\s*export const REGISTRO_VERSION = 2;\s*$/,
-  );
   const lanzadorLock = JSON.parse(
-    await readFile(path.join(target, "lanzador/package-lock.json"), "utf8"),
+    await readFile(path.join(target, "launcher/package-lock.json"), "utf8"),
   );
   assert.equal(lanzadorLock.name, "@x/launcher");
   assert.equal(lanzadorLock.lockfileVersion, 3);

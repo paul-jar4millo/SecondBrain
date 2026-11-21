@@ -90,7 +90,7 @@ test("B: MCP stdio y brain-cli omiten herramientas fuera de perfil, ignoran SB_T
   const owner = await setupOwnerClient(baseRoot);
 
   // Mint scoped investigacion capability token as authenticated owner/supervisor
-  const capRes = await fetch(`${baseApi}/agentes/capacidades/token`, {
+  const capRes = await fetch(`${baseApi}/agents/capabilities/token`, {
     method: "POST",
     headers: owner.headers,
     body: JSON.stringify({
@@ -104,7 +104,7 @@ test("B: MCP stdio y brain-cli omiten herramientas fuera de perfil, ignoran SB_T
   assert.ok(capToken.startsWith("sbcap_"));
 
   // Scoped agent token CANNOT mint further tokens (403)
-  const mintDenied = await fetch(`${baseApi}/agentes/capacidades/token`, {
+  const mintDenied = await fetch(`${baseApi}/agents/capabilities/token`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${capToken}`,

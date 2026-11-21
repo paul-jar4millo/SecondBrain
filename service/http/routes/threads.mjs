@@ -185,23 +185,23 @@ export const threadRoutes = (ctx, req) => {
       }
       return send(response, 201, result);
     },
-    "GET /threads/detalle": async () => {
+    "GET /threads/detail": async () => {
       ownerOnly();
       return send(response, 200, await threads.snapshot(query.get("id")));
     },
-    "GET /threads/flujo": async () => relay(query.get("id") ?? ""),
+    "GET /threads/stream": async () => relay(query.get("id") ?? ""),
     "GET /threads/feed": async () => relay(null),
-    "POST /threads/mensajes": async () => {
+    "POST /threads/messages": async () => {
       ownerOnly();
       const { id, ...data } = await body(request);
       return send(response, 202, await threads.send(id, data));
     },
-    "POST /threads/interrumpir": async () => {
+    "POST /threads/interrupt": async () => {
       ownerOnly();
       const { id } = await body(request);
       return send(response, 200, await threads.interrupt(id));
     },
-    "POST /threads/responder": async () => {
+    "POST /threads/answer": async () => {
       ownerOnly();
       const { id, requestId, answer } = await body(request);
       return send(
@@ -210,14 +210,14 @@ export const threadRoutes = (ctx, req) => {
         await threads.answer(id, requestId, { answer, origin: "app" }),
       );
     },
-    "POST /threads/cerrar": async () => {
+    "POST /threads/close": async () => {
       ownerOnly();
       const { id, ...data } = await body(request);
       const result = await threads.close(id, data);
       if (data.mode !== "pr") await auth.revokeCapability({ sessionId: id });
       return send(response, 200, result);
     },
-    "POST /threads/archivar": async () => {
+    "POST /threads/archive": async () => {
       ownerOnly();
       const { id } = await body(request);
       const result = await threads.archive(id);
@@ -232,11 +232,11 @@ export const threadRoutes = (ctx, req) => {
         await threads.diff(query.get("id"), query.get("turnId") || undefined),
       );
     },
-    "GET /bandeja": async () => {
+    "GET /inbox": async () => {
       ownerOnly();
       return send(response, 200, await threads.inbox());
     },
-    "POST /threads/agente/preguntar": async () => {
+    "POST /threads/agent/ask": async () => {
       const data = await body(request);
       const result = await threads.ask(agentThread(), data);
       return send(response, 201, {
@@ -244,7 +244,7 @@ export const threadRoutes = (ctx, req) => {
         solicitud: toLegacyRequest(result.request),
       });
     },
-    "GET /threads/agente/solicitud": async () => {
+    "GET /threads/agent/request": async () => {
       const result = await threads.request(agentThread(), query.get("id"));
       return send(response, 200, {
         solicitud: toLegacyRequest(result.request),

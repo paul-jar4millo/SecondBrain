@@ -6,29 +6,29 @@ export const worldRoutes = (ctx, req) => {
   const { mundo: world } = ctx;
   const { consulta: query, request, response } = req;
   return {
-    "GET /mundo/overview": async () => {
+    "GET /world/overview": async () => {
       return send(response, 200, await world.leer());
     },
-    "GET /mundo/document": async () => {
+    "GET /world/document": async () => {
       return send(response, 200, await world.documento(query.get("path")));
     },
-    "GET /mundo/media": async () => {
+    "GET /world/media": async () => {
       return await world.imagen(query.get("path"), response);
     },
-    "POST /mundo/briefs": async () => {
+    "POST /world/briefs": async () => {
       return send(response, 201, await world.crearBrief(await body(request)));
     },
-    "POST /mundo/agents": async () => {
+    "POST /world/agents": async () => {
       return send(
         response,
         200,
         await world.configurarAgente(await body(request)),
       );
     },
-    "POST /mundo/tasks": async () => {
+    "POST /world/tasks": async () => {
       return send(response, 201, await world.crearEncargo(await body(request)));
     },
-    "POST /mundo/tasks/status": async () => {
+    "POST /world/tasks/status": async () => {
       return send(
         response,
         200,

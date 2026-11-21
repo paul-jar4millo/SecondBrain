@@ -14,7 +14,7 @@ source "${SB_LXC_ENV:-$(dirname "$0")/../lxc.env}"
 
 como_agente() {
   runuser -u sb-agente -- env -C /srv/sb-agente/proyectos HOME="$agente" LANG=C.UTF-8 \
-    PATH="/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:$agente/.local/bin" "$@"
+    PATH="/opt/sb-agente/cli/current/bin:/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:$agente/.local/bin" "$@"
 }
 # Algunos CLIs necesitan una TTY propia aunque runuser no la asigne.
 tty_agente() { como_agente script -qfc "$(printf '%q ' "$@")" /dev/null; }
@@ -47,7 +47,7 @@ codex() {
 agy() {
   echo "Lira (Antigravity). Si falta, se instala con el instalador oficial en ~/.local/bin de sb-agente."
   pregunta "¿Instalar o conectar Antigravity?" || return 0
-  if [[ ! -x $agente/.local/bin/agy ]]; then
+  if [[ ! -x /opt/sb-agente/cli/current/bin/agy ]]; then
     como_agente bash -c 'curl -fsSL https://antigravity.google/cli/install.sh | bash'
   fi
   como_agente agy --version

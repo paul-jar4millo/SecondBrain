@@ -44,7 +44,7 @@ export function UsageBars({
     const read = () => {
       if (document.hidden) return;
       void Promise.resolve()
-        .then(() => agentApi("/agentes/uso"))
+        .then(() => agentApi("/agents/usage"))
         .then((value) => {
           if (live && value) setUsage(value as Record<string, ProviderUsage>);
         })

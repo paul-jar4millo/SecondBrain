@@ -21,14 +21,16 @@ export interface LauncherServerOptions {
   proyectos?: Record<string, string>;
   espacios?: WorkspaceRegistry;
   controlHash: string;
+  legacyHttpRoutes?: boolean;
   registrar?: (line: string) => void;
 }
 
 export type LauncherRequestBody = Partial<
-  Parameters<WorkspaceRegistry["vincular"]>[0] &
+  Parameters<WorkspaceRegistry["link"]>[0] &
     Parameters<ToolCatalog["updateProfile"]>[1] &
     Parameters<ToolCatalog["resolveSkillsForTask"]>[0]
 > & {
+  repositorio?: string | null;
   optInProbe?: boolean;
   profileId?: string;
   billingAuthorized?: unknown;

@@ -609,7 +609,7 @@ export function mount(
     else openTool(nearby.tool);
   }
   const loadRoomData = () =>
-    requestData<RoomData>("/sala?espacio=general")
+    requestData<RoomData>("/room?espacio=general")
       .then((data) => {
         if (!alive) return;
         orders = data.encargos || {};

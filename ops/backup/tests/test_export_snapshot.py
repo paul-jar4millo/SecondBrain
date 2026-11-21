@@ -64,6 +64,31 @@ class ExportTests(unittest.TestCase):
             self.assertEqual(set(archive.getnames()), {'srv/secondbrain/vault/Home.md', 'srv/secondbrain/vault/node_modules/knowledge.md', 'var/lib/secondbrain/shared/index.json', 'srv/sb-agente/proyectos/example/ignored.bin', 'var/lib/sb-agente/estado/lanzador/workspaces/one/entrega/final.zip'})
             self.assertEqual(archive.extractfile('srv/secondbrain/vault/Home.md').read(), b'knowledge')
 
+    def test_preserves_english_host_paths_and_legacy_links(self):
+        entries = {
+            'srv/sb-agent/projects/example/source.txt': b'project',
+            'srv/sb-agent/projects/example/node_modules/example.js': b'cache',
+            'srv/sb-agent/deliverables/final.zip': b'deliverable',
+            'var/lib/sb-agent/state/launcher/espacios.json': b'links',
+            'var/lib/sb-agent/state/launcher/workspaces/example/file.txt': b'workspace',
+            'var/lib/sb-agent/state/launcher/workspaces/example/.tools/bin/download': b'cache',
+        }
+        source = self.fixture(entries, [
+            ('srv/sb-agente/proyectos', '../sb-agent/projects', tarfile.SYMTYPE),
+            ('srv/sb-agente/entregables', '../sb-agent/deliverables', tarfile.SYMTYPE),
+        ])
+        result = subprocess.run([sys.executable, str(SCRIPT), str(source)], capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with tarfile.open(fileobj=io.BytesIO(result.stdout), mode='r:') as archive:
+            self.assertEqual(set(archive.getnames()), {
+                'srv/sb-agent/projects/example/source.txt',
+                'srv/sb-agent/deliverables/final.zip',
+                'var/lib/sb-agent/state/launcher/espacios.json',
+                'var/lib/sb-agent/state/launcher/workspaces/example/file.txt',
+                'srv/sb-agente/proyectos',
+                'srv/sb-agente/entregables',
+            })
+
     def test_rejects_path_traversal_even_if_streaming_has_started(self):
         source = self.fixture({'./srv/secondbrain/vault/Home.md': b'knowledge', '../outside': b'bad'})
         result = subprocess.run([sys.executable, str(SCRIPT), str(source)], capture_output=True)

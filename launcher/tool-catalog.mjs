@@ -637,10 +637,12 @@ export function buildMcpConfigForProfile({
   const tokenFile =
     sessionTokenFile || env.SB_BRAIN_TOKEN_FILE || env.AGENTES_BRAIN_TOKEN_FILE;
   if (allowedMcps.has("secondbrain") && tokenFile) {
+    const actor = memberId || env.SB_AGENT || env.SB_AGENTE;
     const brainEnv = {
       SB_BRAIN_TOKEN_FILE: tokenFile,
       SB_BRAIN_URL: env.SB_BRAIN_URL || env.AGENTES_BRAIN_URL,
-      SB_AGENTE: memberId || env.SB_AGENTE,
+      SB_AGENT: actor,
+      SB_AGENTE: actor,
       SB_SESSION_ID: sessionId || env.SB_SESSION_ID,
     };
     mcpServers.secondbrain = {

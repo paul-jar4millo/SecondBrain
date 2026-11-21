@@ -58,8 +58,8 @@ sequenceDiagram
   CLI-->>P: events (messages, tool calls, questions)
   P-->>L: normalized thread items
   L-->>S: SSE
-  S-->>D: GET /threads/flujo (SSE)
-  D->>S: POST /threads/responder (answer)
+  S-->>D: GET /threads/stream (SSE)
+  D->>S: POST /threads/answer (answer)
   S->>L: POST /threads/:id/requests/:requestId
 ```
 
@@ -82,7 +82,7 @@ sequenceDiagram
   S->>Q: create pending approval (expires in 30 min)
   Note over A,S: the agent's request stays open<br/>until the owner decides
   S-->>D: change event (SSE)
-  D->>S: POST /aprobaciones/decidir {id, approve, requestId}
+  D->>S: POST /approvals/decide {id, approve, requestId}
   S->>Q: store decision + receipt (one JSON line)
   S-->>D: receipt {decision, by, ts}
   alt approved

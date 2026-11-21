@@ -95,20 +95,19 @@ beforeEach(() => {
     if (path === "/threads" && options?.method !== "POST")
       return { threads: [current], globalSeq: 3 };
     if (path === "/threads") return { thread: newThread };
-    if (path === "/bandeja") return { entries };
-    if (path === "/agentes/espacios")
-      return { vinculos: { project: "fixture" } };
-    if (path === "/agentes/proyectos-lanzador") return ["fixture"];
-    if (path === "/agentes/modelos-lanzador")
+    if (path === "/inbox") return { entries };
+    if (path === "/agents/workspaces") return { links: { project: "fixture" } };
+    if (path === "/agents/projects") return ["fixture"];
+    if (path === "/agents/models")
       return {
         codex: [
           { id: "model-test", nombre: "Modelo de prueba", esfuerzos: ["high"] },
         ],
       };
-    if (path === "/agentes/uso") return {};
-    if (path === "/threads/detalle?id=" + thread.id)
+    if (path === "/agents/usage") return {};
+    if (path === "/threads/detail?id=" + thread.id)
       return { thread: current, items: [], requests: [], lastSeq: 3 };
-    if (path === "/threads/detalle?id=" + newThread.id)
+    if (path === "/threads/detail?id=" + newThread.id)
       return { thread: newThread, items: [], requests: [], lastSeq: 0 };
     if (path === "/threads/diff?id=" + thread.id)
       return {
@@ -122,16 +121,16 @@ beforeEach(() => {
           },
         ],
       };
-    if (path === "/threads/cerrar") {
+    if (path === "/threads/close") {
       current = { ...current, status: "done" };
       return { thread: current };
     }
-    if (path === "/threads/archivar") {
+    if (path === "/threads/archive") {
       current = { ...current, status: "archived" };
       entries = [];
       return { thread: current };
     }
-    if (path === "/threads/mensajes" || path === "/threads/interrumpir")
+    if (path === "/threads/messages" || path === "/threads/interrupt")
       return {};
     throw new Error("Unexpected endpoint " + path);
   });
@@ -151,7 +150,7 @@ it("opens the inbox, resumes the detail stream, steers and reviews the diff", as
     within(inbox).getByRole("link", { name: /Falta una decisión/ }),
   );
   await screen.findByRole("heading", { name: thread.title });
-  const stream = streams.find((entry) => entry.url.includes("/flujo?"));
+  const stream = streams.find((entry) => entry.url.includes("/stream?"));
   expect(stream?.url).toContain("after=3");
   expect(
     streams.some((entry) => entry.url === "/api/v1/threads/feed?after=3"),
@@ -161,13 +160,13 @@ it("opens the inbox, resumes the detail stream, steers and reviews the diff", as
     "Conserva el encabezado",
   );
   await user.click(screen.getByRole("button", { name: "Redirigir" }));
-  expect(submitBody("/threads/mensajes")).toEqual({
+  expect(submitBody("/threads/messages")).toEqual({
     id: thread.id,
     mode: "steer",
     text: "Conserva el encabezado",
   });
   await user.click(screen.getByRole("button", { name: "Detener" }));
-  expect(submitBody("/threads/interrumpir")).toEqual({ id: thread.id });
+  expect(submitBody("/threads/interrupt")).toEqual({ id: thread.id });
   expect(await screen.findByText("+nuevo")).toHaveClass("diff-add");
   await user.click(screen.getByRole("tab", { name: "Plan" }));
   expect(
@@ -181,7 +180,7 @@ it("opens the inbox, resumes the detail stream, steers and reviews the diff", as
   await waitFor(() => expect(stream?.closed).toBe(true));
   await waitFor(() =>
     expect(
-      streams.filter((entry) => entry.url.includes("/flujo?")),
+      streams.filter((entry) => entry.url.includes("/stream?")),
     ).toHaveLength(2),
   );
 });
@@ -242,7 +241,7 @@ it("closes a repo thread by local merge and asks before archiving", async () => 
     within(close).getByRole("radio", { name: /Integrar en local/ }),
   );
   await user.click(within(close).getByRole("button", { name: "Integrar" }));
-  expect(submitBody("/threads/cerrar")).toEqual({
+  expect(submitBody("/threads/close")).toEqual({
     id: thread.id,
     mode: "merge",
   });
@@ -250,7 +249,7 @@ it("closes a repo thread by local merge and asks before archiving", async () => 
   await user.click(screen.getByRole("button", { name: "Archivar" }));
   const archive = screen.getByRole("dialog", { name: "Archivar thread" });
   await user.click(within(archive).getByRole("button", { name: "Cancelar" }));
-  expect(api.mock.calls.some(([url]) => url === "/threads/archivar")).toBe(
+  expect(api.mock.calls.some(([url]) => url === "/threads/archive")).toBe(
     false,
   );
   await user.click(screen.getByRole("button", { name: "Archivar" }));
@@ -260,6 +259,6 @@ it("closes a repo thread by local merge and asks before archiving", async () => 
       { name: "Archivar" },
     ),
   );
-  expect(submitBody("/threads/archivar")).toEqual({ id: thread.id });
+  expect(submitBody("/threads/archive")).toEqual({ id: thread.id });
   await screen.findByText("Elige un thread o crea uno nuevo.");
 });

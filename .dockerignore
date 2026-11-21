@@ -12,3 +12,6 @@ tooling
 scratch
 shared
 library-files
+
+**/*.env
+.impeccable
