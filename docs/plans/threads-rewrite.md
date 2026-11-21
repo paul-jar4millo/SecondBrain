@@ -15,10 +15,11 @@
 > los alias en v0.6.0.
 >
 > **Fase B (2026-11-21):** B1 flujos (#70), B2 traspaso (#71), B3 revisión
-> cruzada (#72), B4 sub-tareas (#73) y B5 uso (este PR) en main, probados con
-> CLIs falsos. B5 conserva el status-line como respaldo: es la única fuente
-> de Antigravity y del contexto. Falta la release, el despliegue y la e2e
-> con un agente real barato.
+> cruzada (#72), B4 sub-tareas (#73) y B5 uso (#74), en v0.7.0 (#75)
+> desplegada en el LXC 204 (`verify.sh` sin fallos, e2e de Codex OK). B5
+> conserva el status-line como respaldo: es la única fuente de Antigravity y
+> del contexto. La e2e del flujo con un agente real se hace desde la app,
+> porque necesita la credencial `sbcap_` que el service da a cada thread.
 
 ## Contexto
 
