@@ -4,7 +4,7 @@ import {
   canonicalWorkspaces,
   legacyLauncherPaths,
   legacyWorkspaceUpdate,
-} from "./launcher-wire.mjs";
+} from "../contracts/src/node/launcher-wire.mjs";
 
 const oldCatalogPaths = new Map(
   Array.from(legacyLauncherPaths, ([old, canonical]) => [canonical, old]),
