@@ -23,10 +23,9 @@ test("the real provider environment carries only the local user's scope runtime"
 });
 
 test("configured concurrency and retention reject malformed or zero values", () => {
-  assert.deepEqual(
-    readLimits({ SB_MAX_ACTIVE_TURNS: "2" }),
-    { maxActiveTurns: 2 },
-  );
+  assert.deepEqual(readLimits({ SB_MAX_ACTIVE_TURNS: "2" }), {
+    maxActiveTurns: 2,
+  });
   for (const env of [
     { SB_MAX_ACTIVE_TURNS: "0" },
     { SB_MAX_ACTIVE_TURNS: "2;bad" },
