@@ -11,7 +11,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { unzipSync, strFromU8 } from "fflate";
-const image = process.env.SB_SMOKE_IMAGE || "second-brain:0.8.0";
+const image = process.env.SB_SMOKE_IMAGE || "second-brain:0.8.1";
 const temporary = mkdtempSync(path.join(tmpdir(), "sb-container-"));
 const root = path.join(temporary, "vault");
 const data = path.join(temporary, "data");
