@@ -15,6 +15,7 @@ export const en: Record<MessageKey, string> = {
   "tools.projects": "Projects",
   "tools.team": "Team",
   "tools.threads": "Threads",
+  "threads.unread": "{count} unseen notices",
   "tools.tasks": "Tasks",
   "tools.finance": "Finance",
   "tools.files": "Briefcase",

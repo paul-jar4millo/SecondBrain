@@ -13,6 +13,7 @@ export const es = {
   "tools.projects": "Proyectos",
   "tools.team": "Equipo",
   "tools.threads": "Threads",
+  "threads.unread": "{count} avisos sin ver",
   "tools.tasks": "Tareas",
   "tools.finance": "Finanzas",
   "tools.files": "Maletín",

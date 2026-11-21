@@ -59,7 +59,7 @@ export async function waitThreadRequest(threads, threadId, requestId, timeout) {
 
 /** @type {RouteModule} */
 export const threadRoutes = (ctx, req) => {
-  const { auth, lanzador, options, resolveServerProfile } = ctx;
+  const { auth, lanzador, notifications, options, resolveServerProfile } = ctx;
   const { callerCap, consulta: query, request, response } = req;
   const threads = lanzador?.threads;
 
@@ -312,6 +312,16 @@ export const threadRoutes = (ctx, req) => {
     "GET /flows": async () => {
       ownerOnly();
       return send(response, 200, await threads.flows());
+    },
+    // Outbox of what needs the owner (phase C1); the app shows the unread.
+    "GET /notifications": async () => {
+      ownerOnly();
+      return send(response, 200, notifications.list());
+    },
+    "POST /notifications/seen": async () => {
+      ownerOnly();
+      const { upTo } = await body(request);
+      return send(response, 200, await notifications.markSeen(upTo));
     },
     "GET /inbox": async () => {
       ownerOnly();

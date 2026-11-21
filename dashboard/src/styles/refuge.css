@@ -633,3 +633,24 @@ h4 {
 .hud-glyph .g-w {
   fill: var(--g-w, #f1f7ff);
 }
+
+/* Unread notices on Threads (phase C1). */
+.nav-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #d8342c;
+  color: #fff;
+  font: 700 11px/1 var(--hud-font, inherit);
+  margin-inline-start: 6px;
+}
+.world-shortcuts a .nav-badge {
+  position: absolute;
+  top: -4px;
+  right: -2px;
+  margin: 0;
+  box-shadow: 0 0 0 2px #fff;
+}

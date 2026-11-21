@@ -80,6 +80,49 @@ test("change notifications follow the launcher's thread feed", async (t) => {
   assert.deepEqual(urls, ["/threads/stream"]);
 });
 
+test("the feed hands over parsed events, resumes from a cursor and reports a lost log", async (t) => {
+  /** @type {string[]} */
+  const urls = [];
+  const server = http.createServer((req, res) => {
+    urls.push(String(req.url));
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    if (urls.length === 1)
+      res.write(
+        'id: 8\ndata: {"type":"event","event":{"type":"thread.updated","globalSeq":8}}\n\n',
+      );
+    else res.end('data: {"type":"snapshot-required","reason":"perdido"}\n\n');
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const client = createLauncherClient(Failure, {
+    url: `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (server.address()).port}`,
+    token: "secreto",
+  });
+  /** @type {unknown[]} */
+  const events = [];
+  let resets = 0;
+  const stop = client.subscribe((event) => event && events.push(event), {
+    after: async () => 7,
+    onReset: () => resets++,
+  });
+  t.after(stop);
+  const until = Date.now() + 3000;
+  while (!events.length && Date.now() < until)
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(events, [{ type: "thread.updated", globalSeq: 8 }]);
+  assert.deepEqual(urls, ["/threads/stream?after=7"]);
+  // The second connection is answered with snapshot-required.
+  server.closeAllConnections();
+  const later = Date.now() + 8000;
+  while (!resets && Date.now() < later)
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(resets, 1);
+});
+
 test("catalog routes deny the room credential and the session routes are gone", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-gateway-"));
   t.after(() => rm(dir, { recursive: true, force: true }));

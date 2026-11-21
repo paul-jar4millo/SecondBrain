@@ -23,6 +23,7 @@ import { createApprovalQueue } from "../approvals.mjs";
 import { createSharedFiles } from "../shared-files.mjs";
 import { createUserRequestStore } from "../user-requests.mjs";
 import { createEffectsExecutor } from "../effects-executor.mjs";
+import { createNotifications } from "../notifications.mjs";
 import { agentHeaders } from "./io.mjs";
 
 /** @import { ApplicationOptions, HttpLogRecord, HttpRequest, ScopedRecord, ToolProfile } from "../types.d.ts" */
@@ -105,7 +106,47 @@ export async function createContext(options) {
     }, 150);
     changeTimer.unref();
   };
-  const stopLauncherEvents = lanzador.subscribe(change);
+  const notifications = await createNotifications({
+    file: path.join(dataDirectory, "notifications.json"),
+    threadInfo: async (id) => {
+      const { thread } =
+        /** @type {{ thread: { title: string, flow?: { stages: Array<{ name: string }> } | null } }} */ (
+          await lanzador.threads.snapshot(id)
+        );
+      return {
+        title: thread.title,
+        stages: thread.flow?.stages.map((stage) => stage.name) ?? [],
+      };
+    },
+  });
+  // One subscription: every event refreshes the app, and the events that
+  // need the owner go to the outbox (in order, resuming from its cursor).
+  /** @type {Promise<unknown>} */
+  let notifying = Promise.resolve();
+  const stopLauncherEvents = lanzador.subscribe(
+    (event) => {
+      change();
+      if (!event) return;
+      notifying = notifying
+        .then(() => notifications.handle(event))
+        .catch(() => undefined);
+    },
+    {
+      after: async () => {
+        if (notifications.cursor() > 0) return notifications.cursor();
+        // First run: start at the launcher's current position. A failure
+        // retries the connection instead of replaying the whole history.
+        const { globalSeq } = /** @type {{ globalSeq: number }} */ (
+          await lanzador.threads.list(new URLSearchParams("status=running"))
+        );
+        await notifications.resumeFrom(globalSeq);
+        return notifications.cursor() || null;
+      },
+      onReset: () => {
+        notifying = notifying.then(() => notifications.resumeFrom(0));
+      },
+    },
+  );
   /** @type {import("node:http").Server} */
   let serverHttp;
   const mcpRemote = await createRemoteMcp({
@@ -446,6 +487,7 @@ export async function createContext(options) {
     sala,
     mundo: world,
     lanzador,
+    notifications,
     clients,
     watchers,
     change,

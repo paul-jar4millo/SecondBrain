@@ -433,6 +433,22 @@ test("threads are relayed to the launcher with a credential per thread", async (
     ).flows.map((/** @type {{ id: string }} */ f) => f.id),
     ["single", "plan-implement-review"],
   );
+  assert.deepEqual(
+    await fetch(`${base}/notifications`, { headers: owner }).then((r) =>
+      r.json(),
+    ),
+    { notifications: [], unread: 0 },
+  );
+  const seen = await fetch(`${base}/notifications/seen`, {
+    method: "POST",
+    headers: owner,
+    body: JSON.stringify({ upTo: 5 }),
+  });
+  assert.deepEqual(await seen.json(), { unread: 0 });
+  assert.equal(
+    (await fetch(`${base}/notifications`, { headers: agent })).status,
+    403,
+  );
 
   // Closing (other than by PR) revokes the thread's credential.
   const closed = await fetch(`${base}/threads/close`, {
