@@ -2,6 +2,7 @@ import { api } from "../../core/store";
 import type {
   AgentRef,
   FileDiff,
+  FlowTemplate,
   InboxEntry,
   Item,
   RequestAnswer,
@@ -21,6 +22,8 @@ export interface NewThread {
   baseBranch?: string;
   agent: AgentRef;
   autonomy?: Thread["autonomy"];
+  flowTemplateId?: string;
+  stageAgents?: Record<string, AgentRef>;
 }
 
 export const threadsApi = {
@@ -68,6 +71,7 @@ export const threadsApi = {
       `/threads/diff?id=${encodeURIComponent(id)}${turnId ? `&turnId=${encodeURIComponent(turnId)}` : ""}`,
     ),
   inbox: () => api<{ entries: InboxEntry[] }>("/inbox"),
+  flows: () => api<{ flows: FlowTemplate[] }>("/flows"),
   models: () =>
     api<Record<string, { id: string; nombre: string; esfuerzos?: string[] }[]>>(
       "/agents/models",

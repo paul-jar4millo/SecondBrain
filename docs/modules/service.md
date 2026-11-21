@@ -55,8 +55,14 @@ in `tests/helpers/` create synthetic vaults; tests never use real notes.
 `http/routes/threads.mjs` relays the owner's thread API to the launcher
 (`launcher-threads-client.mjs`): `GET|POST /threads`, `GET /threads/detail`,
 `GET /threads/stream` (SSE, resumes with `Last-Event-ID` or `?after=`),
-`GET /threads/feed`, `POST /threads/messages|interrumpir|responder|cerrar|archivar`,
-`GET /threads/diff`, `GET /inbox`. Agents cannot use them.
+`GET /threads/feed`, `POST /threads/messages|interrupt|answer|close|archive`,
+`GET /threads/diff`, `GET /inbox` and `GET /flows` (flow templates). Agents
+cannot use them.
+
+`POST /threads` takes an optional `flowTemplateId` and `stageAgents` (agent
+per stage key). The thread freezes the template's stages when it is created;
+the first stage picks the agent, and a read-only stage runs its turns without
+writes. DeepSeek is refused for any stage unless `SB_ALLOW_BILLED_DEEPSEEK=1`.
 
 Each thread gets its own `sbcap_` credential (profile `ejecucion`, narrowed
 by operator policy), bound to the thread id; closing without a PR or

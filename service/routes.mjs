@@ -862,6 +862,13 @@ for (const [
         baseBranch: z.string().min(1).max(200).optional(),
         agent: threadAgent,
         autonomy: z.enum(["auto-worktree", "ask", "read-only"]).optional(),
+        flowTemplateId: z
+          .string()
+          .regex(/^[a-z][a-z0-9-]{0,63}$/)
+          .optional(),
+        stageAgents: z
+          .record(z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), threadAgent)
+          .optional(),
         attachments: threadAttachments,
       })
       .strict(),
@@ -946,6 +953,7 @@ for (const [
       .strict(),
   ],
   ["GET /inbox", false, object, z.object({}).strict()],
+  ["GET /flows", false, object, z.object({}).strict()],
   [
     "POST /threads/agent/ask",
     true,

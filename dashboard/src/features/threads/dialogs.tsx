@@ -9,7 +9,12 @@ import { Modal } from "../../components/ui";
 import { loadChoice, type ModelChoice } from "../agents/ModelEffortPicker";
 import { AgentPicker, agentRef, useModels } from "./Composer";
 import { threadsApi } from "./thread-api";
-import type { Engine, Thread } from "./thread-types";
+import type { AgentRef, Engine, FlowTemplate, Thread } from "./thread-types";
+
+interface StagePick {
+  engine: Engine;
+  choice: ModelChoice;
+}
 
 const AUTONOMY: { id: Thread["autonomy"]; label: string; hint: string }[] = [
   {
@@ -71,6 +76,24 @@ export function NewThreadDialog({
   const [loadingProjects, setLoadingProjects] = useState(!isDemo);
   const [autonomy, setAutonomy] = useState<Thread["autonomy"]>("auto-worktree");
   const [choice, setChoice] = useState<ModelChoice>(() => loadChoice(engine));
+  const [flows, setFlows] = useState<FlowTemplate[]>([]);
+  const [flowId, setFlowId] = useState("single");
+  const [stagePicks, setStagePicks] = useState<Record<string, StagePick>>({});
+  const flow = flows.find((f) => f.id === flowId);
+  const staged = (flow?.stages.length ?? 0) > 1;
+  useEffect(() => {
+    if (isDemo) return;
+    let active = true;
+    void threadsApi
+      .flows()
+      .then(({ flows }) => active && setFlows(flows))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  const pickOf = (key: string): StagePick =>
+    stagePicks[key] ?? { engine, choice };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -98,12 +121,20 @@ export function NewThreadDialog({
     setBusy(true);
     setError("");
     try {
+      const stageAgents: Record<string, AgentRef> = {};
+      if (flow && staged)
+        for (const stage of flow.stages) {
+          const pick = pickOf(stage.key);
+          stageAgents[stage.key] = agentRef(pick.engine, models, pick.choice);
+        }
       const { thread } = await threadsApi.create({
         prompt: prompt.trim(),
         kind: project ? "repo" : "scratch",
         ...(project ? { repoPath: project } : {}),
         agent: agentRef(engine, models, choice),
         autonomy,
+        ...(flow ? { flowTemplateId: flow.id } : {}),
+        ...(staged ? { stageAgents } : {}),
       });
       try {
         if (savedDraft && localStorage.getItem(draftKey)?.trim() === savedDraft)
@@ -160,16 +191,56 @@ export function NewThreadDialog({
             ))}
           </select>
         </label>
-        <AgentPicker
-          engine={engine}
-          onEngine={(e) => {
-            setEngine(e);
-            setChoice(loadChoice(e));
-          }}
-          choice={choice}
-          onChoice={setChoice}
-          models={models}
-        />
+        {flows.length > 1 && (
+          <label>
+            Flujo
+            <select
+              aria-label="Flujo"
+              value={flowId}
+              disabled={busy}
+              onChange={(e) => setFlowId(e.target.value)}
+            >
+              {flows.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+            {flow && <small>{flow.description}</small>}
+          </label>
+        )}
+        {flow && staged ? (
+          <fieldset className="thread-stages">
+            <legend>Agente por etapa</legend>
+            {flow.stages.map((stage, index) => {
+              const pick = pickOf(stage.key);
+              const update = (next: StagePick) =>
+                setStagePicks({ ...stagePicks, [stage.key]: next });
+              return (
+                <AgentPicker
+                  key={stage.key}
+                  label={`${index + 1}. ${stage.name}${stage.readOnly ? " (solo lectura)" : ""}`}
+                  engine={pick.engine}
+                  onEngine={(e) => update({ engine: e, choice: loadChoice(e) })}
+                  choice={pick.choice}
+                  onChoice={(c) => update({ ...pick, choice: c })}
+                  models={models}
+                />
+              );
+            })}
+          </fieldset>
+        ) : (
+          <AgentPicker
+            engine={engine}
+            onEngine={(e) => {
+              setEngine(e);
+              setChoice(loadChoice(e));
+            }}
+            choice={choice}
+            onChoice={setChoice}
+            models={models}
+          />
+        )}
         <fieldset className="thread-autonomy">
           <legend>Autonomía</legend>
           {AUTONOMY.map((a) => (

@@ -60,10 +60,15 @@ function fakeControllers(script, { steer = false } = {}) {
 
 const fakeContext = () => {
   const setups = /** @type {string[][]} */ ([]);
+  const contexts = /** @type {any[]} */ ([]);
   return {
     setups,
+    contexts,
     context: {
-      async buildAgentContext(/** @type {any} */ { threadId, agent, cwd }) {
+      async buildAgentContext(
+        /** @type {any} */ { threadId, agent, cwd, readOnly },
+      ) {
+        contexts.push({ agent, readOnly });
         return { session: { id: threadId, motor: agent.engine }, cwd };
       },
       async runSetup(/** @type {any} */ { argv, onOutput }) {
@@ -80,7 +85,7 @@ async function setup(t, script, options = {}) {
   const repo = await repoSintetico(t);
   const dataDir = await mkdtemp(path.join(tmpdir(), "sb-threads-engine-"));
   const { controllers, log } = fakeControllers(script, options);
-  const { context, setups } = fakeContext();
+  const { context, setups, contexts } = fakeContext();
   const threads = openThreads({
     env: {},
     dataDir,
@@ -100,6 +105,7 @@ async function setup(t, script, options = {}) {
     threads,
     log,
     setups,
+    contexts,
     engine: threads.engine,
     store: threads.store,
   };
@@ -552,6 +558,11 @@ test("HTTP routes and the resumable SSE stream", async (t) => {
   assert.deepEqual(await (await fetch(`${base}/inbox`)).json(), {
     entries: [],
   });
+  const { flows } = await (await fetch(`${base}/flows`)).json();
+  assert.deepEqual(
+    flows.map((/** @type {any} */ f) => f.id),
+    ["single", "plan-implement-review"],
+  );
   assert.equal((await fetch(`${base}/threads/${thread.id}/diff`)).status, 200);
   assert.equal((await fetch(`${base}/elsewhere`)).status, 418);
   // Global feed replays by globalSeq.
@@ -665,4 +676,76 @@ test("the service may choose the thread id", async (t) => {
     }),
     /inválido/,
   );
+});
+
+test("a flow freezes its stages and the first stage picks agent and access", async (t) => {
+  const env = await setup(t, async () => {});
+  const thread = await env.engine.create({
+    kind: "scratch",
+    prompt: "plan it",
+    agent: AGENT,
+    flowTemplateId: "plan-implement-review",
+    stageAgents: { plan: { engine: "claude", model: "opus" } },
+  });
+  assert.equal(thread.flow.templateId, "plan-implement-review");
+  assert.deepEqual(
+    thread.flow.stages.map((/** @type {any} */ s) => [s.key, s.readOnly]),
+    [
+      ["plan", true],
+      ["implement", false],
+      ["review", true],
+    ],
+  );
+  assert.deepEqual(thread.flow.stages[1].agent, AGENT);
+  assert.deepEqual(thread.agent, { engine: "claude", model: "opus" });
+  assert.equal(thread.stageIndex, 0);
+  assert.equal(thread.limits.maxReviewRounds, 3);
+  assert.equal(thread.autonomy, "auto-worktree");
+  await waitFor(() => env.contexts.length);
+  assert.deepEqual(env.contexts[0], {
+    agent: { engine: "claude", model: "opus" },
+    readOnly: true,
+  });
+  assert.deepEqual(env.store.getThread(thread.id).flow, thread.flow);
+});
+
+test("flows reject unknown templates and stages", async (t) => {
+  const env = await setup(t, async () => {});
+  await assert.rejects(
+    env.engine.create({
+      kind: "scratch",
+      prompt: "a",
+      agent: AGENT,
+      flowTemplateId: "nope",
+    }),
+    /Flujo desconocido/,
+  );
+  await assert.rejects(
+    env.engine.create({
+      kind: "scratch",
+      prompt: "a",
+      agent: AGENT,
+      flowTemplateId: "single",
+      stageAgents: { review: AGENT },
+    }),
+    /Etapa desconocida/,
+  );
+  await assert.rejects(
+    env.engine.create({
+      kind: "scratch",
+      prompt: "a",
+      agent: AGENT,
+      stageAgents: { plan: AGENT },
+    }),
+    /requiere un flujo/,
+  );
+  const single = await env.engine.create({
+    kind: "scratch",
+    prompt: "a",
+    agent: AGENT,
+    flowTemplateId: "single",
+  });
+  assert.equal(single.limits.maxReviewRounds, 0);
+  await waitFor(() => env.contexts.length);
+  assert.equal(env.contexts[0].readOnly, false);
 });
