@@ -238,13 +238,12 @@ test("thread_ask_user follows user.ask like the usuario_* tools", () => {
   );
 });
 
-test("thread_handoff follows user.ask like thread_ask_user", () => {
-  assert.equal(
-    isToolAllowedForOperations("thread_handoff", new Set(["user.ask"])),
-    true,
-  );
-  assert.equal(
-    isToolAllowedForOperations("thread_handoff", new Set(["vault.read"])),
-    false,
-  );
+test("thread_handoff and thread_report_review follow user.ask", () => {
+  for (const name of ["thread_handoff", "thread_report_review"]) {
+    assert.equal(isToolAllowedForOperations(name, new Set(["user.ask"])), true);
+    assert.equal(
+      isToolAllowedForOperations(name, new Set(["vault.read"])),
+      false,
+    );
+  }
 });

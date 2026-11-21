@@ -968,6 +968,30 @@ for (const [
     anyQuery,
   ],
   [
+    "POST /threads/agent/review",
+    true,
+    z
+      .object({
+        verdict: z.enum(["approved", "changes-requested", "comment"]),
+        summary: z.string().min(1).max(20_000),
+        findings: z
+          .array(
+            z
+              .object({
+                file: z.string().max(500).optional(),
+                line: z.int().min(1).optional(),
+                severity: z.enum(["blocker", "major", "minor", "nit"]),
+                text: z.string().min(1).max(2000),
+              })
+              .strict(),
+          )
+          .max(100)
+          .optional(),
+      })
+      .strict(),
+    anyQuery,
+  ],
+  [
     "POST /threads/agent/handoff",
     true,
     z

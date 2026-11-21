@@ -160,6 +160,17 @@ export function createThreadsHttp({
     ],
     [
       "POST",
+      new RegExp(`^/threads/${ID}/review$`),
+      async (m, req, res) => {
+        send(
+          res,
+          201,
+          engine.reportReview(m[1] as string, await readJson(req)),
+        );
+      },
+    ],
+    [
+      "POST",
       new RegExp(`^/threads/${ID}/handoff$`),
       async (m, req, res) => {
         send(res, 202, engine.handoff(m[1] as string, await readJson(req)));
