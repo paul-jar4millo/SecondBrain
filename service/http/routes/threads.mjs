@@ -208,11 +208,43 @@ export const threadRoutes = (ctx, req) => {
     "POST /threads/answer": async () => {
       ownerOnly();
       const { id, requestId, answer } = await body(request);
-      return send(
-        response,
-        200,
-        await threads.answer(id, requestId, { answer, origin: "app" }),
+      const asked = (await threads.request(id, requestId)).request;
+      if (asked?.kind !== "subtask" || answer?.approved !== true)
+        return send(
+          response,
+          200,
+          await threads.answer(id, requestId, { answer, origin: "app" }),
+        );
+      // Approving a subtask creates a thread: it gets its own id and
+      // credential, like one the owner creates.
+      if (
+        asked.subtask?.agent?.engine === "deepseek" &&
+        process.env.SB_ALLOW_BILLED_DEEPSEEK !== "1"
+      )
+        throw new Failure(
+          "DeepSeek bloqueado por la política de gasto sin autorización explícita de gasto.",
+          403,
+        );
+      const childId = `thr_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
+      const minted = await mintCapability(
+        asked.subtask?.agent?.engine,
+        childId,
       );
+      try {
+        return send(
+          response,
+          200,
+          await threads.answer(id, requestId, {
+            answer,
+            origin: "app",
+            childId,
+            capabilityToken: minted.token,
+          }),
+        );
+      } catch (error) {
+        await auth.revokeCapability({ tokenId: minted.record.id });
+        throw error;
+      }
     },
     "POST /threads/close": async () => {
       ownerOnly();
@@ -251,6 +283,24 @@ export const threadRoutes = (ctx, req) => {
         ok: true,
         solicitud: toLegacyRequest(result.request),
       });
+    },
+    "POST /threads/agent/subtask": async () => {
+      const result = await threads.requestSubtask(
+        agentThread(),
+        await body(request),
+      );
+      return send(response, 201, {
+        ok: true,
+        solicitud: toLegacyRequest(result.request),
+      });
+    },
+    "GET /threads/agent/subtasks": async () =>
+      send(response, 200, await threads.subtasks(agentThread())),
+    "POST /threads/agent/subtasks/integrate": async () => {
+      const { id } = await body(request);
+      const result = await threads.integrateSubtask(agentThread(), id);
+      await auth.revokeCapability({ sessionId: id });
+      return send(response, 200, result);
     },
     "POST /threads/agent/review": async () =>
       send(

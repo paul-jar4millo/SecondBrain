@@ -91,6 +91,9 @@ async function setup(t, script, options = {}) {
     dataDir,
     projects: { demo: repo },
     git: createGit({ env: process.env }).git,
+    gh: async () => {
+      throw new Error("gh no está disponible en las pruebas");
+    },
     maxActive: options.maxActive ?? 2,
     controllers,
     context,
@@ -974,5 +977,106 @@ test("the third request for changes asks the owner to decide", async (t) => {
         (/** @type {any} */ i) =>
           i.kind === "notice" && i.code === "review-limit",
       ),
+  );
+});
+
+test("an approved subtask works on a child branch and integrates into the parent", async (t) => {
+  /** @type {any} */
+  let env;
+  env = await setup(t, async (/** @type {any} */ ctx) => {
+    const thread = env.store.getThread(ctx.session.id);
+    if (thread.parentId)
+      await writeFile(path.join(ctx.cwd, "subtarea.txt"), "de la sub-tarea\n");
+    else if (thread.counters.turns === 1) {
+      env.engine.requestSubtask(thread.id, {
+        title: "Docs",
+        prompt: "Escribe subtarea.txt",
+        reason: "Va en paralelo",
+      });
+      env.engine.requestSubtask(thread.id, {
+        title: "Otra",
+        prompt: "No hace falta",
+      });
+    }
+  });
+  const parent = await env.engine.create({
+    kind: "repo",
+    repoPath: "demo",
+    prompt: "Trabajo principal",
+    agent: AGENT,
+  });
+  await waitFor(() => env.store.getThread(parent.id).status === "waiting-user");
+  await env.engine.idle(parent.id);
+  const [docs, other] = env.store.requests(parent.id);
+  assert.equal(docs.kind, "subtask");
+  assert.deepEqual(docs.subtask, {
+    title: "Docs",
+    prompt: "Escribe subtarea.txt",
+    agent: AGENT,
+  });
+  assert.match(docs.body, /Va en paralelo/);
+  assert.throws(
+    () =>
+      env.engine.answer(parent.id, docs.id, {
+        answer: { approved: true },
+        origin: "app",
+      }),
+    /answerSubtask/,
+  );
+  const answered = await env.engine.answerSubtask(parent.id, docs.id, {
+    answer: { approved: true },
+    origin: "app",
+    childId: "thr_childsubtask01",
+  });
+  assert.equal(answered.status, "answered");
+  const child = env.store.getThread("thr_childsubtask01");
+  assert.equal(child.parentId, parent.id);
+  assert.equal(child.repo.baseBranch, parent.repo.branch);
+  await env.engine.answerSubtask(parent.id, other.id, {
+    answer: { approved: false, text: "No hace falta." },
+    origin: "app",
+  });
+  await waitFor(() => env.log.turns.length >= 4);
+  await env.engine.idle(child.id);
+  await env.engine.idle(parent.id);
+  await env.engine.idle(child.id);
+  await env.engine.idle(parent.id);
+  const messages = env.engine
+    .snapshot(parent.id)
+    .items.filter((/** @type {any} */ i) => i.kind === "user_message")
+    .map((/** @type {any} */ i) => i.text);
+  assert.ok(
+    messages.some((m) => /«Docs» aprobada: thread thr_childsubtask01/.test(m)),
+  );
+  assert.ok(messages.some((m) => /«Otra» rechazada.*No hace falta\./.test(m)));
+  assert.equal(env.store.getThread(parent.id).counters.subtasks, 1);
+  const [status] = await env.engine.subtasks(parent.id);
+  assert.equal(status.id, child.id);
+  assert.deepEqual(status.diffstat, [
+    { path: "subtarea.txt", additions: 1, deletions: 0 },
+  ]);
+  await assert.rejects(
+    env.engine.integrateSubtask(child.id, parent.id),
+    /no encontrada/,
+  );
+  const result = await env.engine.integrateSubtask(parent.id, child.id);
+  assert.equal(result.thread.status, "done");
+  assert.equal(
+    await readFile(path.join(parent.repo.worktree, "subtarea.txt"), "utf8"),
+    "de la sub-tarea\n",
+  );
+  assert.equal(existsSync(child.repo.worktree), false);
+});
+
+test("subtasks need a repo thread and cannot nest", async (t) => {
+  const env = await setup(t, async () => {});
+  const scratch = await env.engine.create({
+    kind: "scratch",
+    prompt: "a",
+    agent: AGENT,
+  });
+  assert.throws(
+    () => env.engine.requestSubtask(scratch.id, { title: "x", prompt: "y" }),
+    /thread de repositorio/,
   );
 });

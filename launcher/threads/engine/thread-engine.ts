@@ -5,6 +5,7 @@ import {
   AgentHandoff,
   AgentQuestion,
   AgentReview,
+  AgentSubtask,
   AnswerRequest,
   CloseThread,
   CreateThread,
@@ -981,6 +982,11 @@ export function createThreadEngine(deps: EngineDeps) {
         throw new EngineError("not-found", "Solicitud no encontrada.");
       if (request.status !== "open")
         throw new EngineError("conflict", "La solicitud ya fue respondida.");
+      if (request.kind === "subtask")
+        throw new EngineError(
+          "invalid",
+          "Las sub-tareas se aprueban con answerSubtask.",
+        );
       const state = live(threadId);
       const pending = state.pending.get(requestId);
       if (!pending && agentRequestIds(threadId).has(requestId)) {
@@ -1209,6 +1215,210 @@ export function createThreadEngine(deps: EngineDeps) {
       state.turn?.mapper?.requestItem(request.id);
       if (!state.turn) setStatus(threadId, "waiting-user");
       return store.getRequest(request.id) as UserRequest;
+    },
+
+    /** thread_request_subtask: a child thread waiting for the owner. */
+    requestSubtask(threadId: string, input: unknown): UserRequest {
+      const parsed = AgentSubtask.safeParse(input);
+      if (!parsed.success)
+        throw new EngineError(
+          "invalid",
+          parsed.error.issues[0]?.message ?? "Datos inválidos.",
+        );
+      const thread = requireThread(threadId);
+      if (BUSY_STATUSES.has(thread.status))
+        throw new EngineError("invalid-state", "El thread ya está cerrado.");
+      if (!thread.repo)
+        throw new EngineError(
+          "invalid",
+          "Las sub-tareas necesitan un thread de repositorio.",
+        );
+      if (thread.parentId)
+        throw new EngineError(
+          "invalid",
+          "Una sub-tarea no puede pedir sus propias sub-tareas.",
+        );
+      const { title, prompt, reason } = parsed.data;
+      const agent = parsed.data.agent ?? thread.agent;
+      const state = live(threadId);
+      const request: UserRequest = {
+        id: newId("request"),
+        threadId,
+        turnId: state.turn?.id ?? null,
+        kind: "subtask",
+        title: `Sub-tarea: ${title}`.slice(0, 300),
+        body: [
+          reason?.trim(),
+          `Agente: ${agent.engine}${agent.model ? ` (${agent.model})` : ""}. Parte del último commit de ${thread.repo.branch}.`,
+          "",
+          prompt.length > 4000 ? `${prompt.slice(0, 4000)}…` : prompt,
+        ]
+          .filter((line) => line !== undefined)
+          .join("\n")
+          .slice(0, 20_000),
+        subtask: { title, prompt, agent },
+        status: "open",
+        answer: null,
+        origin: null,
+        createdAt: now(),
+        answeredAt: null,
+      };
+      store.setMeta(threadId, {
+        agentRequests: [...agentRequestIds(threadId), request.id],
+      });
+      append(threadId, [
+        { type: "request.opened", threadId, at: now(), request },
+      ]);
+      state.turn?.mapper?.requestItem(request.id);
+      if (!state.turn) setStatus(threadId, "waiting-user");
+      return store.getRequest(request.id) as UserRequest;
+    },
+
+    /**
+     * The owner's answer to a subtask request. Approving creates the child
+     * thread from the parent's branch; the service may choose its id and
+     * credential, as for any thread.
+     */
+    async answerSubtask(
+      threadId: string,
+      requestId: string,
+      input: unknown,
+    ): Promise<UserRequest> {
+      const { childId, capabilityToken, ...rest } = (input ?? {}) as Record<
+        string,
+        unknown
+      >;
+      const parsed = AnswerRequest.safeParse({
+        ...rest,
+        type: "AnswerRequest",
+        threadId,
+        requestId,
+      });
+      if (!parsed.success)
+        throw new EngineError(
+          "invalid",
+          parsed.error.issues[0]?.message ?? "Datos inválidos.",
+        );
+      const request = store.getRequest(requestId);
+      if (!request || request.threadId !== threadId || !request.subtask)
+        throw new EngineError("not-found", "Solicitud no encontrada.");
+      if (request.status !== "open")
+        throw new EngineError("conflict", "La solicitud ya fue respondida.");
+      if (parsed.data.answer.approved === undefined)
+        throw new EngineError("invalid", "Aprueba o rechaza la sub-tarea.");
+      const parent = requireThread(threadId);
+      const draft = request.subtask;
+      let text: string;
+      if (parsed.data.answer.approved) {
+        if (BUSY_STATUSES.has(parent.status) || !parent.repo)
+          throw new EngineError("invalid-state", "El thread ya está cerrado.");
+        const child = await engine.create({
+          kind: "repo",
+          repoPath: parent.repo.path,
+          baseBranch: parent.repo.branch,
+          title: draft.title,
+          prompt: draft.prompt,
+          agent: draft.agent,
+          autonomy: parent.autonomy === "read-only" ? "ask" : parent.autonomy,
+          parentId: threadId,
+          ...(childId !== undefined ? { threadId: childId } : {}),
+          ...(capabilityToken !== undefined ? { capabilityToken } : {}),
+        });
+        const current = requireThread(threadId);
+        update(threadId, {
+          counters: {
+            ...current.counters,
+            subtasks: current.counters.subtasks + 1,
+          },
+        });
+        text = `Sub-tarea «${draft.title}» aprobada: thread ${child.id}, rama ${child.repo?.branch}. Consulta su avance con thread_subtask_status e intégrala en tu rama con thread_integrate_subtask cuando termine.`;
+      } else
+        text = `Sub-tarea «${draft.title}» rechazada por el dueño.${parsed.data.answer.text ? ` ${parsed.data.answer.text}` : ""}`;
+      append(threadId, [
+        {
+          type: "request.resolved",
+          threadId,
+          at: now(),
+          requestId,
+          status: "answered",
+          answer: parsed.data.answer,
+          origin: parsed.data.origin,
+        },
+      ]);
+      // The agent learns the answer in its next turn, even if one is running.
+      const state = live(threadId);
+      appendItem(threadId, null, {
+        kind: "user_message",
+        text,
+        delivery: state.turn ? "queue" : "send",
+        attachments: [],
+      });
+      state.queue.push({ text, attachments: [] });
+      void kick(threadId);
+      return store.getRequest(requestId) as UserRequest;
+    },
+
+    /** thread_subtask_status: the parent's children and where they stand. */
+    async subtasks(threadId: string) {
+      requireThread(threadId);
+      const children = store.listThreads({
+        parentId: threadId,
+        includeArchived: true,
+      });
+      return Promise.all(
+        children.map(async (child) => {
+          const items = store.snapshot(child.id)?.items ?? [];
+          const last = items.findLast(
+            (item) => item.kind === "assistant_message",
+          );
+          const diff = await engine.diff(child.id).catch(() => []);
+          return {
+            id: child.id,
+            title: child.title,
+            status: child.status,
+            busy: Boolean(lives.get(child.id)?.turn),
+            branch: child.repo?.branch ?? null,
+            agent: child.agent,
+            closeMode: child.closeMode,
+            lastMessage:
+              last && "text" in last ? String(last.text).slice(-2000) : null,
+            diffstat: diff.map(({ path, additions, deletions }) => ({
+              path,
+              additions,
+              deletions,
+            })),
+          };
+        }),
+      );
+    },
+
+    /** thread_integrate_subtask: merges a finished child into its parent. */
+    async integrateSubtask(threadId: string, childId: string) {
+      const parent = requireThread(threadId);
+      const child = store.getThread(childId);
+      if (!child || child.parentId !== threadId)
+        throw new EngineError("not-found", "Sub-tarea no encontrada.");
+      if (!parent.repo || child.repo?.baseBranch !== parent.repo.branch)
+        throw new EngineError(
+          "invalid",
+          "La sub-tarea no parte de la rama de este thread.",
+        );
+      if (lives.get(childId)?.turn || child.status === "setting-up")
+        throw new EngineError(
+          "invalid-state",
+          "La sub-tarea sigue trabajando; espera a que termine su turno.",
+        );
+      const thread = await engine.close(childId, {
+        mode: "merge",
+        title: commitTitle(child.title, "sub-tarea"),
+      });
+      appendItem(threadId, null, {
+        kind: "notice",
+        level: "info",
+        code: "subtask-integrated",
+        text: `Sub-tarea «${child.title}» integrada en ${parent.repo.branch}.`,
+      });
+      return { integrated: true, thread };
     },
 
     /** thread_report_review: the verdict of the review stage's turn. */

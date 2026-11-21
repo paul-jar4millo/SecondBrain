@@ -77,7 +77,8 @@ export function RequestCard({
           {request.origin ? ` ${ORIGIN[request.origin] ?? ""}` : ""}
           {answerSummary(request) ? `: ${answerSummary(request)}` : ""}
         </p>
-      ) : request.kind === "approval" && !request.options?.length ? (
+      ) : (request.kind === "approval" || request.kind === "subtask") &&
+        !request.options?.length ? (
         <div className="thread-request-actions">
           <button
             type="button"
@@ -85,7 +86,7 @@ export function RequestCard({
             disabled={busy}
             onClick={() => void submit({ approved: true })}
           >
-            Aprobar
+            {request.kind === "subtask" ? "Crear sub-tarea" : "Aprobar"}
           </button>
           <button
             type="button"

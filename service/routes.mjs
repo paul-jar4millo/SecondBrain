@@ -968,6 +968,26 @@ for (const [
     anyQuery,
   ],
   [
+    "POST /threads/agent/subtask",
+    true,
+    z
+      .object({
+        title: z.string().min(1).max(200),
+        prompt: z.string().min(1).max(100_000),
+        agent: threadAgent.optional(),
+        reason: z.string().max(5_000).optional(),
+      })
+      .strict(),
+    anyQuery,
+  ],
+  ["GET /threads/agent/subtasks", true, object, z.object({}).strict()],
+  [
+    "POST /threads/agent/subtasks/integrate",
+    true,
+    z.object({ id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/) }).strict(),
+    anyQuery,
+  ],
+  [
     "POST /threads/agent/review",
     true,
     z
