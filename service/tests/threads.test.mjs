@@ -10,6 +10,7 @@ import { getCsrfHeaders } from "./helpers/csrf.mjs";
 
 let THREAD = "thr_abc1234567";
 const REQUEST = "req_def1234567";
+const SUBTASK = "req_sub1234567";
 
 /** A launcher that answers the thread API from memory. */
 async function fakeLauncher(t) {
@@ -75,6 +76,25 @@ async function fakeLauncher(t) {
       return res.end('id: 4\ndata: {"type":"event"}\n\n');
     }
     if (url === "/inbox") return json(200, { entries: [] });
+    const subtask = {
+      id: SUBTASK,
+      threadId: THREAD,
+      kind: "subtask",
+      title: "Sub-tarea: Docs",
+      body: "",
+      subtask: { title: "Docs", prompt: "b", agent: { engine: "codex" } },
+      status: "open",
+    };
+    if (url === `/threads/${THREAD}/subtasks` && req.method === "POST")
+      return json(201, { request: subtask });
+    if (url === `/threads/${THREAD}/requests/${SUBTASK}`)
+      return req.method === "GET"
+        ? json(200, { request: subtask })
+        : json(200, { request: { ...subtask, status: "answered" } });
+    if (/^\/threads\/thr_[^/]+\/subtasks$/.test(url) && req.method === "GET")
+      return json(200, { subtasks: [] });
+    if (/^\/threads\/[^/]+\/subtasks\/thr_[^/]+\/integrate$/.test(url))
+      return json(200, { integrated: true });
     if (url === `/threads/${THREAD}/review`)
       return json(201, { recorded: true, round: 1, verdict: data.verdict });
     if (url === `/threads/${THREAD}/handoff`)
@@ -188,6 +208,51 @@ test("threads are relayed to the launcher with a credential per thread", async (
     body: JSON.stringify({ toStage: "implement", narrative: "Plan listo" }),
   });
   assert.equal(handoff.status, 202);
+  // Subtasks: the agent asks, the owner approves and the child thread gets
+  // its own credential; integrating the child revokes it.
+  const asks = await fetch(`${base}/threads/agent/subtask`, {
+    method: "POST",
+    headers: agent,
+    body: JSON.stringify({ title: "Docs", prompt: "b" }),
+  });
+  assert.equal(asks.status, 201);
+  assert.equal((await asks.json()).solicitud.kind, "subtask");
+  const approved = await fetch(`${base}/threads/answer`, {
+    method: "POST",
+    headers: owner,
+    body: JSON.stringify({
+      id: THREAD,
+      requestId: SUBTASK,
+      answer: { approved: true },
+    }),
+  });
+  assert.equal(approved.status, 200);
+  const approval = launcher.seen.findLast(
+    (s) =>
+      s.url === `/threads/${THREAD}/requests/${SUBTASK}` && s.method === "POST",
+  );
+  assert.match(approval.data.childId, /^thr_[0-9a-f]{20}$/);
+  assert.match(approval.data.capabilityToken, /^sbcap_[a-f0-9]{48}$/);
+  const childAgent = {
+    authorization: `Bearer ${approval.data.capabilityToken}`,
+    "content-type": "application/json",
+  };
+  assert.equal(
+    (await fetch(`${base}/threads/agent/subtasks`, { headers: childAgent }))
+      .status,
+    200,
+  );
+  const integrated = await fetch(`${base}/threads/agent/subtasks/integrate`, {
+    method: "POST",
+    headers: agent,
+    body: JSON.stringify({ id: approval.data.childId }),
+  });
+  assert.equal(integrated.status, 200);
+  assert.notEqual(
+    (await fetch(`${base}/threads/agent/subtasks`, { headers: childAgent }))
+      .status,
+    200,
+  );
   const review = await fetch(`${base}/threads/agent/review`, {
     method: "POST",
     headers: agent,

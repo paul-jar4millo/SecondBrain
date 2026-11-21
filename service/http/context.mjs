@@ -281,6 +281,9 @@ export async function createContext(options) {
       case "POST /threads/agent/ask":
       case "POST /threads/agent/handoff":
       case "POST /threads/agent/review":
+      case "POST /threads/agent/subtask":
+      case "GET /threads/agent/subtasks":
+      case "POST /threads/agent/subtasks/integrate":
       case "GET /threads/agent/request":
         requireAny("user.ask");
         return cap;

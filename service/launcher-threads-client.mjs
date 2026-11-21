@@ -58,6 +58,24 @@ export function createThreadsClient({ base, secret, request, Failure }) {
      * @param {unknown} id
      * @param {unknown} data
      */
+    requestSubtask: (id, data) =>
+      request(`/threads/${thread(id)}/subtasks`, data),
+    /** @param {unknown} id */
+    subtasks: (id) => request(`/threads/${thread(id)}/subtasks`),
+    /**
+     * @param {unknown} id
+     * @param {unknown} childId
+     */
+    integrateSubtask: (id, childId) =>
+      request(
+        `/threads/${thread(id)}/subtasks/${thread(childId)}/integrate`,
+        {},
+        280_000,
+      ),
+    /**
+     * @param {unknown} id
+     * @param {unknown} data
+     */
     review: (id, data) => request(`/threads/${thread(id)}/review`, data),
     /**
      * @param {unknown} id

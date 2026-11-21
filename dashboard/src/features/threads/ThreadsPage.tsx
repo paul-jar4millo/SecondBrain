@@ -164,6 +164,12 @@ function ThreadDetail({
         </Link>
         <div className="thread-header-text">
           <h2>{thread.title}</h2>
+          {thread.parentId && (
+            <p className="thread-list-meta">
+              Sub-tarea de{" "}
+              <Link to={`/threads/${thread.parentId}`}>su thread padre</Link>
+            </p>
+          )}
           <p className="thread-list-meta">
             <span className="thread-status" data-status={thread.status}>
               {STATUS_LABEL[thread.status]}
