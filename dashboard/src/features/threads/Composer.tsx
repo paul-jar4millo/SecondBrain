@@ -42,19 +42,21 @@ export function AgentPicker({
   choice,
   onChoice,
   models,
+  label = "Agente",
 }: {
   engine: Engine;
   onEngine: (engine: Engine) => void;
   choice: ModelChoice;
   onChoice: (choice: ModelChoice) => void;
   models: Record<string, Model[]>;
+  label?: string;
 }) {
   return (
     <div className="thread-agent-picker">
       <label>
-        Agente
+        {label}
         <select
-          aria-label="Agente"
+          aria-label={label}
           value={engine}
           onChange={(e) => onEngine(e.target.value as Engine)}
         >

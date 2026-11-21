@@ -5,6 +5,7 @@ import { ThreadStatus } from "../../../contracts/src/index.ts";
 import type { Store } from "../store/event-log.ts";
 import { EngineError, type ThreadEngine } from "../engine/thread-engine.ts";
 import { streamGlobal, streamThread } from "./stream.ts";
+import { FLOW_TEMPLATES } from "../engine/flows.ts";
 
 const MAX_BODY = 1024 * 1024;
 const ID = "(thr_[0-9A-Za-z_-]{6,64})";
@@ -91,6 +92,11 @@ export function createThreadsHttp({
       "GET",
       /^\/threads\/stream$/,
       (_m, req, res, url) => streamGlobal(req, res, url, { store }),
+    ],
+    [
+      "GET",
+      /^\/flows$/,
+      (_m, _req, res) => send(res, 200, { flows: FLOW_TEMPLATES }),
     ],
     [
       "GET",
@@ -201,7 +207,7 @@ export function createThreadsHttp({
     res: ServerResponse,
     url: URL,
   ): Promise<boolean> {
-    if (!/^\/(threads|inbox)(\/|$)/.test(url.pathname)) return false;
+    if (!/^\/(threads|inbox|flows)(\/|$)/.test(url.pathname)) return false;
     try {
       for (const [method, pattern, fn] of routes) {
         const match = pattern.exec(url.pathname);

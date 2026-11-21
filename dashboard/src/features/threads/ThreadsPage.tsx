@@ -169,6 +169,9 @@ function ThreadDetail({
               {STATUS_LABEL[thread.status]}
             </span>
             {pending > 0 && ` · ${pending} pendiente${pending > 1 ? "s" : ""}`}
+            {thread.flow &&
+              thread.flow.stages.length > 1 &&
+              ` · Etapa ${thread.stageIndex + 1}/${thread.flow.stages.length}: ${thread.flow.stages[thread.stageIndex]?.name ?? ""}`}
             {thread.repo &&
               ` · ${thread.repo.branch} → ${thread.repo.baseBranch}`}
             {thread.prUrl && (
