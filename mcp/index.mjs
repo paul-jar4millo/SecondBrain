@@ -83,7 +83,7 @@ export async function resolveServerCapability({ baseUrl, token }) {
     return null;
   }
   try {
-    const res = await fetch(`${baseUrl}/agentes/mi-capacidad`, {
+    const res = await fetch(`${baseUrl}/agents/self-capability`, {
       headers: { authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(5000),
     });
@@ -205,7 +205,7 @@ export function createBrainMcp({
   /** @param {WaitOptions} options */
   const waitRequestBySegments = ({ id, timeout = 300_000 }) =>
     waitInSegments({
-      path: "/solicitudes/esperar",
+      path: "/requests/wait",
       payloadBuilder: (segment) => ({ id, timeout: segment }),
       timeout,
       done: (result) => result?.solicitud?.status !== "pendiente",
@@ -561,7 +561,7 @@ export function createBrainMcp({
       workOrderId,
       requestId,
     }) =>
-      api("/solicitudes/preguntar", {
+      api("/requests/ask", {
         ...(title ? { titulo: title } : {}),
         pregunta: question,
         ...(options ? { opciones: options } : {}),
@@ -575,7 +575,7 @@ export function createBrainMcp({
     "usuario_consultar_respuesta",
     "Consulta sin bloquear el estado y la respuesta recibida de una solicitud persistente por su identificador.",
     { id: requestIdSchema },
-    ({ id }) => api(`/solicitudes/detalle?id=${encodeURIComponent(id)}`),
+    ({ id }) => api(`/requests/detail?id=${encodeURIComponent(id)}`),
   );
   tool(
     "usuario_esperar_respuesta",
@@ -615,7 +615,7 @@ export function createBrainMcp({
         .max(20)
         .optional(),
     },
-    (args) => api("/threads/agente/preguntar", args),
+    (args) => api("/threads/agent/ask", args),
     false,
   );
   return server;
@@ -637,7 +637,7 @@ export async function startMcp() {
   const server = createBrainMcp({
     baseUrl,
     token,
-    actor: process.env.SB_AGENTE,
+    actor: process.env.SB_AGENT ?? process.env.SB_AGENTE,
     sessionId: process.env.SB_SESSION_ID,
     descargasLocales: true,
     allowedOperations,

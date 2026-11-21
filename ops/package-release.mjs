@@ -12,43 +12,12 @@ import { workspaceLock } from "./release-lock.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-/**
- * Repository folder → folder in the release. The launcher lives in launcher/
- * in the repository but stays lanzador/ in the release, because systemd units,
- * the deploy helper and the stable entry points on the hosts use that path.
- */
+/** Repository folder to runtime folder. */
 export const RELEASE_MODULES = /** @type {const} */ ([
   ["service", "service"],
   ["mcp", "mcp"],
-  ["launcher", "lanzador"],
+  ["launcher", "launcher"],
 ]);
-
-/**
- * Hosts installed before the English renaming run a compatibility helper
- * (/usr/local/lib/secondbrain/launcher-compatible.mjs) that reads the session
- * registry version from lanzador/registro-version.mjs as REGISTRO_VERSION.
- * Without that file it keeps the previous launcher release. Ship the old marker
- * next to the new one until every host runs the current helper; the thread
- * launcher ignores the old index, which the A9 data step removes.
- * @param {string} root
- * @param {string} target
- */
-async function writeLegacyRegistryMarker(root, target) {
-  const marker = await readFile(
-    path.join(root, "launcher/version-registry.mjs"),
-    "utf8",
-  );
-  const version =
-    /^\s*export const SESSION_REGISTRY_VERSION = ([1-9]\d*);\s*$/m.exec(
-      marker,
-    )?.[1];
-  if (!version)
-    throw new Error("launcher/version-registry.mjs no declara la versión.");
-  await writeFile(
-    path.join(target, "lanzador/registro-version.mjs"),
-    `// Legacy marker for host helpers installed before v0.2.0.\nexport const REGISTRO_VERSION = ${version};\n`,
-  );
-}
 
 /**
  * Runtime sources: .mjs and native TypeScript (ADR 0011), never declarations.
@@ -102,28 +71,41 @@ async function packageContracts(root, target) {
 /**
  * Explicit inputs: never copy an entire checkout or runtime data directory.
  * @param {string} destination
- * @param {{ sourceRoot?: string }} [options]
+ * @param {{ sourceRoot?: string, serviceImage?: boolean, nativeHost?: boolean }} [options]
  */
 
-export async function packageRelease(destination, { sourceRoot = root } = {}) {
+export async function packageRelease(
+  destination,
+  { sourceRoot = root, serviceImage = false, nativeHost = false } = {},
+) {
   const root = path.resolve(sourceRoot);
   const target = path.resolve(destination);
-  const source = await stat(path.join(root, "dashboard/dist/index.html"));
-  if (!source.isFile()) throw new Error("Falta compilar dashboard/dist.");
+  if (serviceImage && nativeHost)
+    throw new Error("Packaging modes are mutually exclusive.");
   await mkdir(target, { recursive: true });
   if ((await readdir(target)).length)
     throw new Error("El destino del paquete debe estar vacío.");
-  await cp(
-    path.join(root, "dashboard/dist"),
-    path.join(target, "dashboard/dist"),
-    { recursive: true },
-  );
+  if (!nativeHost) {
+    const source = await stat(path.join(root, "dashboard/dist/index.html"));
+    if (!source.isFile())
+      throw new Error("Build dashboard/dist before packaging.");
+    await cp(
+      path.join(root, "dashboard/dist"),
+      path.join(target, "dashboard/dist"),
+      { recursive: true },
+    );
+  }
   // One lockfile in the repository (npm workspaces); each released module
   // gets its own slice, so the hosts keep installing modules one by one.
   const rootLock = JSON.parse(
     await readFile(path.join(root, "package-lock.json"), "utf8"),
   );
-  for (const [module, output] of RELEASE_MODULES) {
+  const modules = RELEASE_MODULES.filter(
+    ([module]) =>
+      !(serviceImage && module === "launcher") &&
+      !(nativeHost && module === "service"),
+  );
+  for (const [module, output] of modules) {
     await mkdir(path.join(target, output));
     await writeFile(
       path.join(target, output, "package-lock.json"),
@@ -173,13 +155,20 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
         }
     }
   }
-  await writeLegacyRegistryMarker(root, target);
   await packageContracts(root, target);
-  await mkdir(path.join(target, "lanzador/skills"));
+  for (const [, output] of modules)
+    if (
+      !JSON.parse(
+        await readFile(path.join(target, output, "package.json"), "utf8"),
+      ).private
+    )
+      throw new Error("SecondBrain modules must be private.");
+  if (serviceImage) return target;
+  await mkdir(path.join(target, "launcher/skills"));
   for (const skill of ["resumen-matutino"])
     await cp(
       path.join(root, `launcher/skills/${skill}.md`),
-      path.join(target, `lanzador/skills/${skill}.md`),
+      path.join(target, `launcher/skills/${skill}.md`),
     );
   // Product skills: only each skill folder's SKILL.md, so the catalog
   // hashes the same bytes in the release and nothing else from the folder ships.
@@ -195,10 +184,10 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
         throw e;
       });
     if (!isFile) continue;
-    await mkdir(path.join(target, "lanzador/skills", entry.name));
+    await mkdir(path.join(target, "launcher/skills", entry.name));
     await cp(
       file,
-      path.join(target, "lanzador/skills", entry.name, "SKILL.md"),
+      path.join(target, "launcher/skills", entry.name, "SKILL.md"),
     );
   }
   await cp(path.join(root, "ops/launcher"), path.join(target, "ops/lanzador"), {
@@ -261,17 +250,45 @@ export async function packageRelease(destination, { sourceRoot = root } = {}) {
       await cp(path.join(root, source), path.join(target, destination));
     }
   }
-  await cp(path.join(root, "ops/compat"), path.join(target, "server"), {
-    recursive: true,
-  });
-  // Verify the manifests are private before distributing any software package.
-  for (const [, module] of RELEASE_MODULES) {
-    if (
-      !JSON.parse(
-        await readFile(path.join(target, module, "package.json"), "utf8"),
-      ).private
-    )
-      throw new Error("Los módulos de SecondBrain deben ser privados.");
+  for (const folder of ["agents", "migration"]) {
+    const input = path.join(root, "ops", folder);
+    await cp(input, path.join(target, "ops", folder), {
+      recursive: true,
+      filter: (file) =>
+        !/(?:^|[\\/])(?:node_modules|tests)(?:[\\/]|$)/.test(file) &&
+        !/\.(?:env|log)$/.test(file),
+    }).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+  }
+  for (const [source, output] of [
+    ["launcher/resumen-matutino.sh", "launcher/morning-summary.sh"],
+    ["aviso/enviar-aviso.sh", "aviso/send-notice.sh"],
+  ]) {
+    const targetFile = path.join(target, "ops", output);
+    await mkdir(path.dirname(targetFile), { recursive: true });
+    await cp(path.join(root, "ops", source), targetFile).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+  }
+  // Stable entry points for existing units and MCP clients.
+  await mkdir(path.join(target, "server"));
+  for (const [entry, module, method] of [
+    ["index", "service/index", "startService"],
+    ["lanzador", "launcher/index", "arrancar"],
+    ["mcp", "mcp/index", "startMcp"],
+  ]) {
+    if (nativeHost && entry === "index") continue;
+    await writeFile(
+      path.join(target, "server", entry + ".mjs"),
+      "import { " +
+        method +
+        ' } from "../' +
+        module +
+        '.mjs";\nawait ' +
+        method +
+        "();\n",
+    );
   }
   return target;
 }
@@ -280,7 +297,15 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
+  const [destination, ...flags] = process.argv.slice(2);
+  if (
+    flags.some((flag) => !["--service-image", "--native-host"].includes(flag))
+  )
+    throw new Error("Unknown packaging option.");
   console.log(
-    await packageRelease(process.argv[2] || path.join(root, "artifacts/app")),
+    await packageRelease(destination || path.join(root, "artifacts/app"), {
+      serviceImage: flags.includes("--service-image"),
+      nativeHost: flags.includes("--native-host"),
+    }),
   );
 }

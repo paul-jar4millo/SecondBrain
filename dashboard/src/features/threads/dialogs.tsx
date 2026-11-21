@@ -79,13 +79,13 @@ export function NewThreadDialog({
     void Promise.all([
       threadsApi.projects().catch((): string[] => []),
       projectId
-        ? agentApi("/agentes/espacios")
+        ? agentApi("/agents/workspaces")
             .then((result) => result as ProjectLinks)
             .catch(() => null)
         : null,
     ]).then(([list, links]) => {
       if (!active) return;
-      const linked = projectId ? links?.vinculos[projectId] : null;
+      const linked = projectId ? links?.links[projectId] : null;
       setProjects(list);
       setProject(linked && list.includes(linked) ? linked : "");
       setLoadingProjects(false);

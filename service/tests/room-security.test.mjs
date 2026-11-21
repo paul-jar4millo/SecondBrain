@@ -144,7 +144,7 @@ test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificado
   assert.equal(dsDenied.status, 403);
 
   // Mint investigacion token for direct fetch boundary testing
-  const resCapInv = await fetch(`${baseApi}/agentes/capacidades/token`, {
+  const resCapInv = await fetch(`${baseApi}/agents/capabilities/token`, {
     method: "POST",
     headers: ownerHdrs,
     body: JSON.stringify({
@@ -160,7 +160,7 @@ test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificado
   // Read routes allowed
   assert.equal(
     (
-      await fetch(`${baseApi}/agentes/mi-capacidad`, {
+      await fetch(`${baseApi}/agents/self-capability`, {
         headers: { authorization: `Bearer ${invToken}` },
       })
     ).status,
@@ -210,7 +210,7 @@ test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificado
       { area: "notas", name: "x.txt", encoding: "utf8", content: "QQ" },
     ],
     [
-      "POST /efectos/preparar",
+      "POST /effects/prepare",
       {
         category: "external_message",
         action: "send_email",
@@ -249,7 +249,7 @@ test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificado
     ],
     [
       "POST",
-      "/efectos/preparar",
+      "/effects/prepare",
       {
         category: "external_message",
         action: "send_email",
@@ -293,7 +293,7 @@ test("B/E: auth:true impone sbcap_ en fetch directo, rechaza headers falsificado
 
   assert.equal(
     (
-      await fetch(`${baseApi}/agentes/mi-capacidad`, {
+      await fetch(`${baseApi}/agents/self-capability`, {
         headers: { authorization: `Bearer ${invToken}` },
       })
     ).status,
@@ -351,7 +351,7 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
     sessionId,
     profileId = "coordinacion",
   ) => {
-    const r = await fetch(`${baseApi}/agentes/capacidades/token`, {
+    const r = await fetch(`${baseApi}/agents/capabilities/token`, {
       method: "POST",
       headers: ownerHdrs,
       body: JSON.stringify({ memberId, actor, sessionId, profileId }),
@@ -365,7 +365,7 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
     "66666666-6666-4666-8666-666666666666",
     "ejecucion",
   );
-  const blockedExec = await fetch(`${baseApi}/efectos/preparar`, {
+  const blockedExec = await fetch(`${baseApi}/effects/prepare`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${execOnlyToken}`,
@@ -395,7 +395,7 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
   );
 
   // (i) Mismatched contentHash MUST fail 400
-  const mismatched = await fetch(`${baseApi}/efectos/preparar`, {
+  const mismatched = await fetch(`${baseApi}/effects/prepare`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${mentaToken}`,
@@ -414,7 +414,7 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
   assert.equal(mismatched.status, 400);
 
   // (ii) 17000 chars MUST fail 400 without silently truncating
-  const oversized = await fetch(`${baseApi}/efectos/preparar`, {
+  const oversized = await fetch(`${baseApi}/effects/prepare`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${mentaToken}`,
@@ -432,7 +432,7 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
 
   // (iii) Explicit input.id collision with distinct requestId MUST fail 409 without overwriting original
   const fixedId = randomUUID();
-  const firstPrep = await fetch(`${baseApi}/efectos/preparar`, {
+  const firstPrep = await fetch(`${baseApi}/effects/prepare`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${mentaToken}`,
@@ -456,7 +456,7 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
     sha256("Primer contenido exacto"),
   );
 
-  const collision = await fetch(`${baseApi}/efectos/preparar`, {
+  const collision = await fetch(`${baseApi}/effects/prepare`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${mentaToken}`,
@@ -473,9 +473,9 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
   });
   assert.equal(collision.status, 409);
 
-  // Owner inspects exact content/changes/contentHash/recipient/scope/expiresAt via /efectos and /solicitudes
+  // Owner inspects exact content/changes/contentHash/recipient/scope/expiresAt via /effects and /requests
   const ownerList = await (
-    await fetch(`${baseApi}/efectos`, { headers: ownerHdrs })
+    await fetch(`${baseApi}/effects`, { headers: ownerHdrs })
   ).json();
   const ownerOp = ownerList.operaciones.find((o) => o.id === fixedId);
   assert.equal(ownerOp.content, "Primer contenido exacto");
@@ -486,7 +486,7 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
   assert.ok(ownerOp.expiresAt);
 
   const reqsJson = await (
-    await fetch(`${baseApi}/solicitudes`, { headers: ownerHdrs })
+    await fetch(`${baseApi}/requests`, { headers: ownerHdrs })
   ).json();
   const approvalReq = reqsJson.solicitudes.find(
     (s) => s.id === firstJson.operacion.approvalId,
@@ -494,20 +494,17 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
   assert.equal(approvalReq.content, "Primer contenido exacto");
 
   // Sibling agent lira CANNOT read menta's pending effect, solicitud, or execute it
-  const siblingDetail = await fetch(
-    `${baseApi}/efectos/detalle?id=${fixedId}`,
-    {
-      headers: { authorization: `Bearer ${liraToken}` },
-    },
-  );
+  const siblingDetail = await fetch(`${baseApi}/effects/detail?id=${fixedId}`, {
+    headers: { authorization: `Bearer ${liraToken}` },
+  });
   assert.equal(siblingDetail.status, 403);
   const siblingReqDetail = await fetch(
-    `${baseApi}/solicitudes/detalle?id=${firstJson.operacion.approvalId}`,
+    `${baseApi}/requests/detail?id=${firstJson.operacion.approvalId}`,
     { headers: { authorization: `Bearer ${liraToken}` } },
   );
   assert.equal(siblingReqDetail.status, 403);
   const siblingList = await (
-    await fetch(`${baseApi}/efectos`, {
+    await fetch(`${baseApi}/effects`, {
       headers: { authorization: `Bearer ${liraToken}` },
     })
   ).json();
@@ -519,7 +516,7 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
   // Owner approves, menta executes, runner verifies un-truncated exact bytes + matching hash
   const exact16000 = "A".repeat(15997) + "FIN";
   const maxPrep = await (
-    await fetch(`${baseApi}/efectos/preparar`, {
+    await fetch(`${baseApi}/effects/prepare`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${mentaToken}`,
@@ -535,7 +532,7 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
       }),
     })
   ).json();
-  const decideRes = await fetch(`${baseApi}/solicitudes/responder`, {
+  const decideRes = await fetch(`${baseApi}/requests/answer`, {
     method: "POST",
     headers: ownerHdrs,
     body: JSON.stringify({
@@ -547,7 +544,7 @@ test("F: efectos rechazan (i) hash discordante 400, (ii) 17000 chars sin truncar
   });
   assert.equal(decideRes.status, 200);
 
-  const execRes = await fetch(`${baseApi}/efectos/ejecutar`, {
+  const execRes = await fetch(`${baseApi}/effects/execute`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${mentaToken}`,

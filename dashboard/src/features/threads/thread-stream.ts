@@ -51,7 +51,7 @@ export function useThread(id: string | undefined): ThreadFollow {
     const connect = (after: number) => {
       if (typeof EventSource === "undefined") return startPolling();
       source = new EventSource(
-        `/api/v1/threads/flujo?id=${encodeURIComponent(id)}&after=${after}`,
+        `/api/v1/threads/stream?id=${encodeURIComponent(id)}&after=${after}`,
       );
       source.onopen = () => {
         failures = 0;

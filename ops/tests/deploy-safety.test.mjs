@@ -21,7 +21,10 @@ async function runWait(t, responses) {
   let calls = 0;
   const server = createServer((req, res) => {
     assert.equal(req.headers.authorization, "Bearer synthetic-control");
-    assert.equal(req.url, "/threads?status=setting-up,running,closing");
+    assert.equal(
+      req.url,
+      "/threads?status=setting-up,running,waiting-user,closing",
+    );
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(responses[Math.min(calls++, responses.length - 1)]));
   });
@@ -81,11 +84,6 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
   const release = path.join(dir, "release");
   const host = path.join(dir, "host");
   const files = [
-    [
-      "ops/deploy/launcher-compatible.mjs",
-      "ops/deploy/launcher-compatible.mjs",
-      "usr/local/lib/secondbrain/launcher-compatible.mjs",
-    ],
     [
       "dashboard/ops/deploy-release.sh",
       "ops/deploy/deploy-release.sh",
@@ -173,11 +171,5 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
   assert.match(drift.output, /resumen-matutino\.timer/);
   assert.equal(await readFile(unit, "utf8"), "old installation\n");
   await writeFile(unit, installed);
-  await writeFile(
-    path.join(host, "usr/local/lib/secondbrain/launcher-compatible.mjs"),
-    "obsolete checker\n",
-  );
-  const checkerDrift = await run();
-  assert.equal(checkerDrift.code, 1);
-  assert.match(checkerDrift.output, /launcher-compatible\.mjs/);
+  assert.equal((await run()).code, 0);
 });

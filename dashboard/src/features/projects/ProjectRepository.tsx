@@ -3,9 +3,9 @@ import { agentApi } from "../agents/agent-api";
 import { isDemo } from "../../core/store";
 export interface ProjectLinks {
   revision: number;
-  repositorios: string[];
+  repositories: string[];
   repositoryPaths?: Record<string, string>;
-  vinculos: Record<string, string | null>;
+  links: Record<string, string | null>;
 }
 export function ProjectRepository({
   projectId,
@@ -20,7 +20,7 @@ export function ProjectRepository({
   useEffect(() => {
     let live = true;
     if (!isDemo)
-      void agentApi("/agentes/espacios")
+      void agentApi("/agents/workspaces")
         .then((result) => {
           if (live) {
             setLinks(result as ProjectLinks);
@@ -40,23 +40,23 @@ export function ProjectRepository({
       <label>
         Repositorio del proyecto
         <select
-          value={links?.vinculos[projectId] || ""}
+          value={links?.links[projectId] || ""}
           disabled={!links || busy}
           onChange={async (event) => {
             const repository = event.target.value || null;
             setBusy(true);
             setError("");
             try {
-              const next = (await agentApi("/agentes/espacios", {
+              const next = (await agentApi("/agents/workspaces", {
                 id: projectId,
-                repositorio: repository,
+                repository,
                 revision: links!.revision,
               })) as ProjectLinks;
               setLinks(next);
               onChange?.(next);
             } catch (e) {
               setError((e as Error).message);
-              const next = await agentApi("/agentes/espacios").catch(
+              const next = await agentApi("/agents/workspaces").catch(
                 () => null,
               );
               if (next) {
@@ -69,7 +69,7 @@ export function ProjectRepository({
           }}
         >
           <option value="">Sin repositorio · espacio propio</option>
-          {links?.repositorios.map((repo) => (
+          {links?.repositories.map((repo) => (
             <option key={repo} value={repo}>
               {repo}
             </option>

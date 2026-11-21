@@ -58,7 +58,7 @@ test("una operación financiera de sala espera aprobación y la credencial de sa
   });
   let requests = [];
   for (let i = 0; i < 100 && requests.length === 0; i++) {
-    const r = await fetch(base + "/aprobaciones");
+    const r = await fetch(base + "/approvals");
     if (r.ok) requests = await r.json();
     if (!requests.length)
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -67,7 +67,7 @@ test("una operación financiera de sala espera aprobación y la credencial de sa
   const decision = JSON.stringify({ id: requests[0].id, aprobar: true });
   assert.equal(
     (
-      await fetch(base + "/aprobaciones/decidir", {
+      await fetch(base + "/approvals/decide", {
         method: "POST",
         headers,
         body: decision,
@@ -88,7 +88,7 @@ test("una operación financiera de sala espera aprobación y la credencial de sa
   };
   assert.equal(
     (
-      await fetch(base + "/aprobaciones/decidir", {
+      await fetch(base + "/approvals/decide", {
         method: "POST",
         headers: appHeaders,
         body: decision,
@@ -119,7 +119,7 @@ test("una operación financiera de sala espera aprobación y la credencial de sa
   });
   let pending;
   for (let i = 0; i < 100 && !pending; i++) {
-    const list = await (await fetch(base + "/aprobaciones")).json();
+    const list = await (await fetch(base + "/approvals")).json();
     pending = list.find((s) => s.estado === "pendiente");
     if (!pending) await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -128,7 +128,7 @@ test("una operación financiera de sala espera aprobación y la credencial de sa
   const intento = JSON.stringify({ id: pending.id, aprobar: true });
   assert.equal(
     (
-      await fetch(base + "/aprobaciones/decidir", {
+      await fetch(base + "/approvals/decide", {
         method: "POST",
         headers: appHeaders,
         body: intento,
@@ -151,7 +151,7 @@ test("una operación financiera de sala espera aprobación y la credencial de sa
   });
   pending = null;
   for (let i = 0; i < 100 && !pending; i++) {
-    const lista = await (await fetch(base + "/aprobaciones")).json();
+    const lista = await (await fetch(base + "/approvals")).json();
     pending = lista.find((s) => s.estado === "pendiente");
     if (!pending) await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -159,7 +159,7 @@ test("una operación financiera de sala espera aprobación y la credencial de sa
   const negativa = JSON.stringify({ id: pending.id, aprobar: false });
   assert.equal(
     (
-      await fetch(base + "/aprobaciones/decidir", {
+      await fetch(base + "/approvals/decide", {
         method: "POST",
         headers: appHeaders,
         body: negativa,
@@ -374,7 +374,7 @@ test("la ruta decide con requestId: reintento 200 repetido y otro id 409 con el 
   });
   let id;
   for (let i = 0; i < 100 && !id; i++) {
-    id = (await (await fetch(base + "/aprobaciones")).json())[0]?.id;
+    id = (await (await fetch(base + "/approvals")).json())[0]?.id;
     if (!id) await new Promise((r) => setTimeout(r, 10));
   }
   const csrf = await fetch(base + "/auth/csrf");
@@ -389,7 +389,7 @@ test("la ruta decide con requestId: reintento 200 repetido y otro id 409 con el 
       .join("; "),
   };
   const decide = async (cuerpo) => {
-    const r = await fetch(base + "/aprobaciones/decidir", {
+    const r = await fetch(base + "/approvals/decide", {
       method: "POST",
       headers,
       body: JSON.stringify(cuerpo),

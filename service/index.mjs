@@ -9,14 +9,18 @@ import { createContext } from "./http/context.mjs";
 import { prepareResponse, sendError } from "./http/middleware.mjs";
 import { serveStatic } from "./http/static.mjs";
 import { buildRoutes } from "./http/routes/index.mjs";
+import { legacyPaths } from "./http/legacy-paths.mjs";
 
 /** @import { ApplicationOptions, HttpRequest } from "./types.d.ts" */
 /** @import { ServerResponse } from "node:http" */
 
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
+const apiPrefix = "/api/v1";
 /** @param {ApplicationOptions} [options] */
 export async function createApplication(options = {}) {
   const context = await createContext(options);
+  const legacyHttpRoutes =
+    options.legacyHttpRoutes ?? process.env.SB_LEGACY_HTTP_ROUTES !== "off";
   const {
     root,
     dataDirectory,
@@ -45,12 +49,23 @@ export async function createApplication(options = {}) {
     prepareResponse(request, response, requestId, started, logger);
     try {
       // Parsing runs inside the try: an async handler that throws would kill the process.
-      let pathname;
+      let url;
       try {
-        pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+        url = new URL(request.url ?? "/", "http://localhost");
       } catch {
         throw new Failure("Ruta inválida.", 400);
       }
+      const successor =
+        legacyHttpRoutes && url.pathname.startsWith(apiPrefix + "/")
+          ? legacyPaths.get(url.pathname.slice(apiPrefix.length))
+          : undefined;
+      if (successor) {
+        response.setHeader("Deprecation", "@1795132800");
+        url.pathname = apiPrefix + successor;
+        // Body validation and request logging also use the canonical policy.
+        request.url = url.pathname + url.search;
+      }
+      const { pathname } = url;
       if (
         pathname === "/mcp" ||
         pathname.startsWith("/oauth/") ||
@@ -60,7 +75,7 @@ export async function createApplication(options = {}) {
       }
       if (pathname.startsWith("/api/")) {
         response.setHeader("Cache-Control", "no-store");
-        const route = pathname.slice("/api/v1".length),
+        const route = pathname.slice(apiPrefix.length),
           method = request.method;
         const policy = routePolicy(method, route);
         if (auth.isRoomAgent(request) && !policy?.room)
@@ -76,8 +91,7 @@ export async function createApplication(options = {}) {
           request,
           `${method} ${route}`,
         );
-        const consulta = new URL(request.url ?? "/", "http://localhost")
-          .searchParams;
+        const consulta = url.searchParams;
         if (
           policy &&
           !policy.query.safeParse(Object.fromEntries(consulta)).success
@@ -87,7 +101,14 @@ export async function createApplication(options = {}) {
         const required = (/** @type {string} */ name) =>
           /** @type {string} */ (consulta.get(name));
         /** @type {import("./http/route-types.d.ts").RouteRequest} */
-        const req = { request, response, consulta, required, callerCap };
+        const req = {
+          request,
+          response,
+          consulta,
+          required,
+          callerCap,
+          legacy: Boolean(successor),
+        };
         const routes = buildRoutes(context, req);
         const handler = routes[method + " " + route];
         if (handler) return await handler();

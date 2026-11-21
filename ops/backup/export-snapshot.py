@@ -5,6 +5,12 @@ import tarfile
 import posixpath
 from pathlib import PurePosixPath
 
+PROJECT_ROOTS = ('srv/sb-agente/proyectos', 'srv/sb-agent/projects')
+WORKSPACE_ROOTS = (
+    'var/lib/sb-agente/estado/lanzador/workspaces',
+    'var/lib/sb-agent/state/launcher/workspaces',
+)
+
 ROOTS = (
     'srv/secondbrain/vault',
     'var/lib/secondbrain/shared',
@@ -12,8 +18,9 @@ ROOTS = (
     'var/lib/secondbrain/operations',
     'var/lib/secondbrain/vault-git',
     'var/lib/secondbrain/auth.json',
-    'srv/sb-agente/proyectos',
+    *PROJECT_ROOTS,
     'srv/sb-agente/entregables',
+    'srv/sb-agent/deliverables',
     'srv/sb-agente/recuperado',
     'var/lib/sb-agente/claude/.credentials.json',
     'var/lib/sb-agente/codex/auth.json',
@@ -21,7 +28,8 @@ ROOTS = (
     'var/lib/sb-agente/.config/gh/hosts.yml',
     'var/lib/sb-agente/agentes.env',
     'var/lib/sb-agente/estado/lanzador/espacios.json',
-    'var/lib/sb-agente/estado/lanzador/workspaces',
+    'var/lib/sb-agent/state/launcher/espacios.json',
+    *WORKSPACE_ROOTS,
     'etc/secondbrain',
     'etc/sb-agente',
     'home/claude/homelab',
@@ -33,10 +41,12 @@ def selected(raw):
     name = PurePosixPath(raw)
     if not any(raw == root or raw.startswith(root + '/') for root in ROOTS):
         return False
-    if raw.startswith('var/lib/sb-agente/estado/lanzador/workspaces/') and CACHE_PARTS.intersection(name.parts[7:]):
-        return False
-    if raw.startswith('srv/sb-agente/proyectos/') and {'node_modules', '__pycache__'}.intersection(name.parts[3:]):
-        return False
+    for root in WORKSPACE_ROOTS:
+        if raw.startswith(root + '/') and CACHE_PARTS.intersection(name.relative_to(root).parts):
+            return False
+    for root in PROJECT_ROOTS:
+        if raw.startswith(root + '/') and {'node_modules', '__pycache__'}.intersection(name.relative_to(root).parts):
+            return False
     return True
 
 

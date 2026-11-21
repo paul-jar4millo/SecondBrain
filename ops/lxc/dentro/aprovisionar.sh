@@ -21,7 +21,7 @@ ssh_vault="/usr/bin/ssh -F /dev/null -i $clave_vault -o UserKnownHostsFile=$serv
 
 paso() { printf '\n== %s\n' "$*"; }
 como() { local u=$1; shift; runuser -u "$u" -- "$@"; }
-como_agente() { runuser -u sb-agente -- env -C "$agente" HOME="$agente" PATH="/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:$agente/.local/bin" "$@"; }
+como_agente() { runuser -u sb-agente -- env -C "$agente" HOME="$agente" PATH="/opt/sb-agente/cli/current/bin:/opt/sb-agente/node_modules/.bin:/opt/node/bin:/usr/bin:/bin:$agente/.local/bin" "$@"; }
 plantilla() { sed -e "s|@PROXY_IP@|$PROXY_IP|g" "$aqui/plantillas/$1"; }
 
 base() {
@@ -29,7 +29,7 @@ base() {
   apt-get update -qq
   apt-get upgrade -y -qq >/dev/null
   apt-get install -y -qq ca-certificates curl git nftables sudo python3 openssl xz-utils \
-    bubblewrap procps gh openssh-client restic >/dev/null
+    bubblewrap procps gh openssh-client restic podman >/dev/null
   echo 'LANG=C.UTF-8' >/etc/default/locale
   timedatectl set-timezone "$ZONA" 2>/dev/null || ln -sfn "/usr/share/zoneinfo/$ZONA" /etc/localtime
 
@@ -93,6 +93,7 @@ base() {
 
   paso "Helper de despliegue y MCP"
   printf '%s\n' "$HEALTH_PUBLICO" >/etc/secondbrain/health-url
+  printf 'ghcr.io/%s\n' "${REPO_APP,,}" >/etc/secondbrain/image-repository
   echo 'sb-runner ALL=(root) NOPASSWD: /usr/local/sbin/secondbrain-deploy *' >/etc/sudoers.d/secondbrain-deploy
   chmod 440 /etc/sudoers.d/secondbrain-deploy
   visudo -cq
@@ -113,29 +114,8 @@ EOF
   printf 'nameserver 1.1.1.1\nnameserver 9.9.9.9\n' >/etc/sb-agente/resolv.conf
   chmod 644 /etc/sb-agente/resolv.conf
 
-  paso "CLIs de los motores (Claude $CLAUDE_VERSION, Codex $CODEX_VERSION)"
-  cd /opt/sb-agente
-  [[ -f package.json ]] || printf '{"name":"sb-agente","private":true}\n' >package.json
-  npm install --save-exact --ignore-scripts --no-audit --no-fund --loglevel=error \
-    "@anthropic-ai/claude-code@$CLAUDE_VERSION" "@openai/codex@$CODEX_VERSION"
-  # Reviewed allowlist: this script only places the pinned native optional dependency.
-  echo "${CLAUDE_INSTALL_SHA256:?}  node_modules/@anthropic-ai/claude-code/install.cjs" | sha256sum --check --status
-  node node_modules/@anthropic-ai/claude-code/install.cjs
-  ./node_modules/.bin/claude --version | grep -q "$CLAUDE_VERSION"
-  cd - >/dev/null
-
-  paso "Antigravity ${AGY_VERSION:?} (paquete oficial verificado)"
-  if [[ ! -x $agente/.local/bin/agy ]]; then
-    local agy_tmp; agy_tmp=$(mktemp -d)
-    curl -fsSL -o "$agy_tmp/agy.tar.gz" "${AGY_URL:?}"
-    echo "${AGY_SHA512:?}  $agy_tmp/agy.tar.gz" | sha512sum --check --status
-    tar -xzf "$agy_tmp/agy.tar.gz" --no-same-owner -C "$agy_tmp"
-    local agy_binary
-    agy_binary=$(find "$agy_tmp" -type f -name antigravity -print -quit)
-    [[ -n $agy_binary ]] || { echo 'Falta el binario oficial de Antigravity' >&2; exit 1; }
-    install -o sb-agente -g sb-agente -m 700 "$agy_binary" "$agente/.local/bin/agy"
-    rm -rf -- "$agy_tmp"
-  fi
+  paso "Install pinned agent CLIs"
+  node "$aqui/operational/ops/agents/install.mjs"
   # User scopes need a real user manager; no provider is started by linger.
   loginctl enable-linger sb-agente
   systemctl start "user@$(id -u sb-agente).service"
@@ -212,7 +192,7 @@ vault() {
   fi
   como secondbrain git -C "$vault" config user.name SecondBrain
   como secondbrain git -C "$vault" config user.email secondbrain@localhost
-  if [[ -n $REPO_VAULT && ${ACTIVAR_AUTOMATIZACIONES:-0} == 1 ]]; then
+  if [[ -n $REPO_VAULT && ${ENABLE_AUTOMATIONS:-${ACTIVAR_AUTOMATIZACIONES:-0}} == 1 ]]; then
     systemctl enable --now secondbrain-vault-push.timer >/dev/null
   else
     systemctl disable --now secondbrain-vault-push.timer >/dev/null 2>&1 || true
@@ -233,7 +213,7 @@ desplegar() {
     rm -rf -- "/var/lib/sb-runner/incoming/$sha"
   fi
   paso "Lanzador"
-  SB_ENABLE_AUTOMATIONS="${ACTIVAR_AUTOMATIZACIONES:-0}" bash /opt/secondbrain/current/ops/lanzador/install.sh
+  SB_ENABLE_AUTOMATIONS="${ENABLE_AUTOMATIONS:-${ACTIVAR_AUTOMATIZACIONES:-0}}" bash /opt/secondbrain/current/ops/lanzador/install.sh
   node /opt/secondbrain/current/ops/deploy/configure.mjs --release /opt/secondbrain/current --parameters /etc/secondbrain/parameters.json
   systemctl daemon-reload
 }

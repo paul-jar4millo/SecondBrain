@@ -328,11 +328,11 @@ test("una operación de sala inválida se rechaza sin pedir aprobación y un rei
     ).status,
     404,
   );
-  assert.deepEqual(await (await call("/aprobaciones")).json(), []);
+  assert.deepEqual(await (await call("/approvals")).json(), []);
   const op = { op: "init", requestId: "already-applied" };
   assert.equal((await call("/finance/ops", op)).status, 200);
   assert.equal((await room(op)).status, 200);
-  assert.deepEqual(await (await call("/aprobaciones")).json(), []);
+  assert.deepEqual(await (await call("/approvals")).json(), []);
 });
 test("un cargo reintentado tras reiniciar no duplica saldo ni movimientos", async (t) => {
   const { app, root, call } = await appFixture(t);

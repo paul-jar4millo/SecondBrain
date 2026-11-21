@@ -48,7 +48,7 @@ export function ProjectDetail() {
         action={<Link to="/projects">Volver a proyectos</Link>}
       />
     );
-  const repository = links?.vinculos[project.id] ?? null;
+  const repository = links?.links[project.id] ?? null;
   const repositoryPath = repository
     ? links?.repositoryPaths?.[repository]
     : undefined;

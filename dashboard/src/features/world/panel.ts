@@ -550,7 +550,7 @@ export function mountPanel(
     if (loading) return;
     loading = true;
     try {
-      const result = (await api("/mundo/overview")) as WorldData;
+      const result = (await api("/world/overview")) as WorldData;
       const signature = JSON.stringify({ ...result, scannedAt: undefined });
       data = result;
       if (force || signature !== lastSignature) {
@@ -592,7 +592,7 @@ export function mountPanel(
   }
   async function documentDialog(path: string) {
     const doc = (await api(
-      "/mundo/document?path=" + encodeURIComponent(path),
+      "/world/document?path=" + encodeURIComponent(path),
     )) as { path: string; text: string };
     openDialog(
       path.split("/").at(-1)!,
@@ -677,7 +677,7 @@ export function mountPanel(
       return copy(taskPrompt(t!));
     },
     "task-complete": async (b) => {
-      await api("/mundo/tasks/status", {
+      await api("/world/tasks/status", {
         id: b.dataset.id,
         status: "completed",
       });
@@ -691,7 +691,7 @@ export function mountPanel(
         `<p>El encargo se conserva en el historial.</p><div class="form-actions" style="margin-top:20px">${button("Conservar encargo", "close")}${button("Cancelar encargo", "confirm-cancel", `data-id="${esc(b.dataset.id)}"`, "danger")}</div>`,
       ),
     "confirm-cancel": async (b) => {
-      await api("/mundo/tasks/status", {
+      await api("/world/tasks/status", {
         id: b.dataset.id,
         status: "cancelled",
       });
@@ -819,18 +819,18 @@ export function mountPanel(
     try {
       const values = Object.fromEntries(new FormData(form));
       if (form.id === "brief-form") {
-        await api("/mundo/briefs", values);
+        await api("/world/briefs", values);
         form.reset();
         delete $("#brief-slug").dataset.edited;
         toast("Brief guardado.");
       }
       if (form.id === "task-form") {
-        await api("/mundo/tasks", values);
+        await api("/world/tasks", values);
         dialog().close();
         toast("Encargo guardado en la cola.");
       }
       if (form.id === "agent-form") {
-        await api("/mundo/agents", {
+        await api("/world/agents", {
           id: form.dataset.id,
           enabled: (form.elements.namedItem("enabled") as HTMLInputElement)
             .checked,

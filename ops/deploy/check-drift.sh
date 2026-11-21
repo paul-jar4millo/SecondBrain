@@ -4,7 +4,7 @@ set -euo pipefail
 release=${1:?Falta release}
 root=${2:-}
 if [[ -f $root/etc/secondbrain/parameters.json && -f $release/ops/deploy/configure.mjs ]]; then
-  exec /opt/node/bin/node "$release/ops/deploy/configure.mjs" --release "$release" --root "${root:-/}" --parameters "$root/etc/secondbrain/parameters.json" --check
+  exec /opt/node/bin/node "$release/ops/deploy/configure.mjs" --release "$release" --root "${root:-/}" --parameters "$root/etc/secondbrain/parameters.json" --check --skip-helper
 fi
 drift=0
 check() {
@@ -15,7 +15,6 @@ check() {
   fi
 }
 check "$release/ops/deploy/deploy-release.sh" /usr/local/sbin/secondbrain-deploy
-check "$release/ops/deploy/launcher-compatible.mjs" /usr/local/lib/secondbrain/launcher-compatible.mjs
 for unit in secondbrain-lanzador.service claude-sb-agente.service resumen-matutino.service resumen-matutino.timer; do
   check "$release/ops/lanzador/$unit" "/etc/systemd/system/$unit"
 done

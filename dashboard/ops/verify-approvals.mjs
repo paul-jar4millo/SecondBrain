@@ -39,7 +39,7 @@ try {
     await page.addInitScript(() =>
       localStorage.setItem("sb-refugio-calidad", "baja"),
     );
-    await page.route("**/api/v1/aprobaciones", (route) =>
+    await page.route("**/api/v1/approvals", (route) =>
       route.fulfill({
         json: [
           {
