@@ -55,6 +55,7 @@ expiry unless pinned, 7-day trash. Attachments are untrusted data.
 | Tool              | Purpose                                                                   |
 | ----------------- | ------------------------------------------------------------------------- |
 | `thread_ask_user` | Ask the owner from inside a thread; the question shows inline in its view |
+| `thread_handoff` | Pass the thread to another stage of its flow; it happens when the turn ends, with a brief the system builds |
 
 ### Questions to the owner
 

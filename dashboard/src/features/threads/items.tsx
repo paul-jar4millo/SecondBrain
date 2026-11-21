@@ -213,9 +213,46 @@ export function MessageItem({ item }: { item: Item }) {
       return (
         <div className="thread-message" data-role="handoff">
           <p className="thread-work-title">
-            Traspaso a la etapa {item.toStage + 1}
+            Traspaso de la etapa {item.fromStage + 1} a la {item.toStage + 1}
           </p>
           <Markdown texto={item.narrative} />
+          {item.openItems.length > 0 && (
+            <>
+              <p className="thread-work-title">Pendientes</p>
+              <ul>
+                {item.openItems.map((text, i) => (
+                  <li key={i}>{text}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {(item.brief.files.length > 0 ||
+            item.brief.commands.length > 0 ||
+            item.brief.errors.length > 0) && (
+            <details>
+              <summary>
+                {item.brief.files.length} archivos ·{" "}
+                {item.brief.commands.length} comandos
+                {item.brief.failedTests.length > 0 &&
+                  ` · ${item.brief.failedTests.length} con tests fallidos`}
+                {item.brief.errors.length > 0 &&
+                  ` · ${item.brief.errors.length} errores`}
+              </summary>
+              <ul>
+                {item.brief.diffstat.map((f) => (
+                  <li key={f.path}>
+                    {f.path} (+{f.additions} −{f.deletions})
+                  </li>
+                ))}
+                {item.brief.failedTests.map((t, i) => (
+                  <li key={`t${i}`}>Tests fallidos: {t}</li>
+                ))}
+                {item.brief.errors.map((e, i) => (
+                  <li key={`e${i}`}>{e}</li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       );
     default:
