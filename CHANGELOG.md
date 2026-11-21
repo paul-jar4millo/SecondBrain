@@ -4,6 +4,29 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-11-21
+
+### Added
+
+- Flows: a thread can follow "Un agente" or "Planificar → Implementar →
+  Revisar", with an agent per stage; plan and review stages run read-only
+  (`GET /api/v1/flows`).
+- Autonomous hand-off (`thread_handoff`): the agent passes the thread to
+  the next stage when its turn ends, with a brief the system builds
+  (diffstat, commands, failed tests, errors) plus its narrative.
+- Cross review (`thread_report_review`): changes go back to the
+  implementer, approval leaves the thread ready for the owner, and the
+  third request for changes asks the owner to decide.
+- Subtasks with approval (`thread_request_subtask`,
+  `thread_subtask_status`, `thread_integrate_subtask`): a child thread
+  from the parent's branch, merged back without touching files on conflict.
+- `agent_usage` MCP tool; plan usage comes first from provider events.
+
+### Changed
+
+- Usage bars keep a reading while its window can still be running and
+  say when it was taken.
+
 ## [0.6.0] - 2026-11-21
 
 ### Removed
@@ -271,6 +294,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.7.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.7.0
 [0.6.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.6.0
 [0.5.3]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.3
 [0.5.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.2
