@@ -275,7 +275,8 @@ test(
         started: "wrong-start",
       }),
     );
-    const { acquireInstance } = await import("../instance.mjs");
+    const { acquireInstance } =
+      await import("../../contracts/src/node/instance.mjs");
     const release = await acquireInstance(dir);
     await release();
   },
