@@ -1,6 +1,6 @@
 {
   "name": "@secondbrain/contracts",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "Shared Zod 4 schemas for threads, items, events and commands (native TypeScript, no build).",
