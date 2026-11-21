@@ -5,6 +5,8 @@ import {
   lstat,
   chmod,
   realpath,
+  rename,
+  rm,
 } from "node:fs/promises";
 import path from "node:path";
 import net from "node:net";
@@ -37,7 +39,9 @@ function validate(p) {
   if (!/^([a-f0-9]{2}:){5}[a-f0-9]{2}$/i.test(p.mac))
     throw new Error("Invalid MAC");
   if (
-    !/^\/srv\/sb-agente\/proyectos(?:\/[A-Za-z0-9_-]+)*$/.test(p.remoteWorkdir)
+    !/^\/srv\/(?:sb-agente\/proyectos|sb-agent\/projects)(?:\/[A-Za-z0-9_-]+)*$/.test(
+      p.remoteWorkdir,
+    )
   )
     throw new Error("Invalid remote working directory");
 }
@@ -91,12 +95,13 @@ async function safeDestination(root, absolute) {
   }
   return candidate;
 }
-/** @param {{ root?: string, release: string, parameters: DeploymentParameters, check?: boolean }} options */
+/** @param {{ root?: string, release: string, parameters: DeploymentParameters, check?: boolean, skipHelper?: boolean }} options */
 export async function configure({
   root = "/",
   release,
   parameters,
   check = false,
+  skipHelper = false,
 }) {
   validate(parameters);
   root = await realpath(root);
@@ -115,11 +120,6 @@ export async function configure({
       "ops/deploy/deploy-release.sh",
       "/usr/local/sbin/secondbrain-deploy",
       0o755,
-    ],
-    [
-      "ops/deploy/launcher-compatible.mjs",
-      "/usr/local/lib/secondbrain/launcher-compatible.mjs",
-      0o644,
     ],
     [
       "ops/lxc/plantillas/secondbrain.service",
@@ -151,19 +151,45 @@ export async function configure({
     ["ops/homelab/prender-pc", "/usr/local/bin/prender-pc", 0o755],
     ["ops/homelab/estado-pc", "/usr/local/bin/estado-pc", 0o755],
   ];
+  const marker = await safeDestination(root, "/etc/secondbrain/english-layout");
+  const english = await lstat(marker)
+    .then((file) => file.isFile())
+    .catch((error) => {
+      if (error.code === "ENOENT") return false;
+      throw error;
+    });
+  const names = english ? await import("../migration/host-layout.mjs") : null;
   const files = await Promise.all(
-    mapping.map(async (entry) => {
-      const [source, target, mode] = /** @type {[string, string, number]} */ (
-        entry
-      );
-      let content = render(await readFile(path.join(release, source), "utf8"));
-      if (target.endsWith("/claude-sb-agente.service"))
-        content = content.replace(
-          /^WorkingDirectory=.*$/m,
-          "WorkingDirectory=" + p.remoteWorkdir,
+    mapping
+      .filter(
+        (entry) =>
+          !skipHelper || entry[1] !== "/usr/local/sbin/secondbrain-deploy",
+      )
+      .map(async (entry) => {
+        const [source, target, mode] = /** @type {[string, string, number]} */ (
+          entry
         );
-      return { target, mode, content };
-    }),
+        let content = render(
+          await readFile(path.join(release, source), "utf8"),
+        );
+        if (target.endsWith("/claude-sb-agente.service"))
+          content = content.replace(
+            /^WorkingDirectory=.*$/m,
+            "WorkingDirectory=" + p.remoteWorkdir,
+          );
+        const basename = target.split("/").at(-1);
+        const renderedTarget =
+          names && target.startsWith("/etc/systemd/system/") && basename
+            ? target.slice(0, -basename.length) + names.hostUnitName(basename)
+            : target;
+        return {
+          target:
+            names?.HOST_COMMANDS.find(([from]) => from === target)?.[1] ??
+            renderedTarget,
+          mode,
+          content: names ? names.hostUnitText(content) : content,
+        };
+      }),
   );
   files.push({
     target: "/etc/sb-agente/pc.json",
@@ -206,13 +232,19 @@ export async function configure({
         if (error.code !== "ENOENT") throw error;
       }
       if (!same) {
-        console.error("Configuración pendiente: " + item.target);
+        console.error("Configuration drift: " + item.target);
         drift++;
       }
     } else {
       await mkdir(path.dirname(dest), { recursive: true });
-      await writeFile(dest, item.content, { mode: item.mode });
-      await chmod(dest, item.mode);
+      const temp = dest + "." + process.pid + ".tmp";
+      await writeFile(temp, item.content, { flag: "wx", mode: item.mode });
+      try {
+        await chmod(temp, item.mode);
+        await rename(temp, dest);
+      } finally {
+        await rm(temp, { force: true });
+      }
     }
   }
   console.log(
@@ -242,6 +274,7 @@ if (
       release: value("--release"),
       parameters: JSON.parse(await readFile(value("--parameters"), "utf8")),
       check: args.includes("--check"),
+      skipHelper: args.includes("--skip-helper"),
     });
   } catch (error) {
     console.error(error.message);

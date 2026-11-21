@@ -4,7 +4,7 @@
 set -euo pipefail
 puerto="${SB_LANZADOR_PORT:-8092}"
 token="$(cat "${SB_CONTROL_TOKEN_FILE:-/var/lib/secondbrain/lanzador-token}")"
-skill="${SB_SKILL_RESUMEN:-/opt/secondbrain/current/lanzador/skills/resumen-matutino.md}"
+skill="${SB_SKILL_SUMMARY:-${SB_SKILL_RESUMEN:-/opt/secondbrain/current/launcher/skills/resumen-matutino.md}}"
 hoy="$(TZ=America/Mexico_City date +%F)"
 cuerpo="$(SB_PROMPT="$(cat "$skill")"$'\n\nHoy es '"$hoy"'.' SB_HOY="$hoy" \
   /opt/node/bin/node -e 'console.log(JSON.stringify({

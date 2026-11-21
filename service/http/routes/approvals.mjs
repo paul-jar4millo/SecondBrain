@@ -8,8 +8,8 @@ export const approvalRoutes = (ctx, req) => {
   const { actorOf, aprobaciones: approvals, auth } = ctx;
   const { request, response } = req;
   return {
-    "GET /aprobaciones": async () => send(response, 200, approvals.listar()),
-    "POST /aprobaciones/decidir": async () => {
+    "GET /approvals": async () => send(response, 200, approvals.listar()),
+    "POST /approvals/decide": async () => {
       const { id, aprobar: approve, requestId } = await body(request);
       let result;
       try {

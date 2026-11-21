@@ -5,6 +5,8 @@ import type { AppContext } from "./context.mjs";
 /** What a route handler knows about the request it is answering. */
 export interface RouteRequest {
   request: HttpRequest;
+  /** Whether the request used a temporary legacy route alias. */
+  legacy?: boolean;
   response: ServerResponse;
   /** Query parameters, already validated against the route's schema. */
   consulta: URLSearchParams;

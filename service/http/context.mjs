@@ -245,13 +245,13 @@ export async function createContext(options) {
       }
     };
     switch (routeKey) {
-      case "GET /agentes/mi-capacidad":
-      case "GET /agentes/herramientas/catalogo":
-      case "POST /agentes/herramientas/skills/resolver":
-      case "GET /efectos":
-      case "GET /efectos/detalle":
-      case "GET /solicitudes":
-      case "GET /solicitudes/detalle":
+      case "GET /agents/self-capability":
+      case "GET /agents/tools/catalog":
+      case "POST /agents/tools/skills/resolve":
+      case "GET /effects":
+      case "GET /effects/detail":
+      case "GET /requests":
+      case "GET /requests/detail":
         return cap;
       case "GET /vault/files":
       case "GET /vault/note":
@@ -276,20 +276,20 @@ export async function createContext(options) {
       case "POST /files/trash":
         requireAny("file.write", "vault.write", "artifact.publish");
         return cap;
-      case "POST /solicitudes/preguntar":
-      case "POST /solicitudes/esperar":
-      case "POST /threads/agente/preguntar":
-      case "GET /threads/agente/solicitud":
+      case "POST /requests/ask":
+      case "POST /requests/wait":
+      case "POST /threads/agent/ask":
+      case "GET /threads/agent/request":
         requireAny("user.ask");
         return cap;
-      case "POST /solicitudes/aprobacion":
-      case "POST /solicitudes/verificar-ejecucion":
-      case "POST /solicitudes/entrega":
-      case "POST /solicitudes/cerrar-turno":
+      case "POST /requests/approval":
+      case "POST /requests/verify-execution":
+      case "POST /requests/delivery":
+      case "POST /requests/close-turn":
         requireAny("effect.prepare", "user.ask");
         return cap;
-      case "POST /efectos/preparar":
-      case "POST /efectos/ejecutar":
+      case "POST /effects/prepare":
+      case "POST /effects/execute":
         requireAny("effect.prepare");
         return cap;
       default:

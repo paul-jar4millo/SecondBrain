@@ -4,7 +4,7 @@ import { setTimeout } from "node:timers/promises";
 // Waits until no thread is mid-turn, so the deploy can restart the launcher.
 // Read live state: an unreachable launcher or an unexpected answer must never
 // authorize a restart.
-const BUSY = "setting-up,running,closing";
+const BUSY = "setting-up,running,waiting-user,closing";
 
 try {
   const wait = Number(process.env.SB_DEPLOY_WAIT_MS ?? 900000);
@@ -13,13 +13,17 @@ try {
     throw new Error();
   const token = (
     await readFile(
-      process.env.LANZADOR_TOKEN_FILE || "/var/lib/secondbrain/lanzador-token",
+      process.env.LAUNCHER_TOKEN_FILE ||
+        process.env.LANZADOR_TOKEN_FILE ||
+        "/var/lib/secondbrain/lanzador-token",
       "utf8",
     )
   ).trim();
   const endpoint = new URL(
     `/threads?status=${BUSY}`,
-    process.env.LANZADOR_URL || "http://127.0.0.1:8092",
+    process.env.LAUNCHER_URL ||
+      process.env.LANZADOR_URL ||
+      "http://127.0.0.1:8092",
   );
   if (endpoint.hostname !== "127.0.0.1" || endpoint.protocol !== "http:")
     throw new Error();

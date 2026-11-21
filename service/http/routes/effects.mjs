@@ -8,7 +8,7 @@ export const effectRoutes = (ctx, req) => {
     ctx;
   const { callerCap, consulta: query, request, required, response } = req;
   return {
-    "GET /efectos": async () => {
+    "GET /effects": async () => {
       const items = effects.list({
         workOrderId: query.get("workOrderId") || undefined,
         status: query.get("status") || undefined,
@@ -20,7 +20,7 @@ export const effectRoutes = (ctx, req) => {
           : items,
       });
     },
-    "GET /efectos/detalle": async () => {
+    "GET /effects/detail": async () => {
       const operation = effects.get(required("id"), {
         includeSensitive: true,
       });
@@ -38,7 +38,7 @@ export const effectRoutes = (ctx, req) => {
       }
       return send(response, 200, { operacion: operation });
     },
-    "POST /efectos/preparar": async () => {
+    "POST /effects/prepare": async () => {
       const data = await body(request);
       const { agentId, sessionUuid } = agentHeaders(request);
       const isAgentCall = auth.isAgent(request);
@@ -72,7 +72,7 @@ export const effectRoutes = (ctx, req) => {
       );
       return send(response, 201, { ok: true, ...result });
     },
-    "POST /efectos/ejecutar": async () => {
+    "POST /effects/execute": async () => {
       const data = await body(request);
       if (auth.isAgent(request)) {
         const targetOp = effects.get(data.id, {
@@ -93,7 +93,7 @@ export const effectRoutes = (ctx, req) => {
       );
       return send(response, 200, result);
     },
-    "POST /efectos/conciliar": async () => {
+    "POST /effects/reconcile": async () => {
       const data = await body(request);
       const result = await runStoreOp(() =>
         effects.reconcileEffect(data.id, {

@@ -5,6 +5,24 @@
 ("room") credentials may call it, and a [Zod](https://zod.dev) schema for its
 body. Unknown routes return `404`; invalid bodies return `400`.
 
+
+## English API paths
+
+The route tables list the canonical paths for Phase 1.5. In the transition
+release, a legacy path forwards to the same handler, validation and
+authorization policy as its successor and sends a `Deprecation` response
+header. Integrations should send new requests to the English paths.
+
+After the transition release, set `SB_LEGACY_HTTP_ROUTES=off` on the service
+and launcher together to retire all old HTTP paths. Roll both processes
+back together if a client still needs the old paths.
+
+For `/agents/workspaces`, the canonical response carries `revision`,
+`links`, `repositories` and `repositoryPaths`. The write body contains
+`id`, `repository` (name or `null`) and `revision`. Legacy responses
+keep `vinculos` and `repositorios`. The on-disk registry still reads old
+links and writes both keys during the compatibility release for rollback.
+
 ## Authentication
 
 | Caller                                   | Credential                                               | Notes                                                                          |
@@ -43,8 +61,8 @@ Legend: **public** = no session; **room** = also callable by agents.
 | POST   | `/auth/login`                           | public — password (+ TOTP code)                           |
 | POST   | `/auth/logout`                          |                                                           |
 | POST   | `/auth/totp/start`, `/auth/totp/enable` | Enroll a TOTP authenticator                               |
-| GET    | `/oauth/clientes`                       | Remote MCP clients                                        |
-| POST   | `/oauth/clientes/revocar`               | Revoke a client                                           |
+| GET    | `/oauth/clients`                       | Remote MCP clients                                        |
+| POST   | `/oauth/clients/revoke`               | Revoke a client                                           |
 
 ### Vault and items
 
@@ -67,8 +85,8 @@ Legend: **public** = no session; **room** = also callable by agents.
 | GET    | `/finance/overview`     | room — accounts, cards, cash-flow, utilization        |
 | POST   | `/finance/ops`          | room — structured operation; agents wait for approval |
 | GET    | `/finance/ledger`       | Ledger entries                                        |
-| GET    | `/aprobaciones`         | Pending and recent approvals                          |
-| POST   | `/aprobaciones/decidir` | Approve or reject, with an idempotent receipt         |
+| GET    | `/approvals`         | Pending and recent approvals                          |
+| POST   | `/approvals/decide` | Approve or reject, with an idempotent receipt         |
 
 ### Briefcase (files shared with agents)
 
@@ -87,34 +105,34 @@ in [modules/service.md](modules/service.md#threads-adr-0010).
 
 | Method     | Path                                                                |                                            |
 | ---------- | ------------------------------------------------------------------- | ------------------------------------------ |
-| GET        | `/agentes/modelos-lanzador`, `/agentes/uso`, `/agentes/capacidades` | Models, usage windows, capabilities        |
-| GET        | `/agentes/mi-capacidad`                                             | room — capabilities of the calling thread  |
-| GET / POST | `/agentes/espacios`                                                 | Project ↔ repository links                 |
-| GET        | `/agentes/proyectos-lanzador`                                       | Registered repositories                    |
-| GET        | `/agentes/herramientas/catalogo`                                    | room — tool and skill catalog              |
-| POST       | `/agentes/herramientas/perfiles`                                    | Tool profiles                              |
-| POST       | `/agentes/herramientas/skills/resolver`                             | room — resolve skills for a profile        |
-| POST       | `/agentes/capacidades/token`                                        | Issue a scoped capability token            |
+| GET        | `/agents/models`, `/agents/usage`, `/agents/capabilities` | Models, usage windows, capabilities        |
+| GET        | `/agents/self-capability`                                             | room — capabilities of the calling thread  |
+| GET / POST | `/agents/workspaces`                                                 | Project ↔ repository links                 |
+| GET        | `/agents/projects`                                       | Registered repositories                    |
+| GET        | `/agents/tools/catalog`                                    | room — tool and skill catalog              |
+| POST       | `/agents/tools/profiles`                                    | Tool profiles                              |
+| POST       | `/agents/tools/skills/resolve`                             | room — resolve skills for a profile        |
+| POST       | `/agents/capabilities/token`                                        | Issue a scoped capability token            |
 
 ### Requests and effects
 
 | Method | Path                                                                                   |                                              |
 | ------ | -------------------------------------------------------------------------------------- | -------------------------------------------- |
-| GET    | `/solicitudes`, `/solicitudes/detalle`                                                 | room — persistent questions to the owner     |
+| GET    | `/requests`, `/requests/detail`                                                 | room — persistent questions to the owner     |
 | POST   | `/solicitudes/{preguntar,esperar,aprobacion,cerrar-turno,verificar-ejecucion,entrega}` | room                                         |
-| POST   | `/solicitudes/responder`                                                               | Owner answers                                |
-| GET    | `/efectos`, `/efectos/detalle`                                                         | room — effects with external consequences    |
-| POST   | `/efectos/preparar`, `/efectos/ejecutar`                                               | room — prepare; execute only after approval  |
-| POST   | `/efectos/conciliar`                                                                   | Reconcile an effect whose outcome is unknown |
+| POST   | `/requests/answer`                                                               | Owner answers                                |
+| GET    | `/effects`, `/effects/detail`                                                         | room — effects with external consequences    |
+| POST   | `/effects/prepare`, `/effects/execute`                                               | room — prepare; execute only after approval  |
+| POST   | `/effects/reconcile`                                                                   | Reconcile an effect whose outcome is unknown |
 
 ### Refuge and world panel
 
 | Method | Path                                                                       |                                         |
 | ------ | -------------------------------------------------------------------------- | --------------------------------------- |
-| GET    | `/sala`, `/sala/imagen`                                                    | 3D refuge state and reference images    |
-| POST   | `/sala/tablero`, `/sala/encargos`, `/sala/agentes`, `/sala/agentes/borrar` | Boards, room work orders, agent copies  |
-| GET    | `/mundo/overview`, `/mundo/document`, `/mundo/media`                       | Published video package                 |
-| POST   | `/mundo/briefs`, `/mundo/agents`, `/mundo/tasks`, `/mundo/tasks/status`    | Briefs and tasks for the video pipeline |
+| GET    | `/room`, `/room/image`                                                    | 3D refuge state and reference images    |
+| POST   | `/room/board`, `/room/work-orders`, `/room/agents`, `/room/agents/delete` | Boards, room work orders, agent copies  |
+| GET    | `/world/overview`, `/world/document`, `/world/media`                       | Published video package                 |
+| POST   | `/world/briefs`, `/world/agents`, `/world/tasks`, `/world/tasks/status`    | Briefs and tasks for the video pipeline |
 
 ## Remote MCP
 

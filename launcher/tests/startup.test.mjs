@@ -25,20 +25,20 @@ test("arranca solo en loopback con configuración y huellas desde archivos", asy
   t.after(() => rm(dir, { recursive: true, force: true }));
   assert.equal(server.address().address, "127.0.0.1");
   const response = await fetch(
-    `http://127.0.0.1:${server.address().port}/estado`,
+    `http://127.0.0.1:${server.address().port}/status`,
     { headers: { authorization: "Bearer control" } },
   );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true });
   const projects = await fetch(
-    `http://127.0.0.1:${server.address().port}/proyectos`,
+    `http://127.0.0.1:${server.address().port}/projects`,
     { headers: { authorization: "Bearer control" } },
   );
   assert.deepEqual(await projects.json(), ["prueba"]);
   assert.equal(
     JSON.stringify(
       await (
-        await fetch(`http://127.0.0.1:${server.address().port}/proyectos`, {
+        await fetch(`http://127.0.0.1:${server.address().port}/projects`, {
           headers: { authorization: "Bearer control" },
         })
       ).json(),

@@ -7,7 +7,7 @@ export async function installFakeStream(context) {
       constructor(url, options) {
         this.url = String(url);
         const path = new URL(this.url, location.origin).pathname;
-        if (!["/api/v1/threads/feed", "/api/v1/threads/flujo"].includes(path))
+        if (!["/api/v1/threads/feed", "/api/v1/threads/stream"].includes(path))
           return new RealEventSource(url, options);
         this.closed = false;
         window.__threadStreams.push(this);

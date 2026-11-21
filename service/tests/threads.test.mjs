@@ -136,7 +136,7 @@ test("threads are relayed to the launcher with a credential per thread", async (
   };
 
   // The usuario_* tools of an agent in a thread ask through the thread.
-  const asked = await fetch(`${base}/solicitudes/preguntar`, {
+  const asked = await fetch(`${base}/requests/ask`, {
     method: "POST",
     headers: agent,
     body: JSON.stringify({
@@ -147,19 +147,19 @@ test("threads are relayed to the launcher with a credential per thread", async (
   assert.equal(asked.solicitud.id, REQUEST);
   assert.equal(asked.solicitud.status, "pendiente");
   assert.equal(asked.solicitud.title, "¿A o B?");
-  const detail = await fetch(`${base}/solicitudes/detalle?id=${REQUEST}`, {
+  const detail = await fetch(`${base}/requests/detail?id=${REQUEST}`, {
     headers: agent,
   }).then((r) => r.json());
   assert.equal(detail.solicitud.status, "pendiente");
   launcher.answer();
-  const waited = await fetch(`${base}/solicitudes/esperar`, {
+  const waited = await fetch(`${base}/requests/wait`, {
     method: "POST",
     headers: agent,
     body: JSON.stringify({ id: REQUEST, timeout: 2000 }),
   }).then((r) => r.json());
   assert.equal(waited.solicitud.status, "respondida");
   assert.deepEqual(waited.solicitud.answer, { optionId: "o2" });
-  const direct = await fetch(`${base}/threads/agente/preguntar`, {
+  const direct = await fetch(`${base}/threads/agent/ask`, {
     method: "POST",
     headers: agent,
     body: JSON.stringify({ title: "Formulario", options: ["x"] }),
@@ -173,7 +173,7 @@ test("threads are relayed to the launcher with a credential per thread", async (
   );
   assert.equal(
     (
-      await fetch(`${base}/threads/agente/preguntar`, {
+      await fetch(`${base}/threads/agent/ask`, {
         method: "POST",
         headers: { ...agent, authorization: "Bearer room-secret" },
         body: JSON.stringify({ title: "x" }),
@@ -190,7 +190,7 @@ test("threads are relayed to the launcher with a credential per thread", async (
   assert.ok(
     launcher.seen.some((s) => s.url === "/threads?status=idle%2Crunning"),
   );
-  const answered = await fetch(`${base}/threads/responder`, {
+  const answered = await fetch(`${base}/threads/answer`, {
     method: "POST",
     headers: owner,
     body: JSON.stringify({
@@ -200,7 +200,7 @@ test("threads are relayed to the launcher with a credential per thread", async (
     }),
   }).then((r) => r.json());
   assert.equal(answered.request.origin, "app");
-  const refused = await fetch(`${base}/threads/mensajes`, {
+  const refused = await fetch(`${base}/threads/messages`, {
     method: "POST",
     headers: owner,
     body: JSON.stringify({ id: THREAD, text: "x", mode: "send" }),
@@ -209,7 +209,7 @@ test("threads are relayed to the launcher with a credential per thread", async (
   assert.equal((await refused.json()).error, "El thread ya está cerrado.");
   assert.equal(
     (
-      await fetch(`${base}/threads/mensajes`, {
+      await fetch(`${base}/threads/messages`, {
         method: "POST",
         headers: owner,
         body: JSON.stringify({ id: "../etc", text: "x", mode: "send" }),
@@ -217,7 +217,7 @@ test("threads are relayed to the launcher with a credential per thread", async (
     ).status,
     400,
   );
-  const stream = await fetch(`${base}/threads/flujo?id=${THREAD}&after=3`, {
+  const stream = await fetch(`${base}/threads/stream?id=${THREAD}&after=3`, {
     headers: { ...owner, "last-event-id": "3" },
   });
   assert.match(stream.headers.get("content-type"), /text\/event-stream/);
@@ -228,18 +228,18 @@ test("threads are relayed to the launcher with a credential per thread", async (
   assert.equal(upstream.url, `/threads/${THREAD}/stream?after=3`);
   assert.equal(upstream.headers["last-event-id"], "3");
   assert.deepEqual(
-    await fetch(`${base}/bandeja`, { headers: owner }).then((r) => r.json()),
+    await fetch(`${base}/inbox`, { headers: owner }).then((r) => r.json()),
     { entries: [] },
   );
 
   // Closing (other than by PR) revokes the thread's credential.
-  const closed = await fetch(`${base}/threads/cerrar`, {
+  const closed = await fetch(`${base}/threads/close`, {
     method: "POST",
     headers: owner,
     body: JSON.stringify({ id: THREAD, mode: "merge" }),
   });
   assert.equal(closed.status, 200);
-  const after = await fetch(`${base}/solicitudes/detalle?id=${REQUEST}`, {
+  const after = await fetch(`${base}/requests/detail?id=${REQUEST}`, {
     headers: agent,
   });
   assert.ok([401, 403].includes(after.status));

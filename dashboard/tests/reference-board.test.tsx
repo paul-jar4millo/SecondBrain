@@ -9,7 +9,7 @@ const fixture = vi.hoisted(() => ({
 vi.mock("../src/core/store", () => ({ isDemo: true }));
 vi.mock("../src/features/agents/agent-api", () => ({
   agentApi: async (path: string) => {
-    if (path === "/sala/tablero")
+    if (path === "/room/board")
       return new Promise<string[]>((resolve) => {
         fixture.finish = resolve;
       });

@@ -30,6 +30,8 @@ export type HttpLogRecord =
     };
 
 export interface ApplicationOptions {
+  /** Defaults to true during the compatibility release. */
+  legacyHttpRoutes?: boolean;
   vaultRoot?: string;
   dataDirectory?: string;
   sharedDirectory?: string;

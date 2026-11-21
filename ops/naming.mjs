@@ -2,7 +2,7 @@
 // identifiers that contain Spanish words. `node ops/naming.mjs --legacy`
 // prints the current findings in the format of ops/naming-legacy.json.
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -45,10 +45,114 @@ export const isSpanish = (word) =>
 /** @param {string} name */
 export const spanishWords = (name) => words(name).filter(isSpanish);
 
+function trackedAndNewFiles() {
+  return [
+    ...new Set(
+      execFileSync(
+        "git",
+        ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        { cwd: root, encoding: "utf8" },
+      ).split("\0"),
+    ),
+  ].filter((file) => file && existsSync(path.join(root, file)));
+}
+
 export function sourceFiles() {
-  return execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
-    .split("\n")
-    .filter((f) => SOURCE.test(f) && !SKIP.test(f));
+  return trackedAndNewFiles().filter(
+    (file) => SOURCE.test(file) && !SKIP.test(file),
+  );
+}
+
+const operationalWords = new Set([
+  "agregar",
+  "aviso",
+  "bandeja",
+  "capacidad",
+  "cliente",
+  "conectar",
+  "decidir",
+  "detalle",
+  "dentro",
+  "entregable",
+  "imagen",
+  "matutino",
+  "perfil",
+  "plantilla",
+  "prender",
+  "recibo",
+  "resumen",
+  "revocar",
+  "vinculo",
+]);
+
+/** @param {string} name */
+function isSpanishOperationalName(name) {
+  return words(name).some(
+    (word) =>
+      isSpanish(word) ||
+      [word, word.replace(/s$/, ""), word.replace(/es$/, "")].some((form) =>
+        operationalWords.has(form),
+      ),
+  );
+}
+
+const declarationFile =
+  /^(?:service\/(?:routes\.mjs|http\/routes\/.*\.mjs)|launcher\/(?:index\.mjs|threads\/http\/routes\.ts))$/;
+const unitFile = /\.(?:service|timer|socket|target|slice)$/;
+const environmentSource =
+  /\.(?:mjs|js|ts|tsx|py|sh|service|timer|conf|example|yml)$/;
+
+/** @param {string} file @param {string} text */
+export function operationalNamesIn(file, text) {
+  const findings = new Set();
+  const name = path.basename(file);
+  if (
+    file.startsWith("ops/") &&
+    !SKIP.test(file) &&
+    file.slice(4).split("/").some(isSpanishOperationalName)
+  )
+    findings.add("ops:" + file);
+  if (unitFile.test(name) && isSpanishOperationalName(name))
+    findings.add("unit:" + name);
+  if (environmentSource.test(file) && !file.includes("/tests/"))
+    for (const [name] of text.matchAll(/\bSB_[A-Z][A-Z0-9_]*\b/g))
+      if (!name.endsWith("_") && isSpanishOperationalName(name.slice(3)))
+        findings.add("env:" + name);
+  if (declarationFile.test(file))
+    for (const [, route] of text.matchAll(
+      /["'`](?:GET|POST|PATCH|PUT|DELETE|HEAD) (\/[^"'\x60\s]+)["'`]/g,
+    ))
+      if (isSpanishOperationalName(route)) findings.add("route:" + route);
+  if (file === "launcher/threads/http/routes.ts")
+    for (const [, route] of text.matchAll(
+      new RegExp("/\\^((?:\\\\/[^/$]+)+)\\$/", "g"),
+    )) {
+      const literal = route.replaceAll("\\/", "/").replace(/\([^)]*\)/g, "");
+      if (isSpanishOperationalName(literal)) findings.add("route:" + literal);
+    }
+  return [...findings].sort();
+}
+
+/** P7 checks names introduced after the compatibility rollout began. */
+export function operationalFindings() {
+  return [
+    ...new Set(
+      trackedAndNewFiles().flatMap((file) => {
+        if (
+          !/^(?:service|launcher|ops|mcp|dashboard\/src|\.github\/workflows)\//.test(
+            file,
+          )
+        )
+          return [];
+        return operationalNamesIn(
+          file,
+          environmentSource.test(file)
+            ? readFileSync(path.join(root, file), "utf8")
+            : "",
+        );
+      }),
+    ),
+  ].sort();
 }
 
 /** Findings as "file" or "file#identifier". */
@@ -82,3 +186,10 @@ if (
   process.argv.includes("--legacy")
 )
   console.log(JSON.stringify(findings(), null, 2));
+
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) &&
+  process.argv.includes("--operational")
+)
+  console.log(JSON.stringify(operationalFindings(), null, 2));

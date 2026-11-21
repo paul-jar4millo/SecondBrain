@@ -3,7 +3,14 @@
 # desplegada en /opt/secondbrain/current. Idempotente; no toca el runner anterior
 # (usa credenciales con otros nombres).
 set -euo pipefail
-src=${SB_RELEASE:-/opt/secondbrain/current}/ops/lanzador
+release=${SB_RELEASE:-/opt/secondbrain/current}
+src=$release/ops/lanzador
+launcher=secondbrain-lanzador.service
+summary=resumen-matutino.timer
+if [[ -f /etc/secondbrain/english-layout ]]; then
+  launcher=secondbrain-launcher.service
+  summary=morning-summary.timer
+fi
 agente=/var/lib/sb-agente
 servicio=/var/lib/secondbrain
 install -d -m 750 -o root -g sb-agente /etc/sb-agente
@@ -22,20 +29,24 @@ chmod 0440 "$hash"
 install -d -m 750 -o root -g sb-agente /etc/sb-agente
 /opt/node/bin/node -e '
 const fs = require("fs"), path = require("path");
-const base = "/srv/sb-agente/proyectos";
-const proyectos = {};
+const base = fs.realpathSync("/srv/sb-agente/proyectos");
+let projects;
+try {
+  projects = JSON.parse(fs.readFileSync("/etc/sb-agente/proyectos.json", "utf8"));
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+  projects = {};
+}
 for (const e of fs.readdirSync(base, { withFileTypes: true }))
-  if (e.isDirectory() && /^[a-z0-9_-]+$/i.test(e.name)) proyectos[e.name] = path.join(base, e.name);
-fs.writeFileSync("/etc/sb-agente/proyectos.json", JSON.stringify(proyectos, null, 2));
+  if (e.isDirectory() && /^[a-z0-9_-]+$/i.test(e.name)) projects[e.name] ??= path.join(base, e.name);
+fs.writeFileSync("/etc/sb-agente/proyectos.json", JSON.stringify(projects, null, 2));
 '
 chmod 644 /etc/sb-agente/proyectos.json
 install -d -m 700 -o sb-agente -g sb-agente "$agente/estado/lanzador"
 
-for unit in secondbrain-lanzador.service claude-sb-agente.service resumen-matutino.service resumen-matutino.timer; do
-  sed "s|@UID@|$(id -u sb-agente)|g" "$src/$unit" >"/etc/systemd/system/$unit"
-  chmod 0644 "/etc/systemd/system/$unit"
-done
-chmod 0755 "$src/resumen-matutino.sh"
+if [[ -f $release/ops/agents/install.mjs ]]; then
+  /opt/node/bin/node "$release/ops/agents/install.mjs"
+fi
 /opt/node/bin/node "$src/configure-remote.mjs"
 chown sb-agente:sb-agente "$agente/claude/settings.json" "$agente/deepseek/settings.json" "$agente/.gemini/config/hooks.json" "$agente/.gemini/antigravity-cli/settings.json"
 
@@ -51,13 +62,13 @@ EOF
 rm -f /usr/local/bin/sb-hilo "$agente/hook-token" /etc/sb-agente/hook-token.sha256
 
 systemctl daemon-reload
-systemctl enable secondbrain-lanzador.service
+systemctl enable "$launcher"
 if [[ ${SB_ACTIVATE:-1} == 1 ]]; then
-  systemctl start secondbrain-lanzador.service
+  systemctl start "$launcher"
   systemctl restart secondbrain.service
 fi
 if [[ ${SB_ENABLE_AUTOMATIONS:-0} == 1 ]]; then
-  systemctl enable --now resumen-matutino.timer
+  systemctl enable --now "$summary"
 fi
-echo "Lanzador instalado."
+echo "Launcher installed."
 echo "Pendiente manual: token de GitHub, login de Claude y claude-sb-agente.service."

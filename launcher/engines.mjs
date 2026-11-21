@@ -43,7 +43,7 @@ export function engineCommand(
         "--json",
         "--dangerously-bypass-approvals-and-sandbox",
         "-c",
-        'mcp_servers.secondbrain.env_vars=["SB_BRAIN_TOKEN_FILE","SB_BRAIN_URL","SB_AGENTE","SB_SESSION_ID"]',
+        'mcp_servers.secondbrain.env_vars=["SB_BRAIN_TOKEN_FILE","SB_BRAIN_URL","SB_AGENT","SB_AGENTE","SB_SESSION_ID"]',
         ...(modelo ? ["-m", modelo] : []),
         ...(effort ? ["-c", `model_reasoning_effort="${effort}"`] : []),
         prompt,
@@ -138,6 +138,9 @@ export function environmentOf(proveedor, env) {
   )
     throw new Error("Directorio de ejecución de sesión inválido");
   const tokenVault = fileTokenVault(env);
+  const actor = /** @type {(keyof typeof AGENTS_BY_ID)[]} */ (
+    Object.keys(AGENTS_BY_ID)
+  ).find((id) => AGENTS_BY_ID[id].proveedor === proveedor);
   const base = {
     PATH: env.PATH,
     HOME: env.HOME,
@@ -150,9 +153,8 @@ export function environmentOf(proveedor, env) {
     ...(tokenVault
       ? {
           SB_BRAIN_TOKEN_FILE: tokenVault,
-          SB_AGENTE: /** @type {(keyof typeof AGENTS_BY_ID)[]} */ (
-            Object.keys(AGENTS_BY_ID)
-          ).find((id) => AGENTS_BY_ID[id].proveedor === proveedor),
+          SB_AGENT: actor,
+          SB_AGENTE: actor,
           SB_BRAIN_URL: env.AGENTES_BRAIN_URL || "http://127.0.0.1:8080/api/v1",
           SB_BRAIN_CLI: env.AGENTES_BRAIN_CLI,
         }

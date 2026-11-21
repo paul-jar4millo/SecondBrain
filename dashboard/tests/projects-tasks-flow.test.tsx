@@ -39,7 +39,7 @@ const persistence = vi.hoisted(() => ({
 }));
 
 vi.mock("../src/core/store", () => ({
-  api: vi.fn(async () => ({ revision: 1, repositorios: [], vinculos: {} })),
+  api: vi.fn(async () => ({ revision: 1, repositories: [], links: {} })),
   isDemo: false,
   save: persistence.save,
   create: vi.fn(),

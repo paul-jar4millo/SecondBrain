@@ -89,7 +89,7 @@ Playwright's Chromium.
 - `thread-store.ts`: pure reducer from a snapshot plus stream messages
   (events, deltas, live item snapshots); `groupTurns` folds each turn's work
   ("Trabajó 42 s") apart from its messages.
-- `thread-stream.ts`: snapshot, then SSE (`/threads/flujo`, resumes with
+- `thread-stream.ts`: snapshot, then SSE (`/threads/stream`, resumes with
   `Last-Event-ID`); `snapshot-required` reloads; repeated failures fall back
   to polling.
 - `thread-projection.ts` shares the thread list between the refuge, projects,

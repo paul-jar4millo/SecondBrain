@@ -71,8 +71,12 @@ query). It is the safety net for refactoring the HTTP layer.
 
 Deployment is **tag-driven**: pushing to `main` never deploys.
 
-1. `build` runs on a GitHub-hosted runner: installs, tests, packages the
-   release with `ops/package-release.mjs` and records its SHA-256.
+1. `build` runs on a GitHub-hosted runner. It installs and tests, then builds
+   the service image (service, MCP, dashboard and contracts) with an SBOM. It
+   pushes the image to `ghcr.io/<owner>/<repo>` and smoke-tests it by digest.
+   Then it packages the native launcher and the operations files with
+   `ops/package-release.mjs --native-host`, writes the image digest to
+   `image-reference` and records the package's SHA-256.
 2. `deploy` waits for the `production` environment's required reviewer. The
    environment only accepts `v*` tags, and the job only runs when
    `github.repository_owner` equals the `SB_DEPLOY_OWNER` variable, so forks
@@ -81,11 +85,16 @@ Deployment is **tag-driven**: pushing to `main` never deploys.
    verifies its checksum and calls the privileged helper
    `/usr/local/sbin/secondbrain-deploy` through a narrow `sudo` rule.
 4. The helper (`dashboard/ops/deploy-release.sh`) unpacks into
-   `/opt/secondbrain/releases/<sha>`, installs runtime dependencies (one
-   `npm ci` per module, from the lockfile the packager cut for it out of the
-   root workspace lockfile; see [ADR 0008](adr/0008-npm-workspaces.md)), switches
-   the `current` symlink, restarts the service and checks `/api/v1/health`.
-   If the check fails it switches back to the previous release.
+   `/opt/secondbrain/releases/<sha>`. It installs the launcher and MCP runtime
+   dependencies with one `npm ci` per module, using the lockfile the packager
+   cut out of the root workspace lockfile (see
+   [ADR 0008](adr/0008-npm-workspaces.md)). It pulls the image by digest and
+   applies the host configuration: `configure.mjs`, the launcher's
+   `install.sh`, `daemon-reload` and nftables. It renders the Quadlet unit
+   `secondbrain-container.container`, switches the `current` symlink and
+   restarts the container and the launcher. Finally it runs
+   `ops/deploy/verify.sh`, which ships in the release. If any step fails, it
+   restores the previous release with its image digest and configuration.
 5. When `SB_PUBLIC_URL` is set, the job checks the public health endpoint too.
 
 Host-specific values (runner label, public URL, owner) are environment

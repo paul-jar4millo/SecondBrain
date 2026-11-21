@@ -19,14 +19,14 @@ const schemas = {
     })
     .passthrough(),
   "POST /auth/totp/enable": z.object({ code: z.string() }).passthrough(),
-  "POST /sala/tablero": z
+  "POST /room/board": z
     .object({
       id: z.string(),
       guardar: z.boolean(),
       espacio: z.string().optional(),
     })
     .passthrough(),
-  "POST /sala/encargos": z
+  "POST /room/work-orders": z
     .object({
       id: z.string(),
       mode: z.string(),
@@ -34,24 +34,24 @@ const schemas = {
       project: z.string().optional(),
     })
     .passthrough(),
-  "POST /sala/agentes/borrar": z.object({ id: z.string() }).passthrough(),
+  "POST /room/agents/delete": z.object({ id: z.string() }).passthrough(),
   "POST /finance/ops": z
     .object({ op: z.string(), requestId: z.string().max(100).optional() })
     .passthrough(),
-  "POST /mundo/briefs": z
+  "POST /world/briefs": z
     .object({ title: z.string(), brief: z.string(), slug: z.string() })
     .passthrough(),
-  "POST /mundo/agents": z
+  "POST /world/agents": z
     .object({ id: z.string(), enabled: z.boolean(), notes: z.string() })
     .passthrough(),
-  "POST /mundo/tasks": z
+  "POST /world/tasks": z
     .object({
       agentId: z.string(),
       instruction: z.string(),
       videoId: z.string().nullable().optional(),
     })
     .passthrough(),
-  "POST /mundo/tasks/status": z
+  "POST /world/tasks/status": z
     .object({ id: z.string(), status: z.string() })
     .passthrough(),
   "POST /mutations": z
@@ -127,119 +127,119 @@ export const ROUTES = new Map([
     },
   ],
   [
-    "GET /mundo/overview",
+    "GET /world/overview",
     {
       public: false,
       room: false,
-      body: schemas["GET /mundo/overview"] || object,
+      body: schemas["GET /world/overview"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "GET /mundo/document",
+    "GET /world/document",
     {
       public: false,
       room: false,
-      body: schemas["GET /mundo/document"] || object,
+      body: schemas["GET /world/document"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "GET /mundo/media",
+    "GET /world/media",
     {
       public: false,
       room: false,
-      body: schemas["GET /mundo/media"] || object,
+      body: schemas["GET /world/media"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "POST /mundo/briefs",
+    "POST /world/briefs",
     {
       public: false,
       room: false,
-      body: schemas["POST /mundo/briefs"] || object,
+      body: schemas["POST /world/briefs"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "POST /mundo/agents",
+    "POST /world/agents",
     {
       public: false,
       room: false,
-      body: schemas["POST /mundo/agents"] || object,
+      body: schemas["POST /world/agents"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "POST /mundo/tasks",
+    "POST /world/tasks",
     {
       public: false,
       room: false,
-      body: schemas["POST /mundo/tasks"] || object,
+      body: schemas["POST /world/tasks"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "POST /mundo/tasks/status",
+    "POST /world/tasks/status",
     {
       public: false,
       room: false,
-      body: schemas["POST /mundo/tasks/status"] || object,
+      body: schemas["POST /world/tasks/status"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "GET /sala",
+    "GET /room",
     {
       public: false,
       room: false,
-      body: schemas["GET /sala"] || object,
+      body: schemas["GET /room"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "POST /sala/tablero",
+    "POST /room/board",
     {
       public: false,
       room: false,
-      body: schemas["POST /sala/tablero"] || object,
+      body: schemas["POST /room/board"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "POST /sala/encargos",
+    "POST /room/work-orders",
     {
       public: false,
       room: false,
-      body: schemas["POST /sala/encargos"] || object,
+      body: schemas["POST /room/work-orders"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "POST /sala/agentes",
+    "POST /room/agents",
     {
       public: false,
       room: false,
-      body: schemas["POST /sala/agentes"] || object,
+      body: schemas["POST /room/agents"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "POST /sala/agentes/borrar",
+    "POST /room/agents/delete",
     {
       public: false,
       room: false,
-      body: schemas["POST /sala/agentes/borrar"] || object,
+      body: schemas["POST /room/agents/delete"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
   [
-    "GET /sala/imagen",
+    "GET /room/image",
     {
       public: false,
       room: false,
-      body: schemas["GET /sala/imagen"] || object,
+      body: schemas["GET /room/image"] || object,
       query: z.record(z.string(), z.string()),
     },
   ],
@@ -383,9 +383,9 @@ export const ROUTES = new Map([
 // (the handlers restrict what they can write or remove); pinning is the owner's.
 const anyQuery = z.record(z.string(), z.string());
 for (const [key, body] of /** @type {Array<[string, z.ZodType]>} */ ([
-  ["GET /aprobaciones", object],
+  ["GET /approvals", object],
   [
-    "POST /aprobaciones/decidir",
+    "POST /approvals/decide",
     z
       .object({
         id: z.uuid(),
@@ -394,27 +394,36 @@ for (const [key, body] of /** @type {Array<[string, z.ZodType]>} */ ([
       })
       .strict(),
   ],
-  ["GET /oauth/clientes", object],
+  ["GET /oauth/clients", object],
   [
-    "POST /oauth/clientes/revocar",
+    "POST /oauth/clients/revoke",
     z.object({ id: z.string().regex(/^[a-f0-9]{32}$/) }).strict(),
   ],
-  ["GET /agentes/espacios", object],
+  ["GET /agents/workspaces", object],
   [
-    "POST /agentes/espacios",
-    z
-      .object({
-        id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
-        repositorio: z.string().min(1).max(100).nullable(),
-        revision: z.number().int().nonnegative(),
-      })
-      .strict(),
+    "POST /agents/workspaces",
+    z.union([
+      z
+        .object({
+          id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
+          repository: z.string().min(1).max(100).nullable(),
+          revision: z.number().int().nonnegative(),
+        })
+        .strict(),
+      z
+        .object({
+          id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
+          repositorio: z.string().min(1).max(100).nullable(),
+          revision: z.number().int().nonnegative(),
+        })
+        .strict(),
+    ]),
   ],
-  ["GET /agentes/capacidades", object],
-  ["GET /agentes/mi-capacidad", object],
-  ["GET /agentes/herramientas/catalogo", object],
+  ["GET /agents/capabilities", object],
+  ["GET /agents/self-capability", object],
+  ["GET /agents/tools/catalog", object],
   [
-    "POST /agentes/herramientas/perfiles",
+    "POST /agents/tools/profiles",
     z
       .object({
         profileId: z.enum([
@@ -445,7 +454,7 @@ for (const [key, body] of /** @type {Array<[string, z.ZodType]>} */ ([
       .strict(),
   ],
   [
-    "POST /agentes/herramientas/skills/resolver",
+    "POST /agents/tools/skills/resolve",
     z
       .object({
         motor: z.enum(["claude", "codex", "agy", "deepseek"]).optional(),
@@ -462,9 +471,9 @@ for (const [key, body] of /** @type {Array<[string, z.ZodType]>} */ ([
       })
       .strict(),
   ],
-  ["GET /agentes/proyectos-lanzador", object],
-  ["GET /agentes/modelos-lanzador", object],
-  ["GET /agentes/uso", object],
+  ["GET /agents/projects", object],
+  ["GET /agents/models", object],
+  ["GET /agents/usage", object],
 ]))
   ROUTES.set(key, { public: false, room: false, body, query: anyQuery });
 // Changes and PR draft of one session: a user session and a UUID, nothing else.
@@ -503,7 +512,7 @@ for (const [
 
 // user requests
 
-ROUTES.set("GET /solicitudes", {
+ROUTES.set("GET /requests", {
   public: false,
   room: true,
   body: object,
@@ -515,7 +524,7 @@ ROUTES.set("GET /solicitudes", {
     })
     .strict(),
 });
-ROUTES.set("GET /solicitudes/detalle", {
+ROUTES.set("GET /requests/detail", {
   public: false,
   room: true,
   body: object,
@@ -525,7 +534,7 @@ ROUTES.set("GET /solicitudes/detalle", {
     })
     .strict(),
 });
-ROUTES.set("POST /solicitudes/preguntar", {
+ROUTES.set("POST /requests/ask", {
   public: false,
   room: true,
   body: z
@@ -551,7 +560,7 @@ ROUTES.set("POST /solicitudes/preguntar", {
     .strict(),
   query: anyQuery,
 });
-ROUTES.set("POST /solicitudes/esperar", {
+ROUTES.set("POST /requests/wait", {
   public: false,
   room: true,
   body: z
@@ -562,7 +571,7 @@ ROUTES.set("POST /solicitudes/esperar", {
     .strict(),
   query: anyQuery,
 });
-ROUTES.set("POST /solicitudes/aprobacion", {
+ROUTES.set("POST /requests/approval", {
   public: false,
   room: true,
   body: z
@@ -590,7 +599,7 @@ ROUTES.set("POST /solicitudes/aprobacion", {
     .strict(),
   query: anyQuery,
 });
-ROUTES.set("POST /solicitudes/responder", {
+ROUTES.set("POST /requests/answer", {
   public: false,
   room: false,
   body: z
@@ -615,7 +624,7 @@ ROUTES.set("POST /solicitudes/responder", {
     .strict(),
   query: anyQuery,
 });
-ROUTES.set("POST /solicitudes/cerrar-turno", {
+ROUTES.set("POST /requests/close-turn", {
   public: false,
   room: true,
   body: z
@@ -627,7 +636,7 @@ ROUTES.set("POST /solicitudes/cerrar-turno", {
     .strict(),
   query: anyQuery,
 });
-ROUTES.set("POST /solicitudes/verificar-ejecucion", {
+ROUTES.set("POST /requests/verify-execution", {
   public: false,
   room: true,
   body: z
@@ -645,7 +654,7 @@ ROUTES.set("POST /solicitudes/verificar-ejecucion", {
     .strict(),
   query: anyQuery,
 });
-ROUTES.set("POST /solicitudes/entrega", {
+ROUTES.set("POST /requests/delivery", {
   public: false,
   room: true,
   body: z
@@ -664,13 +673,13 @@ ROUTES.set("POST /solicitudes/entrega", {
 });
 
 // runtime tool catalog (room-readable) and protected effects executor
-ROUTES.set("GET /agentes/mi-capacidad", {
+ROUTES.set("GET /agents/self-capability", {
   public: false,
   room: true,
   body: object,
   query: anyQuery,
 });
-ROUTES.set("POST /agentes/capacidades/token", {
+ROUTES.set("POST /agents/capabilities/token", {
   public: false,
   room: false,
   body: z
@@ -690,21 +699,21 @@ ROUTES.set("POST /agentes/capacidades/token", {
     .strict(),
   query: anyQuery,
 });
-ROUTES.set("GET /agentes/herramientas/catalogo", {
+ROUTES.set("GET /agents/tools/catalog", {
   public: false,
   room: true,
   body: object,
   query: anyQuery,
 });
-ROUTES.set("POST /agentes/herramientas/skills/resolver", {
+ROUTES.set("POST /agents/tools/skills/resolve", {
   public: false,
   room: true,
   body: /** @type {RoutePolicy} */ (
-    ROUTES.get("POST /agentes/herramientas/skills/resolver")
+    ROUTES.get("POST /agents/tools/skills/resolve")
   ).body,
   query: anyQuery,
 });
-ROUTES.set("GET /efectos", {
+ROUTES.set("GET /effects", {
   public: false,
   room: true,
   body: object,
@@ -715,13 +724,13 @@ ROUTES.set("GET /efectos", {
     })
     .strict(),
 });
-ROUTES.set("GET /efectos/detalle", {
+ROUTES.set("GET /effects/detail", {
   public: false,
   room: true,
   body: object,
   query: z.object({ id: z.uuid() }).strict(),
 });
-ROUTES.set("POST /efectos/preparar", {
+ROUTES.set("POST /effects/prepare", {
   public: false,
   room: true,
   body: z
@@ -761,7 +770,7 @@ ROUTES.set("POST /efectos/preparar", {
     .strict(),
   query: anyQuery,
 });
-ROUTES.set("POST /efectos/ejecutar", {
+ROUTES.set("POST /effects/execute", {
   public: false,
   room: true,
   body: z
@@ -781,7 +790,7 @@ ROUTES.set("POST /efectos/ejecutar", {
     .strict(),
   query: anyQuery,
 });
-ROUTES.set("POST /efectos/conciliar", {
+ROUTES.set("POST /effects/reconcile", {
   public: false,
   room: false,
   body: z
@@ -858,9 +867,9 @@ for (const [
       .strict(),
     anyQuery,
   ],
-  ["GET /threads/detalle", false, object, threadIdQuery],
+  ["GET /threads/detail", false, object, threadIdQuery],
   [
-    "GET /threads/flujo",
+    "GET /threads/stream",
     false,
     object,
     z
@@ -872,7 +881,7 @@ for (const [
   ],
   ["GET /threads/feed", false, object, z.object(afterQuery).strict()],
   [
-    "POST /threads/mensajes",
+    "POST /threads/messages",
     false,
     z
       .object({
@@ -886,13 +895,13 @@ for (const [
     anyQuery,
   ],
   [
-    "POST /threads/interrumpir",
+    "POST /threads/interrupt",
     false,
     z.object({ id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/) }).strict(),
     anyQuery,
   ],
   [
-    "POST /threads/responder",
+    "POST /threads/answer",
     false,
     z
       .object({
@@ -904,7 +913,7 @@ for (const [
     anyQuery,
   ],
   [
-    "POST /threads/cerrar",
+    "POST /threads/close",
     false,
     z
       .object({
@@ -917,7 +926,7 @@ for (const [
     anyQuery,
   ],
   [
-    "POST /threads/archivar",
+    "POST /threads/archive",
     false,
     z.object({ id: z.string().regex(/^thr_[0-9A-Za-z_-]{6,64}$/) }).strict(),
     anyQuery,
@@ -936,9 +945,9 @@ for (const [
       })
       .strict(),
   ],
-  ["GET /bandeja", false, object, z.object({}).strict()],
+  ["GET /inbox", false, object, z.object({}).strict()],
   [
-    "POST /threads/agente/preguntar",
+    "POST /threads/agent/ask",
     true,
     z
       .object({
@@ -951,7 +960,7 @@ for (const [
     anyQuery,
   ],
   [
-    "GET /threads/agente/solicitud",
+    "GET /threads/agent/request",
     true,
     object,
     z.object({ id: z.string().regex(/^req_[0-9A-Za-z_-]{6,64}$/) }).strict(),

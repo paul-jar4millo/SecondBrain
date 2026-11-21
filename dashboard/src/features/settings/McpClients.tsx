@@ -14,7 +14,7 @@ export function McpClients() {
   const [clientes, setClientes] = useState<Cliente[] | null>(null);
   const cargar = useCallback(async () => {
     try {
-      setClientes(await api<Cliente[]>("/oauth/clientes"));
+      setClientes(await api<Cliente[]>("/oauth/clients"));
     } catch {
       setClientes([]);
     }
@@ -40,7 +40,7 @@ export function McpClients() {
                 className="button"
                 onClick={async () => {
                   try {
-                    await api("/oauth/clientes/revocar", {
+                    await api("/oauth/clients/revoke", {
                       method: "POST",
                       body: JSON.stringify({ id: c.id }),
                     });

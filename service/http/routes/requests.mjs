@@ -34,7 +34,7 @@ export const requestRoutes = (ctx, req) => {
     return callerThread;
   };
   return {
-    "GET /solicitudes": async () => {
+    "GET /requests": async () => {
       const items = userRequests.list({
         workOrderId: query.get("workOrderId") || undefined,
         kind: query.get("kind") || undefined,
@@ -46,7 +46,7 @@ export const requestRoutes = (ctx, req) => {
           : items,
       });
     },
-    "GET /solicitudes/detalle": async () => {
+    "GET /requests/detail": async () => {
       const thread = threadOf(query.get("id"));
       if (thread) {
         const { request: found } = await lanzador.threads.request(
@@ -68,7 +68,7 @@ export const requestRoutes = (ctx, req) => {
       }
       return send(response, 200, { solicitud });
     },
-    "POST /solicitudes/preguntar": async () => {
+    "POST /requests/ask": async () => {
       const data = await body(request);
       if (callerThread) {
         const prompt = String(data.pregunta ?? data.prompt ?? "");
@@ -114,7 +114,7 @@ export const requestRoutes = (ctx, req) => {
       );
       return send(response, 200, { ok: true, ...result });
     },
-    "POST /solicitudes/esperar": async () => {
+    "POST /requests/wait": async () => {
       const { id, timeout = 240_000 } = await body(request);
       const thread = threadOf(id);
       if (thread)
@@ -137,7 +137,7 @@ export const requestRoutes = (ctx, req) => {
       );
       return send(response, 200, { ok: true, solicitud });
     },
-    "POST /solicitudes/aprobacion": async () => {
+    "POST /requests/approval": async () => {
       const data = await body(request);
       const { agentId, sessionUuid } = agentHeaders(request);
       if (
@@ -160,7 +160,7 @@ export const requestRoutes = (ctx, req) => {
       );
       return send(response, 200, { ok: true, ...result });
     },
-    "POST /solicitudes/responder": async () => {
+    "POST /requests/answer": async () => {
       const data = await body(request);
       const result = await runStoreOp(() =>
         userRequests.respond(data.id, {
@@ -171,19 +171,19 @@ export const requestRoutes = (ctx, req) => {
       );
       return send(response, 200, { ok: true, ...result });
     },
-    "POST /solicitudes/cerrar-turno": async () => {
+    "POST /requests/close-turn": async () => {
       const data = await body(request);
       const result = await runStoreOp(() => userRequests.markTurnClosed(data));
       return send(response, 200, { ok: true, ...result });
     },
-    "POST /solicitudes/verificar-ejecucion": async () => {
+    "POST /requests/verify-execution": async () => {
       const data = await body(request);
       const result = await runStoreOp(() =>
         userRequests.verifyApprovalBeforeExecute(data.id, data),
       );
       return send(response, 200, { ok: true, ...result });
     },
-    "POST /solicitudes/entrega": async () => {
+    "POST /requests/delivery": async () => {
       const data = await body(request);
       const solicitud = await runStoreOp(() =>
         userRequests.updateDeliveryState(data.id, data),

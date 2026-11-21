@@ -105,6 +105,24 @@ function createInputQueue() {
   };
 }
 
+/**
+ * Launch settings shared by the controller and the credential-free CLI check.
+ * @param {Pick<ClaudeContext, "cwd" | "env" | "operatorEnv" | "mcpServers" | "settingSources">} ctx
+ */
+export function claudeStartupOptions(ctx) {
+  return {
+    cwd: ctx.cwd,
+    env: { ...ctx.env, ENABLE_CLAUDEAI_MCP_SERVERS: "false" },
+    pathToClaudeCodeExecutable: ctx.operatorEnv?.SB_CLAUDE_BIN,
+    settingSources: ctx.settingSources ?? [],
+    strictMcpConfig: true,
+    mcpServersDelivery: /** @type {const} */ ("initialize"),
+    mcpServers: /** @type {ClaudeOptions["mcpServers"]} */ (
+      resolveMcpServers(ctx)
+    ),
+  };
+}
+
 /** @param {ClaudeQuery | null} [queryOverride] */
 export function createClaudeController(queryOverride = null) {
   const connectionId = randomUUID();
@@ -484,11 +502,6 @@ export function createClaudeController(queryOverride = null) {
         queryOverride || (await import("@anthropic-ai/claude-agent-sdk")).query;
       controller = new AbortController();
       inputQueue = createInputQueue();
-      const mcpServers = resolveMcpServers(ctx);
-      const envWithIsolation = {
-        ...(ctx.env || {}),
-        ENABLE_CLAUDEAI_MCP_SERVERS: "false",
-      };
       const disallowedTools = [];
       if (profileDisallowsAction(ctx, "write")) {
         disallowedTools.push("Write", "Edit", "MultiEdit", "NotebookEdit");
@@ -538,13 +551,8 @@ export function createClaudeController(queryOverride = null) {
       stream = query({
         prompt: inputQueue,
         options: {
-          cwd: ctx.cwd,
-          env: envWithIsolation,
+          ...claudeStartupOptions(ctx),
           abortController: controller,
-          settingSources: ctx.settingSources ?? [],
-          strictMcpConfig: true,
-          mcpServersDelivery: "initialize",
-          mcpServers: /** @type {ClaudeOptions["mcpServers"]} */ (mcpServers),
           ...(disallowedTools.length > 0 ? { disallowedTools } : {}),
           permissionMode: "default",
           includePartialMessages: true,

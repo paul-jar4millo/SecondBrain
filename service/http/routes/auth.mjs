@@ -48,8 +48,8 @@ export const authRoutes = (ctx, req) => {
         await auth.enableTotp((await body(request)).code),
       );
     },
-    "GET /oauth/clientes": async () => send(response, 200, mcpRemote.listar()),
-    "POST /oauth/clientes/revocar": async () => {
+    "GET /oauth/clients": async () => send(response, 200, mcpRemote.listar()),
+    "POST /oauth/clients/revoke": async () => {
       await mcpRemote.revocar((await body(request)).id);
       return send(response, 200, { ok: true });
     },
