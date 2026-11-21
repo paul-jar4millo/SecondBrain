@@ -12,7 +12,13 @@
 > digest y el host migrado al layout en inglés. La verificación pasó: e2e en
 > vivo con Codex y con Claude, rollback automático real (v0.5.1) y rollback
 > por digest v0.5.3 → v0.5.2 → v0.5.3, con `verify.sh` en 0 fallos. P7 retira
-> los alias en v0.6.0. Sigue la fase B.
+> los alias en v0.6.0.
+>
+> **Fase B (2026-11-21):** B1 flujos (#70), B2 traspaso (#71), B3 revisión
+> cruzada (#72), B4 sub-tareas (#73) y B5 uso (este PR) en main, probados con
+> CLIs falsos. B5 conserva el status-line como respaldo: es la única fuente
+> de Antigravity y del contexto. Falta la release, el despliegue y la e2e
+> con un agente real barato.
 
 ## Contexto
 

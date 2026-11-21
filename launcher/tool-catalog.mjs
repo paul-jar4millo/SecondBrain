@@ -440,6 +440,7 @@ function defaultConnectorEntries(
         "thread_request_subtask",
         "thread_subtask_status",
         "thread_integrate_subtask",
+        "agent_usage",
         "files_*",
         "usuario_preguntar",
         "usuario_consultar_respuesta",

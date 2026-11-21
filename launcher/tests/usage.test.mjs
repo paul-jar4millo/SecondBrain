@@ -15,6 +15,7 @@ import {
   usageLine,
   latestCodexUsage,
   current,
+  mergeUsage,
 } from "../usage.mjs";
 import { agyWindows, claudeWindows } from "../engines.mjs";
 import { prepareAgy, prepareClaude } from "../claude-config.mjs";
@@ -309,4 +310,94 @@ test("Ámbar y Lira miden sin pisar una línea propia; Marina no mide", async (t
     (await read(path.join(folder, "settings.json"))).statusLine,
     personal,
   );
+});
+
+test("provider events keep the latest value of each window", async (t) => {
+  const { openStore } = await import("../threads/store/event-log.ts");
+  const { createUsageTracker } =
+    await import("../threads/engine/usage-tracker.ts");
+  const dir = await mkdtemp(path.join(tmpdir(), "sb-usage-tracker-"));
+  const store = openStore(path.join(dir, "threads.sqlite"));
+  t.after(async () => {
+    store.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+  let clock = Date.parse("2026-11-20T10:00:00.000Z");
+  const tracker = createUsageTracker({
+    store,
+    now: () => new Date(clock).toISOString(),
+  });
+  const five = {
+    window: "five_hour",
+    usedPercent: 40,
+    resetsAt: "2026-11-20T12:00:00.000Z",
+    status: "allowed",
+  };
+  tracker.record("claude", [five]);
+  clock += 1000;
+  tracker.record("claude", [
+    {
+      window: "seven_day",
+      usedPercent: 100,
+      resetsAt: "2026-11-25T00:00:00.000Z",
+      status: "rejected",
+    },
+  ]);
+  assert.deepEqual(tracker.latest("claude"), {
+    ventanas: {
+      "5h": { usado: 40, reinicia: "2026-11-20T12:00:00.000Z", agotada: false },
+      semanal: {
+        usado: 100,
+        reinicia: "2026-11-25T00:00:00.000Z",
+        agotada: true,
+      },
+    },
+    actualizado: "2026-11-20T10:00:01.000Z",
+  });
+  // The same reading again is not stored until it is a few minutes old.
+  clock += 1000;
+  tracker.record("claude", [five]);
+  assert.equal(
+    tracker.latest("claude").actualizado,
+    "2026-11-20T10:00:01.000Z",
+  );
+  clock += 10 * 60_000;
+  tracker.record("claude", [five]);
+  assert.equal(
+    tracker.latest("claude").actualizado,
+    "2026-11-20T10:10:02.000Z",
+  );
+  assert.equal(tracker.latest("codex"), null);
+});
+
+test("/usage takes the newer reading of each window", async () => {
+  const recorded = {
+    ventanas: {
+      "5h": { usado: 10, reinicia: null, agotada: false },
+      semanal: { usado: 20, reinicia: null, agotada: false },
+    },
+    actualizado: "2026-11-20T10:00:00.000Z",
+    contexto: { usados: 1000, limite: 400000 },
+  };
+  const events = {
+    ventanas: { "5h": { usado: 55, reinicia: null, agotada: false } },
+    actualizado: "2026-11-20T11:00:00.000Z",
+  };
+  assert.deepEqual(mergeUsage(recorded, events), {
+    ...recorded,
+    ventanas: { ...recorded.ventanas, "5h": events.ventanas["5h"] },
+    actualizado: "2026-11-20T11:00:00.000Z",
+  });
+  assert.deepEqual(
+    mergeUsage({ ...recorded, actualizado: "2026-11-20T12:00:00.000Z" }, events)
+      .ventanas["5h"].usado,
+    10,
+  );
+  assert.equal(mergeUsage(null, events), events);
+  const usage = createUsage({
+    env: {},
+    ahora: () => Date.parse("2026-11-20T11:30:00.000Z"),
+    snapshots: (engine) => (engine === "claude" ? events : null),
+  });
+  assert.deepEqual(await usage(), { claude: events });
 });
