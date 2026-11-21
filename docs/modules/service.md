@@ -60,6 +60,15 @@ in `tests/helpers/` create synthetic vaults; tests never use real notes.
 `GET /threads/diff`, `GET /inbox` and `GET /flows` (flow templates). Agents
 cannot use them.
 
+Notifications (phase C1, `notifications.mjs`): the service follows the
+launcher's global feed once, resuming from its own cursor, and keeps an
+outbox of what needs the owner in `notifications.json` (the last 200): an
+open request, a thread that needs a decision, is ready for review or failed,
+and a hand-off between stages. `GET /notifications` returns the newest with
+the unread count; `POST /notifications/seen` (`upTo`) marks them seen. The
+app shows the count on Threads and marks it seen while Threads is open; web
+push and Discord will read the same outbox.
+
 `POST /threads` takes an optional `flowTemplateId` and `stageAgents` (agent
 per stage key). The thread freezes the template's stages when it is created;
 the first stage picks the agent, and a read-only stage runs its turns without

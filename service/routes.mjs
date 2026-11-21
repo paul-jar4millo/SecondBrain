@@ -960,6 +960,13 @@ for (const [
   ],
   ["GET /inbox", false, object, z.object({}).strict()],
   ["GET /flows", false, object, z.object({}).strict()],
+  ["GET /notifications", false, object, z.object({}).strict()],
+  [
+    "POST /notifications/seen",
+    false,
+    z.object({ upTo: z.int().min(0) }).strict(),
+    z.object({}).strict(),
+  ],
   [
     "POST /threads/agent/ask",
     true,

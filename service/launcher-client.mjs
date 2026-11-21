@@ -35,11 +35,14 @@ export function createLauncherClient(
     );
   }
   /**
-   * Follows the launcher's global thread feed; every event only asks the app
-   * to re-read.
-   * @param {() => void} listener
+   * Follows the launcher's global thread feed. The listener gets each event
+   * (or nothing on connect, to reconcile). `after` gives the cursor to
+   * resume from (it may throw to retry later); `onReset` runs when the
+   * launcher no longer has that position.
+   * @param {(event?: { type: string, globalSeq?: number, [key: string]: unknown }) => void} listener
+   * @param {{ after?: () => Promise<number | null> | number | null, onReset?: () => void }} [options]
    */
-  function subscribe(listener) {
+  function subscribe(listener, { after, onReset } = {}) {
     let stopped = false;
     /** @type {AbortController | undefined} */
     let controller;
@@ -48,7 +51,12 @@ export function createLauncherClient(
     const connect = async () => {
       controller = new AbortController();
       try {
-        const response = await fetch(base + "/threads/stream", {
+        const from = await after?.();
+        const query =
+          typeof from === "number" && Number.isSafeInteger(from) && from > 0
+            ? `?after=${from}`
+            : "";
+        const response = await fetch(base + "/threads/stream" + query, {
           headers: { authorization: `Bearer ${await secret()}` },
           signal: controller.signal,
           redirect: "error",
@@ -60,7 +68,26 @@ export function createLauncherClient(
           pending += new TextDecoder().decode(chunk, { stream: true });
           const events = pending.split("\n\n");
           pending = events.pop() ?? "";
-          if (events.some((event) => /^data:/m.test(event))) listener();
+          for (const block of events) {
+            const data = block
+              .split("\n")
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.slice(5).trimStart())
+              .join("\n");
+            if (!data) continue;
+            let message;
+            try {
+              message = JSON.parse(data);
+            } catch {
+              message = null;
+            }
+            if (message?.type === "snapshot-required") onReset?.();
+            listener(
+              message?.type === "event" && message.event
+                ? message.event
+                : undefined,
+            );
+          }
         }
       } catch {
         /* Reconnects below. */
@@ -120,7 +147,10 @@ export function createLauncherClient(
   }
   return {
     /** @param {() => void} listener */
-    subscribe: (listener) => (base ? subscribe(listener) : () => {}),
+    subscribe: (
+      /** @type {Parameters<typeof subscribe>[0]} */ listener,
+      /** @type {Parameters<typeof subscribe>[1]} */ options,
+    ) => (base ? subscribe(listener, options) : () => {}),
     proyectos: () => catalog("/projects"),
     modelos: () => catalog("/models", undefined, 30000),
     uso: () => catalog("/usage"),

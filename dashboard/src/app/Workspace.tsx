@@ -40,6 +40,7 @@ import { AgentHandoff } from "../features/assist/AgentHandoff";
 import { PromptBar } from "../features/assist/PromptBar";
 import { preference } from "../features/settings/preferences";
 import type { ThreadTarget } from "../features/threads/thread-target";
+import { useUnreadNotifications } from "../features/threads/notifications";
 const NewThreadDialog = lazy(() =>
   import("../features/threads/dialogs").then((m) => ({
     default: m.NewThreadDialog,
@@ -183,6 +184,16 @@ export function Workspace() {
     }),
     [state.items, edit, notify, trash, openThread],
   );
+  const unread = useUnreadNotifications();
+  const badge = (path: string) =>
+    path === "/threads" && unread > 0 ? (
+      <span
+        className="nav-badge"
+        aria-label={t("threads.unread", { count: unread })}
+      >
+        {unread > 9 ? "9+" : unread}
+      </span>
+    ) : null;
   const tools: { path: string; label: string; glyph: GlyphName }[] = [
     { path: "/projects", label: t("tools.projects"), glyph: "proyectos" },
     { path: "/threads", label: t("tools.threads"), glyph: "equipo" },
@@ -304,6 +315,7 @@ export function Workspace() {
               >
                 <HudGlyph name={glyph} />
                 <span>{label}</span>
+                {badge(path)}
               </NavLink>
             ))}
           </nav>
@@ -321,6 +333,7 @@ export function Workspace() {
                   {tools.map(({ path, label }) => (
                     <NavLink key={path} to={path}>
                       {label}
+                      {badge(path)}
                     </NavLink>
                   ))}
                 </nav>

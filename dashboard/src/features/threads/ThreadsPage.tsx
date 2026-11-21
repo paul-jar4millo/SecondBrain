@@ -14,6 +14,7 @@ import { STATUS_LABEL, openRequests, type ThreadView } from "./thread-store";
 import { useThread } from "./thread-stream";
 import type { InboxEntry, Thread } from "./thread-types";
 import { Timeline } from "./Timeline";
+import { useMarkNotificationsSeen } from "./notifications";
 import "./threads.css";
 
 function useInbox(projection: ReturnType<typeof useThreadProjection>) {
@@ -312,6 +313,7 @@ export function ThreadsPage() {
   const navigate = useNavigate();
   const list = useThreadProjection();
   const inbox = useInbox(list);
+  useMarkNotificationsSeen();
   const [creating, setCreating] = useState(false);
   return (
     <div className="threads-page" data-selected={id ? true : undefined}>
