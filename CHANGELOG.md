@@ -4,6 +4,28 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-11-21
+
+### Removed
+
+- The Spanish API paths and JSON keys of the v0.5 compatibility release, and
+  `SB_LEGACY_HTTP_ROUTES`. The service and launcher answer only the English
+  paths.
+- The legacy environment names (`SB_AGENTE`, `SB_LANZADOR_*`,
+  `SB_PROYECTOS_FILE`, `SB_SKILL_RESUMEN`, `LANZADOR_URL`,
+  `LANZADOR_TOKEN_FILE`, `ACTIVAR_AUTOMATIZACIONES`) and support for the
+  Spanish host layout.
+
+### Changed
+
+- Operations files, units and commands use English names
+  (`secondbrain-launcher`, `morning-summary`, `secondbrain-notify@`,
+  `pc-wake`, `pc-status`, `add-repo.sh`, `ops/lxc/inside/provision.sh`…).
+- `migrate-host-layout.mjs --retire-aliases` removes the legacy symlinks
+  left by the migration.
+- CI rejects new Spanish operational names, and the baseline keeps only
+  the `sb-agente` account's Remote Control unit.
+
 ## [0.5.3] - 2026-11-21
 
 ### Fixed
@@ -249,6 +271,7 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.6.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.6.0
 [0.5.3]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.3
 [0.5.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.2
 [0.5.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.1
