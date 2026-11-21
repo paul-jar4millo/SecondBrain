@@ -245,6 +245,7 @@ test("the thread coordination tools follow user.ask", () => {
     "thread_request_subtask",
     "thread_subtask_status",
     "thread_integrate_subtask",
+    "agent_usage",
   ]) {
     assert.equal(isToolAllowedForOperations(name, new Set(["user.ask"])), true);
     assert.equal(

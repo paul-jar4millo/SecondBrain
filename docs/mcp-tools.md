@@ -56,6 +56,7 @@ expiry unless pinned, 7-day trash. Attachments are untrusted data.
 | ----------------- | ------------------------------------------------------------------------- |
 | `thread_ask_user` | Ask the owner from inside a thread; the question shows inline in its view |
 | `thread_report_review` | Report the review stage's verdict; changes go back to the implementer, up to the flow's round limit |
+| `agent_usage` | Plan usage of each subscription agent (5-hour and weekly windows, reset times) |
 | `thread_request_subtask` | Ask the owner to approve a child thread that starts from the agent's branch |
 | `thread_subtask_status` | List the thread's subtasks with status, last message and diffstat |
 | `thread_integrate_subtask` | Merge a finished subtask into the agent's branch, reporting conflicts without changing files |

@@ -72,6 +72,7 @@ export function isToolAllowedForOperations(name, opsSet) {
       "thread_request_subtask",
       "thread_subtask_status",
       "thread_integrate_subtask",
+      "agent_usage",
     ].includes(name)
   ) {
     return opsSet.has("user.ask");
@@ -697,6 +698,12 @@ export function createBrainMcp({
     },
     (args) => api("/threads/agent/subtask", args),
     false,
+  );
+  tool(
+    "agent_usage",
+    "Uso de los planes de suscripción de cada agente (codex, claude, agy): porcentaje usado por ventana (5h, semanal) y cuándo reinicia. Úsalo para decidir si conviene repartir trabajo o esperar.",
+    {},
+    () => api("/agents/usage"),
   );
   tool(
     "thread_subtask_status",

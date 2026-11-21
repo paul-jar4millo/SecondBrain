@@ -278,6 +278,7 @@ export async function createContext(options) {
         return cap;
       case "POST /requests/ask":
       case "POST /requests/wait":
+      case "GET /agents/usage":
       case "POST /threads/agent/ask":
       case "POST /threads/agent/handoff":
       case "POST /threads/agent/review":
