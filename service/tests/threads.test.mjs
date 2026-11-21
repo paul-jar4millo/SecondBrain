@@ -75,6 +75,8 @@ async function fakeLauncher(t) {
       return res.end('id: 4\ndata: {"type":"event"}\n\n');
     }
     if (url === "/inbox") return json(200, { entries: [] });
+    if (url === `/threads/${THREAD}/handoff`)
+      return json(202, { accepted: true, toStage: data.toStage });
     if (url === "/flows") return json(200, { flows: [{ id: "single" }] });
     json(404, { error: "no" });
   });
@@ -178,6 +180,26 @@ test("threads are relayed to the launcher with a credential per thread", async (
     body: JSON.stringify({ title: "Formulario", options: ["x"] }),
   });
   assert.equal(direct.status, 201);
+  const handoff = await fetch(`${base}/threads/agent/handoff`, {
+    method: "POST",
+    headers: agent,
+    body: JSON.stringify({ toStage: "implement", narrative: "Plan listo" }),
+  });
+  assert.equal(handoff.status, 202);
+  assert.deepEqual(await handoff.json(), {
+    accepted: true,
+    toStage: "implement",
+  });
+  assert.equal(
+    (
+      await fetch(`${base}/threads/agent/handoff`, {
+        method: "POST",
+        headers: { ...agent, authorization: "Bearer room-secret" },
+        body: JSON.stringify({ toStage: "implement", narrative: "x" }),
+      })
+    ).status,
+    403,
+  );
 
   // Agents cannot drive threads; the room token cannot ask in a thread.
   assert.equal(

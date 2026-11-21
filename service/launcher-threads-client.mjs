@@ -56,6 +56,11 @@ export function createThreadsClient({ base, secret, request, Failure }) {
     ask: (id, data) => request(`/threads/${thread(id)}/ask`, data),
     /**
      * @param {unknown} id
+     * @param {unknown} data
+     */
+    handoff: (id, data) => request(`/threads/${thread(id)}/handoff`, data),
+    /**
+     * @param {unknown} id
      * @param {unknown} requestId
      */
     request: (id, requestId) =>

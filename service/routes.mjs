@@ -968,6 +968,18 @@ for (const [
     anyQuery,
   ],
   [
+    "POST /threads/agent/handoff",
+    true,
+    z
+      .object({
+        toStage: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/),
+        narrative: z.string().min(1).max(20_000),
+        openItems: z.array(z.string().min(1).max(500)).max(50).optional(),
+      })
+      .strict(),
+    anyQuery,
+  ],
+  [
     "GET /threads/agent/request",
     true,
     object,

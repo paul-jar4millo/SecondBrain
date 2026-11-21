@@ -71,3 +71,10 @@ archiving revokes it. With that credential the agent asks the owner through
 `usuario_*` tools are routed to the thread: `/requests/ask`,
 `/requests/detail` and `/requests/wait` accept `req_…` ids. An
 answer that arrives after the turn ended starts a new turn with it.
+
+In a multi-stage flow the agent hands the thread on with
+`POST /threads/agent/handoff` (MCP `thread_handoff`, gated by `user.ask`
+like the other thread tools): the launcher checks the flow's rules, waits for
+the agent's turn to end, adds a `handoff` item with the brief (diffstat,
+commands and exit codes, failed tests, errors, files) and starts the next
+stage with its own agent and a new provider conversation.

@@ -749,3 +749,109 @@ test("flows reject unknown templates and stages", async (t) => {
   await waitFor(() => env.contexts.length);
   assert.equal(env.contexts[0].readOnly, false);
 });
+
+test("a hand-off moves the thread to the next stage with a brief and a new conversation", async (t) => {
+  /** @type {any} */
+  let env;
+  /** @type {any} */
+  let rejected;
+  env = await setup(
+    t,
+    async (/** @type {any} */ ctx, /** @type {number} */ n) => {
+      if (n !== 1) return;
+      ctx.nativeId("plan-conversation");
+      rejected = await Promise.resolve()
+        .then(() =>
+          env.engine.handoff(ctx.session.id, {
+            toStage: "review",
+            narrative: "x",
+          }),
+        )
+        .catch((/** @type {Error} */ e) => e);
+      ctx.emit({
+        type: "command",
+        id: "c1",
+        command: "npm test",
+        output: "1 failing",
+        exitCode: 1,
+        status: "failed",
+      });
+      const accepted = env.engine.handoff(ctx.session.id, {
+        toStage: "implement",
+        narrative: "Plan listo: tocar el parser.",
+        openItems: ["Cubrir el caso vacío"],
+      });
+      assert.equal(accepted.accepted, true);
+    },
+  );
+  const thread = await env.engine.create({
+    kind: "scratch",
+    prompt: "Arregla el parser",
+    agent: AGENT,
+    flowTemplateId: "plan-implement-review",
+    stageAgents: { implement: { engine: "claude" } },
+  });
+  await waitFor(() => env.log.turns.length >= 2);
+  await env.engine.idle(thread.id);
+  assert.match(rejected.message, /solo puedes pasar a: implement/);
+  assert.throws(
+    () => env.engine.handoff(thread.id, { toStage: "review", narrative: "x" }),
+    /durante tu turno/,
+  );
+  const [first, second] = env.log.turns;
+  assert.match(first.prompt, /etapa 1\/3 «Planificar»/);
+  assert.match(first.prompt, /thread_handoff/);
+  assert.match(first.prompt, /Arregla el parser$/);
+  assert.match(second.prompt, /etapa 2\/3 «Implementar»/);
+  assert.match(second.prompt, /Traspaso desde la etapa «Planificar»/);
+  assert.match(second.prompt, /Plan listo: tocar el parser\./);
+  assert.match(second.prompt, /- Cubrir el caso vacío/);
+  assert.equal(second.conversacionId, null);
+  assert.deepEqual(
+    env.contexts.map((/** @type {any} */ c) => [c.agent.engine, c.readOnly]),
+    [
+      ["codex", true],
+      ["claude", false],
+    ],
+  );
+  const after = env.store.getThread(thread.id);
+  assert.equal(after.stageIndex, 1);
+  assert.deepEqual(after.agent, { engine: "claude" });
+  const handoff = env.engine
+    .snapshot(thread.id)
+    .items.find((/** @type {any} */ i) => i.kind === "handoff");
+  assert.equal(handoff.fromStage, 0);
+  assert.equal(handoff.toStage, 1);
+  assert.deepEqual(handoff.openItems, ["Cubrir el caso vacío"]);
+  assert.deepEqual(handoff.brief.failedTests, ["npm test"]);
+  assert.deepEqual(handoff.brief.commands, [
+    { command: "npm test", exitCode: 1 },
+  ]);
+  assert.match(second.prompt, /Tests que fallaron:\n- npm test/);
+});
+
+test("a thread without a multi-stage flow cannot hand off", async (t) => {
+  /** @type {any} */
+  let env;
+  /** @type {any} */
+  let error;
+  env = await setup(t, async (/** @type {any} */ ctx) => {
+    error = await Promise.resolve()
+      .then(() =>
+        env.engine.handoff(ctx.session.id, {
+          toStage: "implement",
+          narrative: "x",
+        }),
+      )
+      .catch((/** @type {Error} */ e) => e);
+  });
+  const thread = await env.engine.create({
+    kind: "scratch",
+    prompt: "a",
+    agent: AGENT,
+  });
+  await waitFor(() => env.log.turns.length);
+  await env.engine.idle(thread.id);
+  assert.match(error.message, /no tiene un flujo/);
+  assert.equal(env.store.getThread(thread.id).stageIndex, 0);
+});

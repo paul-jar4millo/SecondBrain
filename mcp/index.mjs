@@ -67,6 +67,7 @@ export function isToolAllowedForOperations(name, opsSet) {
       "usuario_consultar_respuesta",
       "usuario_esperar_respuesta",
       "thread_ask_user",
+      "thread_handoff",
     ].includes(name)
   ) {
     return opsSet.has("user.ask");
@@ -616,6 +617,28 @@ export function createBrainMcp({
         .optional(),
     },
     (args) => api("/threads/agent/ask", args),
+    false,
+  );
+  tool(
+    "thread_handoff",
+    "Pasa tu thread a otra etapa de su flujo (por ejemplo, de planificar a implementar). Solo funciona durante tu turno y hacia las etapas que el flujo permite; el traspaso ocurre cuando tu turno termina. El sistema adjunta el diff, los comandos y los errores; tú aportas la narrativa y los pendientes.",
+    {
+      toStage: z
+        .string()
+        .regex(/^[a-z][a-z0-9-]{0,31}$/)
+        .describe("Clave de la etapa destino, p. ej. implement o review."),
+      narrative: z
+        .string()
+        .min(1)
+        .max(20_000)
+        .describe("Qué hiciste, qué decidiste y por qué."),
+      openItems: z
+        .array(z.string().min(1).max(500))
+        .max(50)
+        .optional()
+        .describe("Pendientes concretos para la etapa siguiente."),
+    },
+    (args) => api("/threads/agent/handoff", args),
     false,
   );
   return server;

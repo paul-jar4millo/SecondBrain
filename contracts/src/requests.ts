@@ -42,6 +42,14 @@ export const AgentQuestion = z.object({
 });
 export type AgentQuestion = z.infer<typeof AgentQuestion>;
 
+/** thread_handoff: the agent passes the thread to another stage of its flow. */
+export const AgentHandoff = z.object({
+  toStage: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/),
+  narrative: z.string().min(1).max(20_000),
+  openItems: z.array(z.string().min(1).max(500)).max(50).default([]),
+});
+export type AgentHandoff = z.infer<typeof AgentHandoff>;
+
 export const RequestStatus = z.enum([
   "open",
   "answered",
