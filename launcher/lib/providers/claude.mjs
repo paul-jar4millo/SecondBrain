@@ -9,12 +9,13 @@ import {
 import {
   profileDisallowsAction,
   publishVerifiedWorkspaceArtifact,
+  readOnlyCommand,
   resolveMcpServers,
   text,
   trackChildExit,
   waitChildExit,
 } from "./shared.mjs";
-import { claudeRateLimit, stepStatus } from "./provider-events.mjs";
+import { claudeRateLimits, stepStatus } from "./provider-events.mjs";
 
 /** @typedef {import("@anthropic-ai/claude-agent-sdk").SDKUserMessage} ClaudeUserMessage */
 /** @typedef {import("@anthropic-ai/claude-agent-sdk").SDKMessage & { is_interrupt?: boolean }} ClaudeMessage */
@@ -260,11 +261,11 @@ export function createClaudeController(queryOverride = null) {
             turn.consumedSteers = turn.pendingSteers;
           }
           if (event.type === "rate_limit_event") {
-            const window = claudeRateLimit(
+            const windows = claudeRateLimits(
               /** @type {any} */ (event).rate_limit_info,
             );
-            if (window)
-              turn.ctx.emit?.({ type: "rate_limits", windows: [window] });
+            if (windows.length)
+              turn.ctx.emit?.({ type: "rate_limits", windows });
           }
           const parentToolUseId =
             "parent_tool_use_id" in event
@@ -682,6 +683,19 @@ export function createClaudeController(queryOverride = null) {
             ].includes(name);
             const shellTool = ["Bash", "PowerShell"].includes(name);
             const webTool = ["WebFetch", "WebSearch"].includes(name);
+            if (
+              shellTool &&
+              profileDisallowsAction(turn.ctx, "write") &&
+              !readOnlyCommand(
+                /** @type {{ command?: unknown }} */ (input)?.command,
+              )
+            ) {
+              return {
+                behavior: "deny",
+                message:
+                  "Esta etapa es de solo lectura: puedes leer (git diff, rg, cat…) y correr tests, pero no encadenar comandos ni escribir archivos.",
+              };
+            }
             if (
               (writeTool && profileDisallowsAction(turn.ctx, "write")) ||
               (shellTool && profileDisallowsAction(turn.ctx, "shell")) ||

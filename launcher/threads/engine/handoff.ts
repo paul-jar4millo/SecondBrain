@@ -99,18 +99,33 @@ const describeStage = (thread: Thread, stage: ThreadStage, index: number) =>
   `${index + 1}/${thread.flow?.stages.length} «${stage.name}» (${stage.key}${stage.readOnly ? ", solo lectura" : ""})`;
 
 /** What a stage's agent reads before its first message in the stage. */
-export function stagePreamble(thread: Thread): string {
+/**
+ * What the agent of the current stage reads first. Later stages start a new
+ * conversation, so they also get the owner's original task.
+ */
+export function stagePreamble(thread: Thread, task = ""): string {
   const stage = currentStage(thread);
   if (!thread.flow || thread.flow.stages.length < 2 || !stage) return "";
   const targets = handoffTargets(thread);
   const lines = [
     `[SecondBrain] Trabajas en la etapa ${describeStage(thread, stage, thread.stageIndex)} de un flujo de ${thread.flow.stages.length} etapas.`,
   ];
+  if (thread.stageIndex > 0 && task.trim()) {
+    const text = task.trim();
+    lines.push(
+      "La tarea original del dueño:",
+      ...(text.length > 4000 ? `${text.slice(0, 4000)}…` : text)
+        .split("\n")
+        .map((line) => `> ${line}`),
+    );
+  }
   if (stage.readOnly)
-    lines.push("En esta etapa no modificas archivos: solo lees y analizas.");
+    lines.push(
+      "En esta etapa no modificas archivos: solo lees, analizas y, si hace falta, corres tests.",
+    );
   if (stage.role === "review")
     lines.push(
-      `Revisa el trabajo de la rama (git diff contra la base, tests si hace falta) y reporta tu veredicto con thread_report_review: approved, changes-requested con hallazgos concretos, o comment. Esta es la ronda ${thread.counters.reviewRounds + 1} de ${thread.limits.maxReviewRounds}. Si pides cambios, el thread vuelve a la etapa anterior al terminar tu turno.`,
+      `Revisa el trabajo de la rama (git diff contra la base, tests si hace falta) y reporta tu veredicto con thread_report_review: approved, changes-requested con hallazgos concretos, o comment. Hasta ahora la revisión pidió cambios ${thread.counters.reviewRounds} de un máximo de ${thread.limits.maxReviewRounds} veces. Si pides cambios, el thread vuelve a la etapa anterior al terminar tu turno.`,
     );
   else if (targets.length)
     lines.push(

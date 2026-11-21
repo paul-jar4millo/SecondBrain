@@ -99,6 +99,8 @@ export interface CapabilityOptions {
   workOrderId?: string | null;
   memberId?: string | null;
   actor?: string | null;
+  /** Every identity that may use it, e.g. one per stage of a thread flow. */
+  actors?: string[];
   profileId?: string;
   allowedMcps?: string[];
   allowedOperations?: string[];

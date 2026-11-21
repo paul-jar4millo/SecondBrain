@@ -99,7 +99,17 @@ async function fakeLauncher(t) {
       return json(201, { recorded: true, round: 1, verdict: data.verdict });
     if (url === `/threads/${THREAD}/handoff`)
       return json(202, { accepted: true, toStage: data.toStage });
-    if (url === "/flows") return json(200, { flows: [{ id: "single" }] });
+    if (url === "/flows")
+      return json(200, {
+        flows: [
+          { id: "single" },
+          {
+            id: "plan-implement-review",
+            stages: [{ key: "plan" }, { key: "implement" }, { key: "review" }],
+          },
+        ],
+      });
+    if (url === "/usage") return json(200, { codex: { ventanas: {} } });
     json(404, { error: "no" });
   });
   server.listen(0, "127.0.0.1");
@@ -118,6 +128,69 @@ async function fakeLauncher(t) {
     },
   };
 }
+
+test("a flow's credential answers to the agent of every stage", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "sb-threads-flow-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const vault = path.join(dir, "vault");
+  await mkdir(path.join(vault, "00-Inbox"), { recursive: true });
+  await writeFile(path.join(vault, "Home.md"), "# Prueba\n");
+  const launcher = await fakeLauncher(t);
+  const app = await createApplication({
+    vaultRoot: vault,
+    dataDirectory: path.join(dir, "data"),
+    auth: false,
+    agentes: { brainToken: "room-secret" },
+    lanzador: { url: launcher.url, token: "ctrl" },
+  });
+  t.after(() => app.close());
+  app.server.listen(0, "127.0.0.1");
+  await once(app.server, "listening");
+  const base = `http://127.0.0.1:${app.server.address().port}/api/v1`;
+  const owner = await getCsrfHeaders(base);
+  // The dialog also sends its single agent, which no stage uses here.
+  const created = await fetch(`${base}/threads`, {
+    method: "POST",
+    headers: owner,
+    body: JSON.stringify({
+      prompt: "Hola",
+      kind: "scratch",
+      agent: { engine: "agy" },
+      flowTemplateId: "plan-implement-review",
+      stageAgents: {
+        plan: { engine: "codex" },
+        implement: { engine: "codex" },
+        review: { engine: "claude" },
+      },
+    }),
+  });
+  assert.equal(created.status, 201);
+  const sent = launcher.seen.find(
+    (s) => s.url === "/threads" && s.method === "POST",
+  );
+  const as = (/** @type {string} */ who) => ({
+    authorization: `Bearer ${sent.data.capabilityToken}`,
+    "content-type": "application/json",
+    "x-sb-agente": who,
+  });
+  for (const who of ["menta", "ambar"]) {
+    const handed = await fetch(`${base}/threads/agent/handoff`, {
+      method: "POST",
+      headers: as(who),
+      body: JSON.stringify({ toStage: "implement", narrative: "Listo." }),
+    });
+    assert.equal(handed.status, 202, who);
+  }
+  const stranger = await fetch(`${base}/threads/agent/handoff`, {
+    method: "POST",
+    headers: as("lira"),
+    body: JSON.stringify({ toStage: "implement", narrative: "Listo." }),
+  });
+  assert.equal(stranger.status, 403);
+  // agent_usage works from inside a thread.
+  const usage = await fetch(`${base}/agents/usage`, { headers: as("menta") });
+  assert.equal(usage.status, 200);
+});
 
 test("threads are relayed to the launcher with a credential per thread", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "sb-threads-api-"));
@@ -355,8 +428,10 @@ test("threads are relayed to the launcher with a credential per thread", async (
     { entries: [] },
   );
   assert.deepEqual(
-    await fetch(`${base}/flows`, { headers: owner }).then((r) => r.json()),
-    { flows: [{ id: "single" }] },
+    (
+      await fetch(`${base}/flows`, { headers: owner }).then((r) => r.json())
+    ).flows.map((/** @type {{ id: string }} */ f) => f.id),
+    ["single", "plan-implement-review"],
   );
 
   // Closing (other than by PR) revokes the thread's credential.

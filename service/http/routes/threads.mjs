@@ -116,10 +116,37 @@ export const threadRoutes = (ctx, req) => {
   };
 
   /** Credential for the thread's MCP servers, narrowed by operator policy. */
-  const mintCapability = async (
-    /** @type {string} */ engine,
-    /** @type {string} */ threadId,
-  ) => {
+  /**
+   * The engine of each stage a new thread will run: what the owner chose for
+   * the stage, else the template's default, else the thread's agent.
+   * @param {{ agent?: { engine?: string }, flowTemplateId?: string, stageAgents?: Record<string, { engine?: string }> }} data
+   */
+  const flowEngines = async (data) => {
+    const fallback = data.agent?.engine;
+    if (!data.flowTemplateId) return [fallback];
+    /** @type {{ flows: Array<{ id: string, stages: Array<{ key: string, defaultAgent?: { engine?: string } }> }> }} */
+    const { flows } = await threads.flows();
+    const template = flows.find((f) => f.id === data.flowTemplateId);
+    if (!template)
+      return [
+        fallback,
+        ...Object.values(data.stageAgents ?? {}).map((a) => a?.engine),
+      ];
+    return template.stages.map(
+      (stage) =>
+        data.stageAgents?.[stage.key]?.engine ??
+        stage.defaultAgent?.engine ??
+        fallback,
+    );
+  };
+
+  /**
+   * A thread's credential is bound to the thread; every stage's agent may
+   * use it under its own identity.
+   * @param {Array<string | undefined>} engines
+   * @param {string} threadId
+   */
+  const mintCapability = async (engines, threadId) => {
     const profile = await resolveServerProfile("ejecucion");
     if (options.operatorToolPolicy?.allowedOperations)
       profile.allowedOperations = intersectList(
@@ -131,11 +158,23 @@ export const threadRoutes = (ctx, req) => {
         profile.allowedMcps,
         options.operatorToolPolicy.allowedMcps,
       );
-    const actor = ENGINE_ACTOR[engine] || null;
+    const identities = [
+      ...new Set(
+        engines
+          .filter((e) => typeof e === "string" && e)
+          .map(
+            (e) =>
+              ENGINE_ACTOR[/** @type {string} */ (e)] ||
+              /** @type {string} */ (e),
+          ),
+      ),
+    ];
+    const first = identities[0] ?? null;
     return auth.issueCapability({
       sessionId: threadId,
-      memberId: actor || engine,
-      actor,
+      memberId: first,
+      actor: first,
+      actors: identities,
       profileId: profile.id,
       allowedMcps: profile.allowedMcps,
       allowedOperations: profile.allowedOperations,
@@ -175,7 +214,7 @@ export const threadRoutes = (ctx, req) => {
       // Same shape as the launcher's ids; the credential is bound to it
       // before the thread exists, so the first turn already sees its thread.
       const threadId = `thr_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
-      const minted = await mintCapability(data.agent?.engine, threadId);
+      const minted = await mintCapability(await flowEngines(data), threadId);
       let result;
       try {
         result = await threads.create({
@@ -226,8 +265,10 @@ export const threadRoutes = (ctx, req) => {
           403,
         );
       const childId = `thr_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
+      if (asked.status !== "open")
+        throw new Failure("Esa sub-tarea ya se respondió.", 409);
       const minted = await mintCapability(
-        asked.subtask?.agent?.engine,
+        [asked.subtask?.agent?.engine],
         childId,
       );
       try {

@@ -221,7 +221,9 @@ export async function createContext(options) {
     }
     if (!cap) return null;
     const { agentId, sessionUuid } = agentHeaders(request);
-    const allowedAgentIds = new Set([cap.actor, cap.memberId].filter(Boolean));
+    const allowedAgentIds = new Set(
+      [cap.actor, cap.memberId, ...(cap.actors ?? [])].filter(Boolean),
+    );
     if (agentId && allowedAgentIds.size > 0 && !allowedAgentIds.has(agentId)) {
       throw new Failure(
         "La identidad del agente no coincide con la capacidad asignada a la sesión.",

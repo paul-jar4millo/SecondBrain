@@ -45,6 +45,23 @@ export function toLegacyUsage(snapshot: UsageSnapshot): LegacyUsage | null {
     : null;
 }
 
+/**
+ * Providers repeat the same reading on every event, sometimes with a reset
+ * time a few seconds off; that is not a new reading.
+ */
+function sameReading(a: RateLimitWindow[], b: RateLimitWindow[]) {
+  const key = (windows: RateLimitWindow[]) =>
+    JSON.stringify(
+      windows.map((w) => [
+        w.window,
+        w.usedPercent,
+        w.status ?? null,
+        w.resetsAt ? Math.round(Date.parse(w.resetsAt) / 600_000) : null,
+      ]),
+    );
+  return key(a) === key(b);
+}
+
 export function createUsageTracker({
   store,
   now,
@@ -65,7 +82,7 @@ export function createUsageTracker({
       const at = now();
       if (
         previous &&
-        JSON.stringify(previous.windows) === JSON.stringify(next) &&
+        sameReading(previous.windows, next) &&
         Date.parse(at) - Date.parse(previous.at) < REFRESH_MS
       )
         return;
