@@ -4,6 +4,27 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-21
+
+### Changed
+
+- The service, MCP and dashboard run as one OCI image, published to GHCR
+  with an SBOM and deployed by digest through a Podman Quadlet unit. The
+  launcher stays native.
+- Each deploy applies the host configuration, units and firewall, then runs
+  `ops/deploy/verify.sh` from the release and rolls back if it fails.
+- The agent CLIs (Claude, Codex, Antigravity) are pinned in `ops/agents/`.
+  CI installs those versions and checks the launcher's real launch options.
+- Service and launcher routes, JSON keys and `SB_*` variables use English
+  names. The Spanish names still work in this release, with a `Deprecation`
+  header on the routes.
+- A host migration script moves the server layout to English names. It shows
+  the plan by default and supports `--apply` and `--rollback`.
+
+### Removed
+
+- The launcher compatibility layer and its version markers.
+
 ## [0.4.2] - 2026-11-20
 
 ### Changed
@@ -198,6 +219,10 @@ First public release.
 - Documentation: architecture (C4), ADRs, module guides, API and MCP
   references, deployment, operations and CI/CD.
 
+[0.5.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.5.0
+[0.4.2]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.4.2
+[0.4.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.4.1
+[0.4.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.4.0
 [0.3.1]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.3.1
 [0.3.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.3.0
 [0.2.0]: https://github.com/paul-jar4millo/SecondBrain/releases/tag/v0.2.0
