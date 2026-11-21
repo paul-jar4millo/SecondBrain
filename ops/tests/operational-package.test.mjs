@@ -50,7 +50,7 @@ test("empaqueta recursos de operación sin configuración privada local", async 
     "ops/backup/backup.sh",
     "ops/backup/secondbrain-backup.timer",
     "ops/backup/backup.env",
-    "ops/aviso/aviso.env",
+    "ops/notify/aviso.env",
   ])
     await put(file);
   const target = path.join(dir, "release");
@@ -59,7 +59,7 @@ test("empaqueta recursos de operación sin configuración privada local", async 
     "backup.sh",
     "secondbrain-backup.timer",
   ]);
-  assert.deepEqual(await readdir(path.join(target, "ops/aviso")), []);
+  assert.deepEqual(await readdir(path.join(target, "ops/notify")), []);
   // Product skills ship only their SKILL.md; folders without one are skipped.
   assert.deepEqual(
     (await readdir(path.join(target, "launcher/skills"))).sort(),

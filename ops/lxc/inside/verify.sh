@@ -18,30 +18,23 @@ como_agente() { runuser -u sb-agente -- env -C "$agente" HOME="$agente" "$@"; }
 echo "Servicio"
 probar "Node $NODE_VERSION" test "$(node -v)" = "v$NODE_VERSION"
 probar "active release" bash /opt/secondbrain/current/ops/deploy/verify.sh "$(readlink -f /opt/secondbrain/current)"
-if [[ -f /etc/secondbrain/english-layout ]]; then
-  probar "launcher service" systemctl is-active --quiet secondbrain-launcher
-else
-  probar "launcher service" systemctl is-active --quiet secondbrain-lanzador
-fi
+probar "launcher service" systemctl is-active --quiet secondbrain-launcher
 probar "health local" curl -fsS --max-time 5 http://127.0.0.1:8080/api/v1/health
 probar "release activa" test -f /opt/secondbrain/current/REVISION
 probar "vault con Home.md" test -f /srv/secondbrain/vault/Home.md
-probar "script matutino legible por el servicio" runuser -u secondbrain -- test -r /opt/secondbrain/current/ops/lanzador/resumen-matutino.sh
+probar "script matutino legible por el servicio" runuser -u secondbrain -- test -r /opt/secondbrain/current/ops/launcher/morning-summary.sh
 probar "API de threads del lanzador" sh -c 'curl -fsS --max-time 5 -H "Authorization: Bearer $(cat /var/lib/secondbrain/lanzador-token)" http://127.0.0.1:8092/threads'
 no_debe "sb-hilo retirado (ADR 0010)" test -e /usr/local/bin/sb-hilo
-if [[ -e $agente/estado/lanzador/sesiones.json ]]; then
-  aviso "datos de sesiones antiguas (paso de datos de A9 pendiente)"
-fi
 probar "configuración operativa sin deriva" node /opt/secondbrain/current/ops/deploy/configure.mjs --release /opt/secondbrain/current --parameters /etc/secondbrain/parameters.json --check
-probar "utilidad de homelab instalada" test -x /usr/local/bin/estado-pc
+probar "utilidad de homelab instalada" test -x /usr/local/bin/pc-status
 probar "gestor de usuario disponible" systemctl is-active --quiet "user@$(id -u sb-agente).service"
-if [[ ${ACTIVAR_AUTOMATIZACIONES:-0} == 1 ]]; then
-  probar "resumen matutino programado" systemctl is-enabled --quiet resumen-matutino.timer
+if [[ ${ENABLE_AUTOMATIONS:-0} == 1 ]]; then
+  probar "resumen matutino programado" systemctl is-enabled --quiet morning-summary.timer
 fi
 if [[ -n $HEALTH_PUBLICO ]]; then
   probar "HTTPS público" curl -fsS --max-time 8 "$HEALTH_PUBLICO"
 fi
-if [[ -n $REPO_VAULT && ${ACTIVAR_AUTOMATIZACIONES:-0} == 1 ]]; then
+if [[ -n $REPO_VAULT && ${ENABLE_AUTOMATIONS:-0} == 1 ]]; then
   probar "push del vault programado" systemctl is-enabled --quiet secondbrain-vault-push.timer
   probar "acceso de escritura al repo del vault" runuser -u secondbrain -- env -C /srv/secondbrain/vault \
     GIT_SSH_COMMAND="/usr/bin/ssh -F /dev/null -i /var/lib/secondbrain/vault-git/id_ed25519 -o UserKnownHostsFile=/var/lib/secondbrain/vault-git/known_hosts -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes" \
@@ -51,7 +44,7 @@ fi
 echo "Despliegue continuo"
 if [[ -n $RUNNER_NOMBRE ]]; then
   if systemctl list-units --all --no-legend 'actions.runner.*' | grep -q running; then ok "runner de GitHub activo"
-  else aviso "runner de GitHub (instalar.sh lo registra)"; fi
+  else aviso "runner de GitHub (install.sh lo registra)"; fi
 fi
 probar "sudo limitado al helper" sudo -l -U sb-runner /usr/local/sbin/secondbrain-deploy x
 
@@ -64,7 +57,7 @@ probar "DNS para las agentes" como_agente getent hosts github.com
 no_debe "el vault es inaccesible para sb-agente" como_agente ls /srv/secondbrain/vault
 no_debe "los datos del servicio son inaccesibles" como_agente cat /var/lib/secondbrain/agentes-brain-token
 
-echo "Motores (cuentas: dentro/conectar.sh)"
+echo "Motores (cuentas: inside/connect.sh)"
 probar "pinned agent CLIs" node /opt/secondbrain/current/ops/agents/install.mjs --check
 [[ -s $agente/claude/.credentials.json ]] && ok "sesión de Claude" || aviso "sesión de Claude"
 grep -q '^DEEPSEEK_API_KEY=.' "$agente/agentes.env" 2>/dev/null && ok "clave de DeepSeek" || aviso "clave de DeepSeek"

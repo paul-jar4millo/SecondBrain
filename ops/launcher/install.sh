@@ -4,13 +4,9 @@
 # (usa credenciales con otros nombres).
 set -euo pipefail
 release=${SB_RELEASE:-/opt/secondbrain/current}
-src=$release/ops/lanzador
-launcher=secondbrain-lanzador.service
-summary=resumen-matutino.timer
-if [[ -f /etc/secondbrain/english-layout ]]; then
-  launcher=secondbrain-launcher.service
-  summary=morning-summary.timer
-fi
+src=$release/ops/launcher
+launcher=secondbrain-launcher.service
+summary=morning-summary.timer
 agente=/var/lib/sb-agente
 servicio=/var/lib/secondbrain
 install -d -m 750 -o root -g sb-agente /etc/sb-agente
@@ -29,7 +25,7 @@ chmod 0440 "$hash"
 install -d -m 750 -o root -g sb-agente /etc/sb-agente
 /opt/node/bin/node -e '
 const fs = require("fs"), path = require("path");
-const base = fs.realpathSync("/srv/sb-agente/proyectos");
+const base = fs.realpathSync("/srv/sb-agent/projects");
 let projects;
 try {
   projects = JSON.parse(fs.readFileSync("/etc/sb-agente/proyectos.json", "utf8"));
@@ -42,7 +38,8 @@ for (const e of fs.readdirSync(base, { withFileTypes: true }))
 fs.writeFileSync("/etc/sb-agente/proyectos.json", JSON.stringify(projects, null, 2));
 '
 chmod 644 /etc/sb-agente/proyectos.json
-install -d -m 700 -o sb-agente -g sb-agente "$agente/estado/lanzador"
+install -d -m 755 /var/lib/sb-agent /var/lib/sb-agent/state
+install -d -m 700 -o sb-agente -g sb-agente /var/lib/sb-agent/state/launcher
 
 if [[ -f $release/ops/agents/install.mjs ]]; then
   /opt/node/bin/node "$release/ops/agents/install.mjs"
@@ -52,10 +49,11 @@ chown sb-agente:sb-agente "$agente/claude/settings.json" "$agente/deepseek/setti
 
 # El servicio principal reenvía al lanzador por loopback.
 install -d /etc/systemd/system/secondbrain.service.d
-cat >/etc/systemd/system/secondbrain.service.d/lanzador.conf <<'EOF'
+rm -f /etc/systemd/system/secondbrain.service.d/lanzador.conf
+cat >/etc/systemd/system/secondbrain.service.d/launcher.conf <<'EOF'
 [Service]
-Environment=LANZADOR_URL=http://127.0.0.1:8092
-Environment=LANZADOR_TOKEN_FILE=/var/lib/secondbrain/lanzador-token
+Environment=SB_LAUNCHER_URL=http://127.0.0.1:8092
+Environment=SB_LAUNCHER_TOKEN_FILE=/var/lib/secondbrain/lanzador-token
 EOF
 
 # Retired with the session-era chat (ADR 0010).

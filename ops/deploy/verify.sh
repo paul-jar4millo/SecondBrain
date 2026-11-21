@@ -3,9 +3,7 @@
 set -euo pipefail
 export PATH=/opt/node/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 release=${1:?Expected an active release directory}
-launch=secondbrain-lanzador.service
-[[ ! -f /etc/secondbrain/english-layout ]] || launch=secondbrain-launcher.service
-systemctl is-active --quiet "$launch"
+systemctl is-active --quiet secondbrain-launcher.service
 if [[ -f $release/image-reference ]]; then
   expected=$(<"$release/image-reference")
   systemctl is-active --quiet secondbrain-container.service

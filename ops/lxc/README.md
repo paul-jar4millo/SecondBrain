@@ -4,19 +4,19 @@
 settings. Values live in `lxc.env` (copy `lxc.env.example`; git-ignored, no
 secrets). The full guide is [docs/deployment.md](../../docs/deployment.md).
 
-| File                     | Responsibility                                      |
-| ------------------------ | --------------------------------------------------- |
-| `instalar.sh`            | Build, create or reuse, provision and verify        |
-| `host/crear-lxc.sh`      | Create the container; never deletes an existing one |
-| `dentro/aprovisionar.sh` | Base system, vault, deployment and runner stages    |
-| `dentro/conectar.sh`     | Connect provider accounts interactively             |
-| `dentro/verificar.sh`    | Check services, network rules and accounts          |
-| `plantillas/`            | systemd units and nftables rules                    |
+| File                  | Responsibility                                      |
+| --------------------- | --------------------------------------------------- |
+| `install.sh`          | Build, create or reuse, provision and verify        |
+| `host/create-lxc.sh`  | Create the container; never deletes an existing one |
+| `inside/provision.sh` | Base system, vault, deployment and runner stages    |
+| `inside/connect.sh`   | Connect provider accounts interactively             |
+| `inside/verify.sh`    | Check services, network rules and accounts          |
+| `templates/`          | systemd units and nftables rules                    |
 
 ```sh
 cp ops/lxc/lxc.env.example ops/lxc/lxc.env
 npm run setup
-bash ops/lxc/instalar.sh            # from Git Bash or any POSIX shell
+bash ops/lxc/install.sh            # from Git Bash or any POSIX shell
 ```
 
 - `--reusar` provisions an existing container. It is not a routine

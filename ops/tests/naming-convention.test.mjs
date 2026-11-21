@@ -60,13 +60,6 @@ test("flags new Spanish routes, environment names, scripts and units", () => {
       "unit:segundo-aviso@.service",
     ],
   );
-  assert.deepEqual(
-    operationalNamesIn(
-      "service/http/legacy-paths.mjs",
-      '"/agentes": "/agents"',
-    ),
-    [],
-  );
 });
 
 test("the operational naming baseline only shrinks", () => {

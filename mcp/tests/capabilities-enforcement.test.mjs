@@ -126,7 +126,7 @@ test("B: MCP stdio y brain-cli omiten herramientas fuera de perfil, ignoran SB_T
       ...process.env,
       SB_BRAIN_URL: baseApi,
       SB_BRAIN_TOKEN_FILE: tokenFile,
-      SB_AGENTE: "lira",
+      SB_AGENT: "lira",
       SB_TOOL_PROFILE: "ejecucion", // spoof attempt!
     },
   });
@@ -203,7 +203,7 @@ test("B: MCP stdio y brain-cli omiten herramientas fuera de perfil, ignoran SB_T
         ...process.env,
         SB_BRAIN_URL: baseApi,
         SB_BRAIN_TOKEN_FILE: tokenFile,
-        SB_AGENTE: "lira",
+        SB_AGENT: "lira",
         SB_TOOL_PROFILE: "ejecucion",
       },
     },
@@ -219,7 +219,7 @@ test("B: MCP stdio y brain-cli omiten herramientas fuera de perfil, ignoran SB_T
           ...process.env,
           SB_BRAIN_URL: baseApi,
           SB_BRAIN_TOKEN_FILE: tokenFile,
-          SB_AGENTE: "lira",
+          SB_AGENT: "lira",
           SB_TOOL_PROFILE: "ejecucion",
         },
       },

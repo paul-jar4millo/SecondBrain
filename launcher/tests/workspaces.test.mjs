@@ -48,12 +48,12 @@ test("vincula proyectos sin confundir su identidad con el repositorio y detecta 
   );
   await assert.rejects(spaces.resolve("../vault"));
   const stored = JSON.parse(await readFile(options.archivo, "utf8"));
-  assert.deepEqual(stored.links, { existing: "repo", p1: "repo" });
-  assert.deepEqual(stored.vinculos, stored.links);
-  const reopened = await openWorkspaces({
-    ...options,
-    legacyHttpRoutes: false,
+  // The first write after a pre-v0.6 file keeps only the English key.
+  assert.deepEqual(stored, {
+    revision: 3,
+    links: { existing: "repo", p1: "repo" },
   });
+  const reopened = await openWorkspaces(options);
   assert.equal((await reopened.resolve("p1")).repository, "repo");
   await reopened.link({
     id: "p1",

@@ -10,7 +10,7 @@ test("pins the container digest and keeps the service identity and launcher loop
   const unit = renderContainer(settings);
   assert.ok(unit.includes("Image=" + image + "\n"));
   assert.match(unit, /Network=host\nUser=999:991\nReadOnly=true/);
-  assert.match(unit, /LAUNCHER_URL=http:\/\/127\.0\.0\.1:8092/);
+  assert.match(unit, /SB_LAUNCHER_URL=http:\/\/127\.0\.0\.1:8092/);
   assert.match(unit, /\/var\/lib\/secondbrain:\/var\/lib\/secondbrain:rw/);
 });
 

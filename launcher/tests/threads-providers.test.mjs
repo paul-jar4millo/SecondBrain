@@ -37,7 +37,7 @@ async function setup(t, { mode, projects = {} } = {}) {
     USERPROFILE: dir,
     CODEX_HOME: path.join(dir, ".codex"),
     SB_CODEX_BIN: process.execPath,
-    SB_LANZADOR_DATA_DIR: path.join(dir, "data"),
+    SB_LAUNCHER_DATA_DIR: path.join(dir, "data"),
   };
   /** @type {{ bin: string, args: string[] }[]} */
   const spawned = [];

@@ -33,8 +33,8 @@ async function runWait(t, responses) {
   const child = spawn(process.execPath, ["ops/deploy/wait-launcher.mjs"], {
     env: {
       ...process.env,
-      LANZADOR_TOKEN_FILE: token,
-      LANZADOR_URL: `http://127.0.0.1:${server.address().port}`,
+      SB_LAUNCHER_TOKEN_FILE: token,
+      SB_LAUNCHER_URL: `http://127.0.0.1:${server.address().port}`,
       SB_DEPLOY_WAIT_MS: "1000",
       SB_DEPLOY_POLL_MS: "10",
     },
@@ -90,13 +90,13 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
       "usr/local/sbin/secondbrain-deploy",
     ],
     ...[
-      "secondbrain-lanzador.service",
+      "secondbrain-launcher.service",
       "claude-sb-agente.service",
-      "resumen-matutino.service",
-      "resumen-matutino.timer",
+      "morning-summary.service",
+      "morning-summary.timer",
     ].map((unit) => [
       `ops/launcher/${unit}`,
-      `ops/lanzador/${unit}`,
+      `ops/launcher/${unit}`,
       `etc/systemd/system/${unit}`,
     ]),
     ...["secondbrain-vault-push.service", "secondbrain-vault-push.timer"].map(
@@ -114,9 +114,9 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
       ],
     ),
     [
-      "ops/aviso/secondbrain-aviso@.service",
-      "ops/aviso/secondbrain-aviso@.service",
-      "etc/systemd/system/secondbrain-aviso@.service",
+      "ops/notify/secondbrain-notify@.service",
+      "ops/notify/secondbrain-notify@.service",
+      "etc/systemd/system/secondbrain-notify@.service",
     ],
   ];
   for (const [source, packaged, installed] of files) {
@@ -128,7 +128,7 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
       await copyFile(source, destination);
     }
   }
-  await mkdir(path.join(release, "ops/lxc/plantillas"), { recursive: true });
+  await mkdir(path.join(release, "ops/lxc/templates"), { recursive: true });
   await mkdir(path.join(host, "etc/secondbrain"), { recursive: true });
   await writeFile(
     path.join(host, "etc/secondbrain/ops.env"),
@@ -138,8 +138,8 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
     ["secondbrain.service", "etc/systemd/system/secondbrain.service"],
     ["nftables.conf", "etc/nftables.conf"],
   ]) {
-    const text = await readFile(`ops/lxc/plantillas/${template}`, "utf8");
-    await writeFile(path.join(release, "ops/lxc/plantillas", template), text);
+    const text = await readFile(`ops/lxc/templates/${template}`, "utf8");
+    await writeFile(path.join(release, "ops/lxc/templates", template), text);
     await writeFile(
       path.join(host, installed),
       text
@@ -163,12 +163,12 @@ test("informa deriva de un archivo instalado sin modificarlo", async (t) => {
     return { code, output };
   };
   assert.equal((await run()).code, 0);
-  const unit = path.join(host, "etc/systemd/system/resumen-matutino.timer");
+  const unit = path.join(host, "etc/systemd/system/morning-summary.timer");
   const installed = await readFile(unit, "utf8");
   await writeFile(unit, "old installation\n");
   const drift = await run();
   assert.equal(drift.code, 1);
-  assert.match(drift.output, /resumen-matutino\.timer/);
+  assert.match(drift.output, /morning-summary\.timer/);
   assert.equal(await readFile(unit, "utf8"), "old installation\n");
   await writeFile(unit, installed);
   assert.equal((await run()).code, 0);
